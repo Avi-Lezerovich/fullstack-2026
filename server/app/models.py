@@ -15,6 +15,8 @@ BASE_DIR = Path(__file__).resolve().parents[2]          # repo root
 DATABASE_DIR = BASE_DIR / "database"
 SCHEMA_PATH = DATABASE_DIR / "init.sql"
 DB_PATH = os.environ.get("DATABASE_PATH", str(DATABASE_DIR / "lolsuit.db"))
+# Uploaded images live next to the server package (override for Docker volumes).
+UPLOAD_DIR = os.environ.get("UPLOAD_DIR", str(BASE_DIR / "server" / "uploads"))
 
 
 def get_db() -> sqlite3.Connection:
@@ -51,20 +53,32 @@ def _hours_ago(hours: float) -> str:
     return _iso(datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=hours))
 
 
-# (name, email, days_ago) — ids are assigned in order 1..12.
+# (name, email, days_ago, bio) — ids are assigned in order 1..12.
 SEED_USERS = [
-    ("דנה כהן", "dana@example.com", 30),
-    ("יואב לוי", "yoav@example.com", 29),
-    ("מאיה שטרן", "maya@example.com", 28),
-    ("איתי אברמוב", "itay@example.com", 27),
-    ("רוני גולן", "roni@example.com", 26),
-    ("נועה פרידמן", "noa@example.com", 25),
-    ("אלון ברק", "alon@example.com", 24),
-    ("מיכל שלו", "michal@example.com", 23),
-    ("תומר אזולאי", "tomer@example.com", 22),
-    ("עדי בלום", "adi@example.com", 21),
-    ("גיא מזרחי", "guy@example.com", 20),
-    ("ליהי שדה", "lihi@example.com", 19),
+    ("דנה כהן", "dana@example.com", 30, "תובעת סדרתית בענייני ספה וכלבים. צדק או כלום."),
+    ("יואב לוי", "yoav@example.com", 29, "מתמחה בעוולות חברתיות וביטולים ברגע האחרון."),
+    ("מאיה שטרן", "maya@example.com", 28, "אם תנגן Wonderwall בחצות — נתראה באולם."),
+    ("איתי אברמוב", "itay@example.com", 27, "חולצות לבנות, קפה חום, ועצבים קצרים."),
+    ("רוני גולן", "roni@example.com", 26, "נהגת זהירה, סבלנית כלפי כולם חוץ מצמתים."),
+    ("נועה פרידמן", "noa@example.com", 25, "מאמינה שכל מנה מגיעה בזמן. תמיד."),
+    ("אלון ברק", "alon@example.com", 24, "אספן הערות TODO ומורשת קוד נטוש."),
+    ("מיכל שלו", "michal@example.com", 23, "אכיפה קפדנית של גבולות במשק בית משותף."),
+    ("תומר אזולאי", "tomer@example.com", 22, "כל 'עוד אחד אחרון' נרשם ונספר."),
+    ("עדי בלום", "adi@example.com", 21, "מתעדת מטענים נעלמים מאז 2019."),
+    ("גיא מזרחי", "guy@example.com", 20, "מומחה לתורים, קופות סגורות והפסקות חשודות."),
+    ("ליהי שדה", "lihi@example.com", 19, "עוקבת אחרי עוקבים. בעיקר אקסים."),
+]
+
+# (follower_idx, followee_idx) pairs — 1-based to match the assigned ids above.
+# Gives the "following" feed real content out of the box.
+SEED_FOLLOWS = [
+    (1, 2), (1, 3), (1, 5),
+    (2, 1), (2, 4),
+    (3, 1), (3, 2), (3, 6),
+    (4, 1), (4, 5),
+    (5, 2), (5, 7),
+    (6, 1), (6, 3),
+    (7, 1),
 ]
 
 SEED_POSTS = [
@@ -180,12 +194,17 @@ SEED_POSTS = [
 
 
 def _seed(conn: sqlite3.Connection) -> None:
-    """Populate users, posts and post_charges. All seed users share password 'demo123'."""
+    """Populate users, posts, post_charges and follows. All seed users share password 'demo123'."""
     pwd = hash_password("demo123")
-    for name, email, days in SEED_USERS:
+    for name, email, days, bio in SEED_USERS:
         conn.execute(
-            "INSERT INTO users (name, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
-            (name, email, pwd, _hours_ago(days * 24)),
+            "INSERT INTO users (name, email, password_hash, bio, created_at) VALUES (?, ?, ?, ?, ?)",
+            (name, email, pwd, bio, _hours_ago(days * 24)),
+        )
+    for follower_id, followee_id in SEED_FOLLOWS:
+        conn.execute(
+            "INSERT INTO follows (follower_id, followee_id, created_at) VALUES (?, ?, ?)",
+            (follower_id, followee_id, _hours_ago(18 * 24)),
         )
     for post in SEED_POSTS:
         cur = conn.execute(

@@ -26,6 +26,8 @@ def _public_user(row: sqlite3.Row) -> dict:
         "id": row["id"],
         "name": row["name"],
         "email": row["email"],
+        "bio": row["bio"],
+        "avatar_url": row["avatar_url"],
         "created_at": row["created_at"],
     }
 
@@ -45,6 +47,7 @@ def _post_to_dict(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         "body": row["body"],
         "defendant": row["defendant"],
         "location": row["location"],
+        "image_url": row["image_url"],
         "charges": charges or None,  # null when there are none (matches old mock)
         "author_id": row["author_id"],
         "author_name": row["author_name"],
@@ -161,8 +164,12 @@ def list_users(search=None, limit=None, offset=0) -> list:
         conn.close()
 
 
-def get_user_profile(user_id: int):
-    """Return {user, posts} for a single user, or None if not found."""
+def get_user_profile(user_id: int, viewer_id=None):
+    """Return {user, posts, followers_count, following_count, is_following} or None.
+
+    `viewer_id` is the currently logged-in user (if any); `is_following` reflects
+    whether that viewer follows this profile.
+    """
     conn = get_db()
     try:
         user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -171,22 +178,104 @@ def get_user_profile(user_id: int):
         rows = conn.execute(
             POSTS_SELECT + " WHERE p.author_id = ? ORDER BY p.created_at DESC", (user_id,)
         ).fetchall()
+        followers = conn.execute(
+            "SELECT COUNT(*) AS c FROM follows WHERE followee_id = ?", (user_id,)
+        ).fetchone()["c"]
+        following = conn.execute(
+            "SELECT COUNT(*) AS c FROM follows WHERE follower_id = ?", (user_id,)
+        ).fetchone()["c"]
+        is_following = False
+        if viewer_id and viewer_id != user_id:
+            is_following = conn.execute(
+                "SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?",
+                (viewer_id, user_id),
+            ).fetchone() is not None
         return {
             "user": _public_user(user),
             "posts": [_post_to_dict(conn, r) for r in rows],
+            "followers_count": followers,
+            "following_count": following,
+            "is_following": is_following,
         }
+    finally:
+        conn.close()
+
+
+def update_profile(user_id: int, bio=None, avatar_url=None) -> dict:
+    """Patch the editable profile fields; only provided (non-None) fields change."""
+    conn = get_db()
+    try:
+        sets, params = [], []
+        if bio is not None:
+            sets.append("bio = ?")
+            params.append(bio)
+        if avatar_url is not None:
+            sets.append("avatar_url = ?")
+            params.append(avatar_url)
+        if sets:
+            params.append(user_id)
+            conn.execute(f"UPDATE users SET {', '.join(sets)} WHERE id = ?", params)
+            conn.commit()
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        return _public_user(row)
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------- follows
+
+def user_exists(user_id: int) -> bool:
+    conn = get_db()
+    try:
+        return conn.execute("SELECT 1 FROM users WHERE id = ?", (user_id,)).fetchone() is not None
+    finally:
+        conn.close()
+
+
+def follow_user(follower_id: int, followee_id: int) -> None:
+    """Create a follow edge (idempotent). Self-follow is rejected by the caller/CHECK."""
+    conn = get_db()
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO follows (follower_id, followee_id, created_at) "
+            "VALUES (?, ?, ?)",
+            (follower_id, followee_id, _now_iso()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def unfollow_user(follower_id: int, followee_id: int) -> None:
+    conn = get_db()
+    try:
+        conn.execute(
+            "DELETE FROM follows WHERE follower_id = ? AND followee_id = ?",
+            (follower_id, followee_id),
+        )
+        conn.commit()
     finally:
         conn.close()
 
 
 # ------------------------------------------------------------------------ posts
 
-def list_posts(limit=None, offset=0) -> list:
-    """Newest-first feed, paginated. ISO timestamps sort lexically == chronologically."""
+def list_posts(limit=None, offset=0, follower_id=None) -> list:
+    """Newest-first feed, paginated. ISO timestamps sort lexically == chronologically.
+
+    When `follower_id` is given, restricts the feed to posts authored by users that
+    `follower_id` follows (the "individual"/following feed).
+    """
     conn = get_db()
     try:
-        sql = POSTS_SELECT + " ORDER BY p.created_at DESC"
+        sql = POSTS_SELECT
         params = []
+        if follower_id is not None:
+            sql += (
+                " JOIN follows f ON f.followee_id = p.author_id AND f.follower_id = ?"
+            )
+            params.append(follower_id)
+        sql += " ORDER BY p.created_at DESC"
         if limit is not None:
             sql += " LIMIT ? OFFSET ?"
             params += [limit, offset or 0]
@@ -197,13 +286,14 @@ def list_posts(limit=None, offset=0) -> list:
 
 
 def create_post(author_id: int, title: str, body: str, defendant: str,
-                location=None, charges=None) -> dict:
+                location=None, charges=None, image_url=None) -> dict:
     conn = get_db()
     try:
         cur = conn.execute(
-            "INSERT INTO posts (title, body, defendant, location, author_id, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (title.strip(), body.strip(), defendant.strip(), location, author_id, _now_iso()),
+            "INSERT INTO posts (title, body, defendant, location, image_url, author_id, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (title.strip(), body.strip(), defendant.strip(), location, image_url,
+             author_id, _now_iso()),
         )
         post_id = cur.lastrowid
         for charge in (charges or []):
