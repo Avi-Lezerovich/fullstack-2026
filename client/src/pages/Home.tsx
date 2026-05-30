@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { Container, Stack, Box, Typography, Button, CircularProgress, Alert } from "@mui/material";
+import { Container, Box, Typography, CircularProgress, Alert } from "@mui/material";
 
-import PostCard from "../components/PostCard";
+import HomeHeader from "../components/home/HomeHeader";
+import PostList from "../components/home/PostList";
 import { fetchPosts } from "../api";
 import type { Post } from "../types";
 
@@ -46,14 +47,7 @@ const Home = () => {
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
-      <Box sx={{ mb: 3, textAlign: "center" }}>
-        <Typography variant="h3" component="h1" sx={{ fontFamily: '"Frank Ruhl Libre", serif', fontWeight: 900, color: "primary.dark" }}>
-          בית המשפט פתוח
-        </Typography>
-        <Typography sx={{ color: "text.secondary", mt: 0.5, fontStyle: "italic" }}>
-          כל התביעות האחרונות שהוגשו לבית המשפט.
-        </Typography>
-      </Box>
+      <HomeHeader />
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
@@ -66,25 +60,7 @@ const Home = () => {
           אין תביעות להצגה.
         </Typography>
       ) : (
-        <Stack spacing={2}>
-          {posts.map((post) => (
-            <PostCard key={post.id} post={post} />
-          ))}
-
-          {hasMore && (
-            <Box sx={{ display: "flex", justifyContent: "center", pt: 2 }}>
-              <Button
-                variant="outlined"
-                size="large"
-                onClick={loadMore}
-                disabled={loadingMore}
-                startIcon={loadingMore ? <CircularProgress size={18} /> : null}
-              >
-                {loadingMore ? "טוען..." : "טען עוד תביעות"}
-              </Button>
-            </Box>
-          )}
-        </Stack>
+        <PostList posts={posts} hasMore={hasMore} loadingMore={loadingMore} onLoadMore={loadMore} />
       )}
     </Container>
   );

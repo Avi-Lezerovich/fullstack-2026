@@ -43,7 +43,7 @@ const Footer = () => {
             </Typography>
           </Stack>
           <Typography variant="caption" sx={{ color: "rgba(250, 246, 233, 0.7)" }}>
-            פרויקט גמר · Full-Stack @ RUNI · {new Date().getFullYear()}
+            Mid term project · Full-Stack @ RUNI · {new Date().getFullYear()}
           </Typography>
         </Stack>
       </Container>

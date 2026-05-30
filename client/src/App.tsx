@@ -1,7 +1,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { Box } from "@mui/material";
 
-import TopBar from "./components/layout/top-bar/TopBar";
+import TopBar from "./components/layout/TopBar";
 import Footer from "./components/layout/Footer";
 import ProtectedRoute from "./components/routing/ProtectedRoute";
 import ScrollToTop from "./components/routing/ScrollToTop";
