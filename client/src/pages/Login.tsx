@@ -35,7 +35,7 @@ const Login = () => {
     setError("");
     try {
       const res = await login(email, password);
-      saveSession(res.token, res.user);
+      saveSession(res.user);
       navigate("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "ההתחברות נכשלה");
