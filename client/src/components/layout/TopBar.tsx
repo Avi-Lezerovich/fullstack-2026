@@ -2,7 +2,7 @@ import { Link as RouterLink, useLocation, useNavigate } from "react-router-dom";
 import { AppBar, Box, Button, Stack, Toolbar, Typography } from "@mui/material";
 import GavelIcon from "@mui/icons-material/Gavel";
 
-import { clearSession } from "../../api";
+import { logout } from "../../api";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 
 const BASE = import.meta.env.BASE_URL;
@@ -26,8 +26,8 @@ const TopBar = () => {
   const location = useLocation();
   const user = useCurrentUser();
 
-  const handleLogout = () => {
-    clearSession();
+  const handleLogout = async () => {
+    await logout();
     navigate("/");
   };
 
