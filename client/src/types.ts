@@ -1,6 +1,6 @@
 /**
  * Shared TypeScript types — the API contract.
- * Mirrors the JSON shapes returned by the Flask backend.
+ * Mirrors the JSON shapes returned by the (mock) backend.
  */
 
 export interface User {
@@ -11,11 +11,9 @@ export interface User {
   created_at: string;
 }
 
-/** A user as returned by GET /api/users (with computed stats). */
+/** A user as returned by GET /api/users (with a computed post count). */
 export interface UserListItem extends User {
   post_count: number;
-  guilty_count: number;
-  guilty_percent: number;
 }
 
 export interface Post {
@@ -25,42 +23,20 @@ export interface Post {
   defendant: string;
   location?: string | null;
   charges?: string[];
-  damages?: string | null;
   author_id: number;
   author_name: string;
-  guilty_votes: number;
-  innocent_votes: number;
   /** ISO 8601 datetime. */
   created_at: string;
 }
 
-export interface UserStats {
-  total: number;
-  guilty: number;
-  innocent: number;
-  success_percent: number;
-}
-
 export interface UserProfileResponse {
   user: User;
-  stats: UserStats;
   posts: Post[];
 }
 
 export interface AuthResponse {
   token: string;
   user: User;
-}
-
-export type Sort = "new" | "hot" | "closed";
-
-export type VoteSide = "guilty" | "innocent";
-
-export interface VoteResponse {
-  post_id: number;
-  side: VoteSide;
-  guilty_votes: number;
-  innocent_votes: number;
 }
 
 /** Fixed list of charges available when filing a new lawsuit. */
