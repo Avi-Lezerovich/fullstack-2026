@@ -1,7 +1,11 @@
 /**
  * Centralized API layer.
  * Every fetch in the app goes through here — components never call fetch directly.
- * When USE_MOCK_DATA is on (dev), calls are served by the in-memory mock backend.
+ * All requests hit the real backend at /api (proxied to Flask in dev — see vite.config.ts).
+ *
+ * Auth is cookie-based (lecture 5 stateful sessions): the server sets an httpOnly
+ * `session_id` cookie on login/signup. We send `credentials: "include"` on every
+ * request so that cookie rides along; the token itself is invisible to JS.
  */
 import type {
   AuthResponse,
@@ -10,17 +14,8 @@ import type {
   UserListItem,
   UserProfileResponse,
 } from "./types";
-import {
-  mockCreatePost,
-  mockFetchPosts,
-  mockFetchUserProfile,
-  mockFetchUsers,
-  mockLogin,
-  mockSignup,
-} from "./mockApi";
 
 const BASE = "/api";
-const USE_MOCK_DATA = import.meta.env.DEV || import.meta.env.VITE_USE_MOCK_DATA === "true";
 
 // ---------------------------------------------------------------- helpers
 
@@ -29,6 +24,7 @@ const request = async <T>(url: string, init: RequestInit = {}): Promise<T> => {
   let res: Response;
   try {
     res = await fetch(url, {
+      credentials: "include", // send/receive the session cookie
       ...init,
       headers: { "Content-Type": "application/json", ...(init.headers || {}) },
     });
@@ -54,34 +50,32 @@ const request = async <T>(url: string, init: RequestInit = {}): Promise<T> => {
   return body as T;
 };
 
-/** Build the Authorization header from the token in localStorage (or empty). */
-const authHeaders = (): Record<string, string> => {
-  const token = localStorage.getItem("token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
-
 // ----------------------------------------------------------------- auth
 
-export const signup = (name: string, email: string, password: string): Promise<AuthResponse> => {
-  if (USE_MOCK_DATA) return mockSignup(name, email, password);
-  return request<AuthResponse>(`${BASE}/auth/signup`, {
+export const signup = (name: string, email: string, password: string): Promise<AuthResponse> =>
+  request<AuthResponse>(`${BASE}/auth/signup`, {
     method: "POST",
     body: JSON.stringify({ name, email, password }),
   });
-};
 
-export const login = (email: string, password: string): Promise<AuthResponse> => {
-  if (USE_MOCK_DATA) return mockLogin(email, password);
-  return request<AuthResponse>(`${BASE}/auth/login`, {
+export const login = (email: string, password: string): Promise<AuthResponse> =>
+  request<AuthResponse>(`${BASE}/auth/login`, {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
+
+/** Destroy the server-side session (and cookie), then clear the local UI hint. */
+export const logout = async (): Promise<void> => {
+  try {
+    await request(`${BASE}/auth/logout`, { method: "POST" });
+  } finally {
+    clearSession();
+  }
 };
 
 // ----------------------------------------------------------------- posts
 
 export const fetchPosts = (opts: { limit?: number; offset?: number } = {}): Promise<Post[]> => {
-  if (USE_MOCK_DATA) return mockFetchPosts(opts);
   const sp = new URLSearchParams();
   if (typeof opts.limit === "number") sp.set("limit", String(opts.limit));
   if (typeof opts.offset === "number") sp.set("offset", String(opts.offset));
@@ -93,19 +87,15 @@ export const createPost = (payload: {
   body: string;
   defendant: string;
   charges?: string[];
-}): Promise<Post> => {
-  if (USE_MOCK_DATA) return mockCreatePost(payload);
-  return request<Post>(`${BASE}/posts`, {
+}): Promise<Post> =>
+  request<Post>(`${BASE}/posts`, {
     method: "POST",
-    headers: authHeaders(),
     body: JSON.stringify(payload),
   });
-};
 
 // ----------------------------------------------------------------- users
 
 export const fetchUsers = (opts: { search?: string; limit?: number; offset?: number } = {}): Promise<UserListItem[]> => {
-  if (USE_MOCK_DATA) return mockFetchUsers(opts);
   const sp = new URLSearchParams();
   if (opts.search) sp.set("search", opts.search);
   if (typeof opts.limit === "number") sp.set("limit", String(opts.limit));
@@ -113,12 +103,14 @@ export const fetchUsers = (opts: { search?: string; limit?: number; offset?: num
   return request<UserListItem[]>(`${BASE}/users?${sp.toString()}`);
 };
 
-export const fetchUserProfile = (id: number): Promise<UserProfileResponse> => {
-  if (USE_MOCK_DATA) return mockFetchUserProfile(id);
-  return request<UserProfileResponse>(`${BASE}/users/${id}`);
-};
+export const fetchUserProfile = (id: number): Promise<UserProfileResponse> =>
+  request<UserProfileResponse>(`${BASE}/users/${id}`);
 
 // ----------------------------------------------------------- session helpers
+//
+// The real auth lives in the httpOnly cookie (unreadable from JS). We still cache
+// the public `user` object in localStorage as a UI hint — to greet the user and to
+// gate routes without a round-trip. A stale hint just yields a 401 the UI handles.
 
 export const getStoredUser = (): User | null => {
   const raw = localStorage.getItem("user");
@@ -130,17 +122,15 @@ export const getStoredUser = (): User | null => {
   }
 };
 
-export const isLoggedIn = (): boolean => !!localStorage.getItem("token");
+export const isLoggedIn = (): boolean => !!getStoredUser();
 
-export const saveSession = (token: string, user: User): void => {
-  localStorage.setItem("token", token);
+export const saveSession = (user: User): void => {
   localStorage.setItem("user", JSON.stringify(user));
   // Notify same-tab listeners (the native "storage" event only fires for OTHER tabs).
   window.dispatchEvent(new Event("auth-change"));
 };
 
 export const clearSession = (): void => {
-  localStorage.removeItem("token");
   localStorage.removeItem("user");
   window.dispatchEvent(new Event("auth-change"));
 };
