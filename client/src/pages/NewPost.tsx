@@ -2,18 +2,22 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Container, Paper, Box, Stack, Typography, TextField, Button, Alert, CircularProgress,
-  Select, MenuItem, FormControl, InputLabel, Chip, OutlinedInput,
+  Select, MenuItem, FormControl, InputLabel, Chip, OutlinedInput, IconButton,
 } from "@mui/material";
 import type { SelectChangeEvent } from "@mui/material";
 import GavelIcon from "@mui/icons-material/Gavel";
+import ImageIcon from "@mui/icons-material/Image";
+import CloseIcon from "@mui/icons-material/Close";
 
-import { createPost } from "../api";
+import { createPost, uploadImage } from "../api";
 import { CHARGES_OPTIONS } from "../types";
+import { htmlTextLength } from "../utils/htmlUtils";
+import RichTextEditor from "../components/editor/RichTextEditor";
 
 /**
  * New lawsuit page — route `/new-post` (guarded by ProtectedRoute).
- * A single form: title, the accused, charges, and the body. On submit we create
- * the post and navigate back to the feed.
+ * Title, the accused, charges, a WYSIWYG body, and an optional evidence image.
+ * On submit we create the post and navigate back to the feed.
  */
 const NewPost = () => {
   const navigate = useNavigate();
@@ -21,6 +25,8 @@ const NewPost = () => {
   const [defendant, setDefendant] = useState("");
   const [charges, setCharges] = useState<string[]>([]);
   const [body, setBody] = useState("");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -29,9 +35,25 @@ const NewPost = () => {
     setCharges(typeof value === "string" ? value.split(",") : value);
   };
 
+  const handleImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (!file) return;
+    setUploading(true);
+    setError("");
+    try {
+      const { url } = await uploadImage(file);
+      setImageUrl(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "העלאת התמונה נכשלה");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !defendant.trim() || !body.trim()) {
+    if (!title.trim() || !defendant.trim() || htmlTextLength(body) === 0) {
       setError("נא למלא כותרת, נתבע ותוכן התביעה");
       return;
     }
@@ -39,7 +61,13 @@ const NewPost = () => {
     setSubmitting(true);
     setError("");
     try {
-      await createPost({ title: title.trim(), body: body.trim(), defendant: defendant.trim(), charges });
+      await createPost({
+        title: title.trim(),
+        body,
+        defendant: defendant.trim(),
+        charges,
+        image_url: imageUrl,
+      });
       navigate("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "הגשת התביעה נכשלה");
@@ -88,7 +116,35 @@ const NewPost = () => {
               </Select>
             </FormControl>
 
-            <TextField label="תוכן התביעה" value={body} onChange={(e) => setBody(e.target.value)} fullWidth multiline minRows={5} />
+            <Box>
+              <Typography variant="body2" sx={{ mb: 0.5, color: "text.secondary" }}>תוכן התביעה</Typography>
+              <RichTextEditor value={body} onChange={setBody} placeholder="פרט את כתב האישום…" />
+            </Box>
+
+            {/* Optional evidence image */}
+            <Box>
+              <Button
+                component="label"
+                variant="outlined"
+                startIcon={uploading ? <CircularProgress size={16} /> : <ImageIcon />}
+                disabled={uploading}
+              >
+                {imageUrl ? "החלף ראיה (תמונה)" : "צרף ראיה (תמונה)"}
+                <input hidden type="file" accept="image/*" onChange={handleImage} />
+              </Button>
+              {imageUrl && (
+                <Box sx={{ position: "relative", mt: 1.5, display: "inline-block" }}>
+                  <Box component="img" src={imageUrl} alt="תצוגה מקדימה" sx={{ maxWidth: "100%", maxHeight: 240, borderRadius: 1, display: "block" }} />
+                  <IconButton
+                    size="small"
+                    onClick={() => setImageUrl(null)}
+                    sx={{ position: "absolute", top: 4, insetInlineEnd: 4, bgcolor: "rgba(0,0,0,0.6)", color: "#fff", "&:hover": { bgcolor: "rgba(0,0,0,0.8)" } }}
+                  >
+                    <CloseIcon fontSize="small" />
+                  </IconButton>
+                </Box>
+              )}
+            </Box>
 
             <Button type="submit" variant="contained" color="secondary" size="large" disabled={submitting} startIcon={submitting ? <CircularProgress size={18} /> : <GavelIcon />}>
               {submitting ? "מגיש..." : "הגש תביעה"}

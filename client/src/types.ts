@@ -7,6 +7,10 @@ export interface User {
   id: number;
   name: string;
   email: string;
+  /** Short self-description (nullable). */
+  bio?: string | null;
+  /** URL/path to the profile picture (nullable). */
+  avatar_url?: string | null;
   /** ISO 8601 datetime. */
   created_at: string;
 }
@@ -19,9 +23,12 @@ export interface UserListItem extends User {
 export interface Post {
   id: number;
   title: string;
+  /** Sanitized rich-text HTML. */
   body: string;
   defendant: string;
   location?: string | null;
+  /** URL/path to an attached image (nullable). */
+  image_url?: string | null;
   charges?: string[];
   author_id: number;
   author_name: string;
@@ -32,6 +39,10 @@ export interface Post {
 export interface UserProfileResponse {
   user: User;
   posts: Post[];
+  followers_count: number;
+  following_count: number;
+  /** Whether the current viewer follows this profile. */
+  is_following: boolean;
 }
 
 export interface AuthResponse {
