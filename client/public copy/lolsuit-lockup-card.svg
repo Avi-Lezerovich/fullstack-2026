@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 140" role="img">
+  <title>LolSuit stacked card lockup</title>
+  <desc>Stacked brand lockup for LolSuit. Small "The court of" label in serif caps above the larger "LolSuit" wordmark, on a soft cream rounded card. Brand color: deep purple (#3C3489) on cream (#F4EFE6).</desc>
+
+  <rect width="220" height="140" rx="18" fill="#F4EFE6"/>
+
+  <text x="110" y="58" font-family="Georgia, 'Times New Roman', serif" font-size="13" fill="#3C3489" text-anchor="middle" letter-spacing="3.5" font-weight="500">THE COURT OF</text>
+
+  <text x="110" y="108" font-family="Georgia, 'Times New Roman', serif" font-size="42" fill="#3C3489" text-anchor="middle" font-weight="700" letter-spacing="-0.5">LolSuit</text>
+</svg>

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img">
+  <title>LolSuit icon mark</title>
+  <desc>Compact circular icon for favicons, avatars, and app icons. Solid deep-purple circle with white scales of justice in the center. Designed to remain recognizable at small sizes down to 16x16 pixels. Brand color: deep purple (#3C3489).</desc>
+
+  <circle cx="32" cy="32" r="30" fill="#3C3489"/>
+
+  <g stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <circle cx="32" cy="14" r="1.8" fill="#FFFFFF" stroke="none"/>
+    <line x1="32" y1="14" x2="32" y2="46" stroke-width="2"/>
+    <line x1="19" y1="19" x2="45" y2="19" stroke-width="2"/>
+    <circle cx="19" cy="19" r="1.4" fill="#FFFFFF" stroke="none"/>
+    <circle cx="45" cy="19" r="1.4" fill="#FFFFFF" stroke="none"/>
+    <line x1="19" y1="19" x2="15" y2="27" stroke-width="0.8"/>
+    <line x1="19" y1="19" x2="23" y2="27" stroke-width="0.8"/>
+    <line x1="45" y1="19" x2="41" y2="27" stroke-width="0.8"/>
+    <line x1="45" y1="19" x2="49" y2="27" stroke-width="0.8"/>
+    <path d="M 13 27 Q 19 33 25 27" stroke-width="1.4"/>
+    <path d="M 39 27 Q 45 33 51 27" stroke-width="1.4"/>
+    <rect x="25" y="46" width="14" height="2.5" fill="#FFFFFF" stroke="none"/>
+  </g>
+</svg>
