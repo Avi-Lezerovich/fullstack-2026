@@ -35,7 +35,6 @@ export interface UserProfileResponse {
 }
 
 export interface AuthResponse {
-  token: string;
   user: User;
 }
 
