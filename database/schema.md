@@ -34,7 +34,6 @@ erDiagram
         TEXT    title
         TEXT    body "sanitized rich-text HTML"
         TEXT    defendant
-        TEXT    location "nullable"
         TEXT    image_url "nullable"
         INTEGER author_id FK
         TEXT    created_at "ISO-8601"

@@ -30,7 +30,6 @@ CREATE TABLE IF NOT EXISTS posts (
     title      TEXT NOT NULL,
     body       TEXT NOT NULL,             -- sanitized rich-text HTML
     defendant  TEXT NOT NULL,
-    location   TEXT,                      -- nullable
     image_url  TEXT,                      -- nullable: /api/uploads/<file> path
     author_id  INTEGER NOT NULL,
     created_at TEXT NOT NULL,             -- ISO-8601
