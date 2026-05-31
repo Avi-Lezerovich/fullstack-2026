@@ -46,7 +46,6 @@ def _post_to_dict(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         "title": row["title"],
         "body": row["body"],
         "defendant": row["defendant"],
-        "location": row["location"],
         "image_url": row["image_url"],
         "charges": charges or None,  # null when there are none (matches old mock)
         "author_id": row["author_id"],
@@ -286,13 +285,13 @@ def list_posts(limit=None, offset=0, follower_id=None) -> list:
 
 
 def create_post(author_id: int, title: str, body: str, defendant: str,
-                location=None, charges=None, image_url=None) -> dict:
+                charges=None, image_url=None) -> dict:
     conn = get_db()
     try:
         cur = conn.execute(
-            "INSERT INTO posts (title, body, defendant, location, image_url, author_id, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (title.strip(), body.strip(), defendant.strip(), location, image_url,
+            "INSERT INTO posts (title, body, defendant, image_url, author_id, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (title.strip(), body.strip(), defendant.strip(), image_url,
              author_id, _now_iso()),
         )
         post_id = cur.lastrowid

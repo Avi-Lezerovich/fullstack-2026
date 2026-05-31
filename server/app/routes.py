@@ -118,12 +118,11 @@ def create_post():
     title = (data.get("title") or "").strip()
     body = (data.get("body") or "").strip()
     defendant = (data.get("defendant") or "").strip()
-    location = data.get("location")
     charges = data.get("charges") or []
     image_url = (data.get("image_url") or "").strip() or None
     if not title or not body or not defendant:
         return jsonify({"error": "נא למלא כותרת, נתבע ותוכן התביעה"}), 400
-    post = services.create_post(g.user_id, title, body, defendant, location, charges, image_url)
+    post = services.create_post(g.user_id, title, body, defendant, charges, image_url)
     return jsonify(post), 201
 
 
