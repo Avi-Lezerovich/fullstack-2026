@@ -26,7 +26,6 @@ export interface Post {
   /** Sanitized rich-text HTML. */
   body: string;
   defendant: string;
-  location?: string | null;
   /** URL/path to an attached image (nullable). */
   image_url?: string | null;
   charges?: string[];
