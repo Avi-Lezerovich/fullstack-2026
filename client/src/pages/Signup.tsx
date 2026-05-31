@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Link as RouterLink, Navigate, useNavigate } from "react-router-dom";
-import { Container, Paper, TextField, Button, Typography, Box, Alert, Stack, Link, CircularProgress } from "@mui/material";
+import { Container, Paper, TextField, Button, Typography, Box, Alert, Stack, Link, CircularProgress, LinearProgress } from "@mui/material";
 import HowToRegIcon from "@mui/icons-material/HowToReg";
 
 import { isLoggedIn, signup, saveSession } from "../api";
-import { EMAIL_RE, MIN_PASSWORD } from "../utils/validationUtils";
+import { EMAIL_RE, MIN_PASSWORD, validatePassword, passwordStrength } from "../utils/validationUtils";
 
 /**
  * Signup page — route `/signup`.
@@ -22,6 +22,8 @@ const Signup = () => {
 
   if (isLoggedIn()) return <Navigate to="/" replace />;
 
+  const strength = passwordStrength(password);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
@@ -32,8 +34,9 @@ const Signup = () => {
       setError("כתובת אימייל לא תקינה");
       return;
     }
-    if (password.length < MIN_PASSWORD) {
-      setError(`הסיסמה חייבת להכיל לפחות ${MIN_PASSWORD} תווים`);
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
     if (password !== confirm) {
@@ -72,7 +75,22 @@ const Signup = () => {
           <Stack spacing={2}>
             <TextField label="שם מלא" value={name} onChange={(e) => setName(e.target.value)} fullWidth autoComplete="name" autoFocus />
             <TextField label="אימייל" type="email" value={email} onChange={(e) => setEmail(e.target.value)} fullWidth autoComplete="email" />
-            <TextField label="סיסמה" type="password" value={password} onChange={(e) => setPassword(e.target.value)} fullWidth autoComplete="new-password" helperText={`לפחות ${MIN_PASSWORD} תווים`} />
+            <Box>
+              <TextField label="סיסמה" type="password" value={password} onChange={(e) => setPassword(e.target.value)} fullWidth autoComplete="new-password" helperText={`לפחות ${MIN_PASSWORD} תווים, כולל אות וספרה`} />
+              {password && (
+                <Box sx={{ mt: 1 }}>
+                  <LinearProgress
+                    variant="determinate"
+                    value={(strength.score / 5) * 100}
+                    color={strength.color}
+                    sx={{ height: 6, borderRadius: 1 }}
+                  />
+                  <Typography variant="caption" sx={{ display: "block", mt: 0.5, color: `${strength.color}.main` }}>
+                    חוזק הסיסמה: {strength.label}
+                  </Typography>
+                </Box>
+              )}
+            </Box>
             <TextField label="אימות סיסמה" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} fullWidth autoComplete="new-password" />
             <Button type="submit" variant="contained" color="secondary" size="large" disabled={submitting} startIcon={submitting ? <CircularProgress size={18} /> : <HowToRegIcon />}>
               {submitting ? "רושם..." : "הצטרף לרשימת המושבעים"}

@@ -1,5 +1,5 @@
 -- LolSuit database schema (SQLite).
--- users 1—N posts, posts 1—N post_charges, users 1—1 sessions.
+-- users 1—N posts, posts 1—N post_charges, users 1—1 sessions, users M—N users (follows).
 -- Seed data is inserted from Python (server/app/models.py) so passwords can be hashed.
 
 PRAGMA foreign_keys = ON;
@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS users (
     name          TEXT NOT NULL,
     email         TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
+    bio           TEXT,                  -- nullable: short self-description
+    avatar_url    TEXT,                  -- nullable: /api/uploads/<file> path
     created_at    TEXT NOT NULL          -- ISO-8601
 );
 
@@ -26,13 +28,27 @@ CREATE INDEX IF NOT EXISTS idx_sessions_session ON sessions(session_id);
 CREATE TABLE IF NOT EXISTS posts (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     title      TEXT NOT NULL,
-    body       TEXT NOT NULL,
+    body       TEXT NOT NULL,             -- sanitized rich-text HTML
     defendant  TEXT NOT NULL,
-    location   TEXT,                      -- nullable
+    image_url  TEXT,                      -- nullable: /api/uploads/<file> path
     author_id  INTEGER NOT NULL,
     created_at TEXT NOT NULL,             -- ISO-8601
     FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+-- Directed follow graph: (follower_id) follows (followee_id). M—N on users.
+CREATE TABLE IF NOT EXISTS follows (
+    follower_id INTEGER NOT NULL,
+    followee_id INTEGER NOT NULL,
+    created_at  TEXT    NOT NULL,         -- ISO-8601
+    PRIMARY KEY (follower_id, followee_id),
+    FOREIGN KEY (follower_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (followee_id) REFERENCES users(id) ON DELETE CASCADE,
+    CHECK (follower_id <> followee_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id);
+CREATE INDEX IF NOT EXISTS idx_follows_followee ON follows(followee_id);
 
 CREATE TABLE IF NOT EXISTS post_charges (
     id      INTEGER PRIMARY KEY AUTOINCREMENT,

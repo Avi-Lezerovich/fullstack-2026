@@ -1,7 +1,9 @@
 
 import {
+  Box,
   Card,
   CardContent,
+  CardMedia,
   Divider,
 } from "@mui/material";
 
@@ -35,6 +37,18 @@ const PostCard = ({ post }: PostCardProps) => {
 
         {/* Body */}
         <PostBody post={post} />
+
+        {/* Optional evidence image */}
+        {post.image_url && (
+          <Box sx={{ mt: 2 }}>
+            <CardMedia
+              component="img"
+              image={post.image_url}
+              alt="ראיה מצורפת"
+              sx={{ borderRadius: 1, maxHeight: 420, objectFit: "contain", bgcolor: "action.hover" }}
+            />
+          </Box>
+        )}
 
       </CardContent>
     </Card>

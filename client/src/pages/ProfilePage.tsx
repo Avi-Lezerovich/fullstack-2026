@@ -7,18 +7,20 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 
 import UserHeader from "../components/profile/UserHeader";
 import UserPosts from "../components/profile/UserPosts";
-import { fetchUserProfile } from "../api";
-import type { Post, User } from "../types";
+import { fetchUserProfile, getStoredUser, saveSession } from "../api";
+import { useCurrentUser } from "../hooks/useCurrentUser";
+import type { Post, User, UserProfileResponse } from "../types";
 
 /**
  * Profile / user-posts page — route `/user-posts/:userId`.
- * Loads the user and all their posts, then reveals them in pages of 5 on the client.
+ * Loads the user, their posts and follow stats. Shows a Follow/Unfollow button
+ * (for others) or an edit-profile affordance (for your own page).
  */
 const ProfilePage = () => {
   const { userId } = useParams<{ userId: string }>();
+  const currentUser = useCurrentUser();
 
-  const [user, setUser] = useState<User | null>(null);
-  const [posts, setPosts] = useState<Post[]>([]);
+  const [profile, setProfile] = useState<UserProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -27,13 +29,18 @@ const ProfilePage = () => {
     setLoading(true);
     fetchUserProfile(id)
       .then((data) => {
-        setUser(data.user);
-        setPosts(data.posts);
+        setProfile(data);
         setError("");
       })
       .catch((err) => setError(err instanceof Error ? err.message : "התובע לא נמצא"))
       .finally(() => setLoading(false));
   }, [userId]);
+
+  // After editing your own profile, update the page and the cached session user.
+  const handleProfileUpdated = (updated: User) => {
+    setProfile((prev) => (prev ? { ...prev, user: updated } : prev));
+    if (getStoredUser()?.id === updated.id) saveSession(updated);
+  };
 
   if (loading) {
     return (
@@ -43,7 +50,7 @@ const ProfilePage = () => {
     );
   }
 
-  if (error || !user) {
+  if (error || !profile) {
     return (
       <Container maxWidth="md" sx={{ py: 4 }}>
         <Alert severity="error">{error || "התובע לא נמצא"}</Alert>
@@ -54,19 +61,31 @@ const ProfilePage = () => {
     );
   }
 
+  const { user, posts } = profile;
+  const isSelf = currentUser?.id === user.id;
+
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
       <Button component={RouterLink} to="/users" sx={{ mb: 2 }} startIcon={<ArrowBackIcon sx={{ transform: "scaleX(-1)" }} />}>
         כל התובעים
       </Button>
 
-      <UserHeader user={user} postCount={posts.length} />
+      <UserHeader
+        user={user}
+        postCount={posts.length}
+        followersCount={profile.followers_count}
+        followingCount={profile.following_count}
+        isFollowing={profile.is_following}
+        isSelf={!!isSelf}
+        isAuthed={!!currentUser}
+        onProfileUpdated={handleProfileUpdated}
+      />
 
       <Typography variant="h5" sx={{ mb: 2, fontFamily: '"Frank Ruhl Libre", serif', fontWeight: 700 }}>
         תיק תביעות {user.name}
       </Typography>
 
-      <UserPosts userName={user.name} posts={posts} />
+      <UserPosts userName={user.name} posts={posts as Post[]} />
     </Container>
   );
 };

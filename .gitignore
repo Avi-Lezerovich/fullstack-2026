@@ -20,6 +20,9 @@ __pycache__/
 # SQLite database (generated + seeded at runtime)
 *.db
 
+# Uploaded images (generated at runtime)
+server/uploads/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -33,3 +36,5 @@ __pycache__/
 
 .claude
 
+.postman
+postman

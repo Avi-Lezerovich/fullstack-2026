@@ -75,10 +75,13 @@ export const logout = async (): Promise<void> => {
 
 // ----------------------------------------------------------------- posts
 
-export const fetchPosts = (opts: { limit?: number; offset?: number } = {}): Promise<Post[]> => {
+export const fetchPosts = (
+  opts: { limit?: number; offset?: number; feed?: "global" | "following" } = {},
+): Promise<Post[]> => {
   const sp = new URLSearchParams();
   if (typeof opts.limit === "number") sp.set("limit", String(opts.limit));
   if (typeof opts.offset === "number") sp.set("offset", String(opts.offset));
+  if (opts.feed === "following") sp.set("feed", "following");
   return request<Post[]>(`${BASE}/posts?${sp.toString()}`);
 };
 
@@ -87,6 +90,7 @@ export const createPost = (payload: {
   body: string;
   defendant: string;
   charges?: string[];
+  image_url?: string | null;
 }): Promise<Post> =>
   request<Post>(`${BASE}/posts`, {
     method: "POST",
@@ -105,6 +109,43 @@ export const fetchUsers = (opts: { search?: string; limit?: number; offset?: num
 
 export const fetchUserProfile = (id: number): Promise<UserProfileResponse> =>
   request<UserProfileResponse>(`${BASE}/users/${id}`);
+
+export const followUser = (id: number): Promise<{ is_following: boolean }> =>
+  request<{ is_following: boolean }>(`${BASE}/users/${id}/follow`, { method: "POST" });
+
+export const unfollowUser = (id: number): Promise<{ is_following: boolean }> =>
+  request<{ is_following: boolean }>(`${BASE}/users/${id}/follow`, { method: "DELETE" });
+
+/** Patch the logged-in user's editable profile fields. Returns the updated user. */
+export const updateProfile = (payload: { bio?: string; avatar_url?: string }): Promise<AuthResponse> =>
+  request<AuthResponse>(`${BASE}/users/me`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+
+/**
+ * Upload an image (multipart). Bypasses the JSON `request` helper because the
+ * browser must set its own multipart boundary on the Content-Type header.
+ */
+export const uploadImage = async (file: File): Promise<{ url: string }> => {
+  const form = new FormData();
+  form.append("file", file);
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/uploads`, { method: "POST", credentials: "include", body: form });
+  } catch {
+    throw new Error("שגיאת רשת. ודא שהשרת פעיל.");
+  }
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    const msg =
+      body && typeof body === "object" && "error" in body && typeof (body as { error: unknown }).error === "string"
+        ? (body as { error: string }).error
+        : `שגיאה ${res.status}`;
+    throw new Error(msg);
+  }
+  return body as { url: string };
+};
 
 // ----------------------------------------------------------- session helpers
 //
