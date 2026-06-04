@@ -59,21 +59,26 @@ const TopBar = () => {
           {user ? (
             <>
               <Button component={RouterLink} to="/new-post" variant="contained" color="secondary" startIcon={<GavelIcon />}>
-                הגש תביעה
+               הגשת תביעה
               </Button>
-              <Typography sx={{ color: "#FAF6E9", mx: 1, fontWeight: 500 }} title={user.name}>
+              <Typography
+                component={RouterLink}
+                to={`/user-posts/${user.id}`}
+                sx={{ color: "#FAF6E9", mx: 1, fontWeight: 500, textDecoration: "none", cursor: "pointer" }}
+                title={user.name}
+              >
                 שלום, {user.name}
               </Typography>
               <Button
                 onClick={handleLogout}
                 sx={{ color: "#FAF6E9", border: "1px solid rgba(250, 246, 233, 0.3)", "&:hover": { backgroundColor: "rgba(250, 246, 233, 0.08)" } }}
               >
-                שחרור באולם
+               התנתקות
               </Button>
             </>
           ) : (
             <Button component={RouterLink} to="/login" variant="contained" color="secondary">
-              התייצב
+             התחברות
             </Button>
           )}
         </Stack>

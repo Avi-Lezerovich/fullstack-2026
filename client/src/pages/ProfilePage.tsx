@@ -32,7 +32,7 @@ const ProfilePage = () => {
         setProfile(data);
         setError("");
       })
-      .catch((err) => setError(err instanceof Error ? err.message : "התובע לא נמצא"))
+      .catch((err) => setError(err instanceof Error ? err.message : "לא נמצאו פרטי תובע/ת"))
       .finally(() => setLoading(false));
   }, [userId]);
 
@@ -53,7 +53,7 @@ const ProfilePage = () => {
   if (error || !profile) {
     return (
       <Container maxWidth="md" sx={{ py: 4 }}>
-        <Alert severity="error">{error || "התובע לא נמצא"}</Alert>
+        <Alert severity="error">{error || "לא נמצאו פרטי תובע/ת"}</Alert>
         <Button component={RouterLink} to="/users" sx={{ mt: 2 }} startIcon={<ArrowBackIcon sx={{ transform: "scaleX(-1)" }} />}>
           חזרה ללוח התובעים
         </Button>
