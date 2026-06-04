@@ -111,6 +111,7 @@ def get_posts():
     return jsonify(services.list_posts(limit, offset, follower_id=follower_id))
 
 
+# create post route
 @api.post("/posts")
 @require_auth
 def create_post():
@@ -144,6 +145,7 @@ def get_user(user_id):
     return jsonify(profile)
 
 
+# Update the current user's profile (bio and avatar_url).
 @api.patch("/users/me")
 @require_auth
 def update_me():
@@ -158,6 +160,7 @@ def update_me():
 
 # ----------------------------------------------------------------------- follows
 
+# Follow a user 
 @api.post("/users/<int:user_id>/follow")
 @require_auth
 def follow(user_id):
@@ -169,6 +172,7 @@ def follow(user_id):
     return jsonify({"ok": True, "is_following": True})
 
 
+# Unfollow a user
 @api.delete("/users/<int:user_id>/follow")
 @require_auth
 def unfollow(user_id):
@@ -178,6 +182,7 @@ def unfollow(user_id):
 
 # ----------------------------------------------------------------------- uploads
 
+# Upload an image file and return its URL, for use in posts. Validates the file type and size.
 @api.post("/uploads")
 @require_auth
 def upload_image():

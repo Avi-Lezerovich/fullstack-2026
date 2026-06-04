@@ -92,8 +92,7 @@ const NewPost = () => {
         <Box component="form" onSubmit={handleSubmit} noValidate>
           <Stack spacing={2.5}>
             <TextField label="כותרת התביעה" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth autoFocus />
-            <TextField label="הנתבע" value={defendant} onChange={(e) => setDefendant(e.target.value)} fullWidth />
-
+            <TextField label="שם הנתבע/ת" value={defendant} onChange={(e) => setDefendant(e.target.value)} fullWidth />
             <FormControl fullWidth>
               <InputLabel id="charges-label">סעיפי אישום</InputLabel>
               <Select
@@ -118,8 +117,7 @@ const NewPost = () => {
 
             <Box>
               <Typography variant="body2" sx={{ mb: 0.5, color: "text.secondary" }}>תוכן התביעה</Typography>
-              <RichTextEditor value={body} onChange={setBody} placeholder="פרט את כתב האישום…" />
-            </Box>
+              <RichTextEditor value={body} onChange={setBody} placeholder="פירוט כתב האישום…" />            </Box>
 
             {/* Optional evidence image */}
             <Box>
@@ -129,8 +127,7 @@ const NewPost = () => {
                 startIcon={uploading ? <CircularProgress size={16} /> : <ImageIcon />}
                 disabled={uploading}
               >
-                {imageUrl ? "החלף ראיה (תמונה)" : "צרף ראיה (תמונה)"}
-                <input hidden type="file" accept="image/*" onChange={handleImage} />
+              {imageUrl ? "החלפת הראיה" : "צירוף ראיה"}                <input hidden type="file" accept="image/*" onChange={handleImage} />
               </Button>
               {imageUrl && (
                 <Box sx={{ position: "relative", mt: 1.5, display: "inline-block" }}>

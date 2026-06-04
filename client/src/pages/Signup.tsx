@@ -93,15 +93,14 @@ const Signup = () => {
             </Box>
             <TextField label="אימות סיסמה" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} fullWidth autoComplete="new-password" />
             <Button type="submit" variant="contained" color="secondary" size="large" disabled={submitting} startIcon={submitting ? <CircularProgress size={18} /> : <HowToRegIcon />}>
-              {submitting ? "רושם..." : "הצטרף לרשימת המושבעים"}
-            </Button>
+            {submitting ? "בתהליך הרשמה..." : "הרשמה למערכת"}            </Button>
           </Stack>
         </Box>
 
         <Typography sx={{ textAlign: "center", mt: 3, color: "text.secondary" }}>
-          כבר רשום?{" "}
+           כבר יש לך חשבון?{" "}
           <Link component={RouterLink} to="/login" sx={{ fontWeight: 700, color: "primary.main" }}>
-            התייצב באולם
+           התייצבות באולם
           </Link>
         </Typography>
       </Paper>

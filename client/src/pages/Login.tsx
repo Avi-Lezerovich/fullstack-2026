@@ -48,11 +48,11 @@ const Login = () => {
     <Container maxWidth="sm" sx={{ py: 8 }}>
       <Paper sx={{ p: 5 }}>
         <Box sx={{ textAlign: "center", mb: 3 }}>
-          <Typography variant="h4" sx={{ fontFamily: '"Frank Ruhl Libre", serif', fontWeight: 700, color: "primary.dark" }}>
-            התייצב בפני בית המשפט
+        <Typography variant="h4" sx={{ fontFamily: '"Frank Ruhl Libre", serif', fontWeight: 700, color: "primary.dark" }}>
+            התייצבות בפני בית המשפט
           </Typography>
           <Typography sx={{ color: "text.secondary", mt: 0.5 }}>
-            הזדהה כדי להגיש תביעות
+            יש להזדהות כדי להגיש תביעות
           </Typography>
         </Box>
 
@@ -63,15 +63,15 @@ const Login = () => {
             <TextField label="אימייל" type="email" value={email} onChange={(e) => setEmail(e.target.value)} fullWidth autoComplete="email" autoFocus />
             <TextField label="סיסמה" type="password" value={password} onChange={(e) => setPassword(e.target.value)} fullWidth autoComplete="current-password" />
             <Button type="submit" variant="contained" color="secondary" size="large" disabled={submitting} startIcon={submitting ? <CircularProgress size={18} /> : <GavelIcon />}>
-              {submitting ? "מתייצב..." : "התייצב"}
+            {submitting ? "בתהליך התייצבות..." : "התייצבות"}              {/* {submitting ? "מתייצב..." : "התייצב בפני בית המשפט"} --- IGNORE --- */}
             </Button>
           </Stack>
         </Box>
 
-        <Typography sx={{ textAlign: "center", mt: 3, color: "text.secondary" }}>
-          עדיין לא תובע?{" "}
+          <Typography sx={{ textAlign: "center", mt: 3, color: "text.secondary" }}>
+          רוצה להצטרף כתובע/ת?{" "}
           <Link component={RouterLink} to="/signup" sx={{ fontWeight: 700, color: "primary.main" }}>
-            הירשם
+            הרשמה
           </Link>
         </Typography>
       </Paper>
