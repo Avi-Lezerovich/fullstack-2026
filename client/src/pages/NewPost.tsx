@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Container, Paper, Box, Stack, Typography, TextField, Button, Alert, CircularProgress,
@@ -12,6 +12,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import { createPost, uploadImage } from "../api";
 import { CHARGES_OPTIONS } from "../types";
 import { htmlTextLength } from "../utils/htmlUtils";
+import { validateImageFile } from "../utils/validationUtils";
 import RichTextEditor from "../components/editor/RichTextEditor";
 
 /**
@@ -25,30 +26,47 @@ const NewPost = () => {
   const [defendant, setDefendant] = useState("");
   const [charges, setCharges] = useState<string[]>([]);
   const [body, setBody] = useState("");
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => () => {
+    if (imagePreviewUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(imagePreviewUrl);
+    }
+  }, [imagePreviewUrl]);
 
   const handleChargesChange = (e: SelectChangeEvent<string[]>) => {
     const value = e.target.value;
     setCharges(typeof value === "string" ? value.split(",") : value);
   };
 
-  const handleImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const clearSelectedImage = () => {
+    setImageFile(null);
+    if (imagePreviewUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(imagePreviewUrl);
+    }
+    setImagePreviewUrl(null);
+  };
+
+  const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-selecting the same file
     if (!file) return;
-    setUploading(true);
-    setError("");
-    try {
-      const { url } = await uploadImage(file);
-      setImageUrl(url);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "העלאת התמונה נכשלה");
-    } finally {
-      setUploading(false);
+
+    const validationError = validateImageFile(file);
+    if (validationError) {
+      clearSelectedImage();
+      setError(validationError);
+      return;
     }
+
+    clearSelectedImage();
+    setImageFile(file);
+    setImagePreviewUrl(URL.createObjectURL(file));
+    setError("");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -57,20 +75,34 @@ const NewPost = () => {
       setError("נא למלא כותרת, נתבע ותוכן התביעה");
       return;
     }
+    if (imageFile) {
+      const validationError = validateImageFile(imageFile);
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
+    }
 
     setSubmitting(true);
     setError("");
     try {
+      let uploadedImageUrl: string | null = null;
+      if (imageFile) {
+        setUploading(true);
+        uploadedImageUrl = (await uploadImage(imageFile)).url;
+      }
       await createPost({
         title: title.trim(),
         body,
         defendant: defendant.trim(),
         charges,
-        image_url: imageUrl,
+        image_url: uploadedImageUrl,
       });
       navigate("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "הגשת התביעה נכשלה");
+    } finally {
+      setUploading(false);
       setSubmitting(false);
     }
   };
@@ -119,22 +151,22 @@ const NewPost = () => {
               <Typography variant="body2" sx={{ mb: 0.5, color: "text.secondary" }}>תוכן התביעה</Typography>
               <RichTextEditor value={body} onChange={setBody} placeholder="פירוט כתב האישום…" />            </Box>
 
-            {/* Optional evidence image */}
             <Box>
               <Button
                 component="label"
                 variant="outlined"
                 startIcon={uploading ? <CircularProgress size={16} /> : <ImageIcon />}
-                disabled={uploading}
+                disabled={uploading || submitting}
               >
-              {imageUrl ? "החלפת הראיה" : "צירוף ראיה"}                <input hidden type="file" accept="image/*" onChange={handleImage} />
+                {imageFile ? "החלפת הראיה" : "צירוף ראיה"}
+                <input hidden type="file" accept="image/*" onChange={handleImage} />
               </Button>
-              {imageUrl && (
+              {imagePreviewUrl && (
                 <Box sx={{ position: "relative", mt: 1.5, display: "inline-block" }}>
-                  <Box component="img" src={imageUrl} alt="תצוגה מקדימה" sx={{ maxWidth: "100%", maxHeight: 240, borderRadius: 1, display: "block" }} />
+                  <Box component="img" src={imagePreviewUrl} alt="תצוגה מקדימה" sx={{ maxWidth: "100%", maxHeight: 240, borderRadius: 1, display: "block" }} />
                   <IconButton
                     size="small"
-                    onClick={() => setImageUrl(null)}
+                    onClick={clearSelectedImage}
                     sx={{ position: "absolute", top: 4, insetInlineEnd: 4, bgcolor: "rgba(0,0,0,0.6)", color: "#fff", "&:hover": { bgcolor: "rgba(0,0,0,0.8)" } }}
                   >
                     <CloseIcon fontSize="small" />
@@ -143,7 +175,7 @@ const NewPost = () => {
               )}
             </Box>
 
-            <Button type="submit" variant="contained" color="secondary" size="large" disabled={submitting} startIcon={submitting ? <CircularProgress size={18} /> : <GavelIcon />}>
+            <Button type="submit" variant="contained" color="secondary" size="large" disabled={submitting || uploading} startIcon={submitting ? <CircularProgress size={18} /> : <GavelIcon />}>
               {submitting ? "מגיש..." : "הגש תביעה"}
             </Button>
           </Stack>

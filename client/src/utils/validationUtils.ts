@@ -9,6 +9,18 @@ export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** Minimum password length enforced by the signup form. Surfaces in error copy too. */
 export const MIN_PASSWORD = 8;
 
+/** Maximum image size accepted by the frontend before an upload is attempted. */
+export const MAX_IMAGE_SIZE_MB = 5;
+
+/** Allowed MIME types for evidence images and profile images. */
+export const ALLOWED_IMAGE_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "image/avif",
+]);
+
 /**
  * Hard signup rules: enforce a minimum length and a mix of letters and digits.
  * Returns a Hebrew error message, or null when the password is acceptable.
@@ -23,6 +35,22 @@ export const validatePassword = (password: string): string | null => {
   if (!/\d/.test(password)) {
     return "הסיסמה חייבת לכלול לפחות ספרה אחת";
   }
+  return null;
+};
+
+/**
+ * Validates an image file before upload. Returns a Hebrew error message, or null when the file is acceptable.
+ */
+export const validateImageFile = (file: File): string | null => {
+  if (!ALLOWED_IMAGE_MIME_TYPES.has(file.type)) {
+    return "אפשר לצרף רק קבצי תמונה";
+  }
+
+  const maxSizeBytes = MAX_IMAGE_SIZE_MB * 1024 * 1024;
+  if (file.size > maxSizeBytes) {
+    return `התמונה גדולה מדי. אפשר לצרף קובץ עד ${MAX_IMAGE_SIZE_MB}MB`;
+  }
+
   return null;
 };
 
