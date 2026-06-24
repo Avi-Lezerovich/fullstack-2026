@@ -56,9 +56,10 @@ def _post_to_dict(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
 
 # ------------------------------------------------------------------------ users
 
-def create_user(name: str, email: str, password: str) -> dict:
+def create_user(name: str, email: str, password: str, conn=None) -> dict:
     """Create a user. Raises ValueError if the email is already taken."""
-    conn = get_db()
+    own = conn is None
+    conn = conn or get_db()
     try:
         taken = conn.execute(
             "SELECT 1 FROM users WHERE LOWER(email) = LOWER(?)", (email.strip(),)
@@ -73,12 +74,14 @@ def create_user(name: str, email: str, password: str) -> dict:
         row = conn.execute("SELECT * FROM users WHERE id = ?", (cur.lastrowid,)).fetchone()
         return _public_user(row)
     finally:
-        conn.close()
+        if own:
+            conn.close()
 
 
-def authenticate(email: str, password: str):
+def authenticate(email: str, password: str, conn=None):
     """Return the public user on valid credentials, else None."""
-    conn = get_db()
+    own = conn is None
+    conn = conn or get_db()
     try:
         row = conn.execute(
             "SELECT * FROM users WHERE LOWER(email) = LOWER(?)", (email.strip(),)
@@ -87,18 +90,20 @@ def authenticate(email: str, password: str):
             return None
         return _public_user(row)
     finally:
-        conn.close()
+        if own:
+            conn.close()
 
 
 # --------------------------------------------------------------------- sessions
 
-def create_session(user_id: int) -> str:
+def create_session(user_id: int, conn=None) -> str:
     """Issue a new opaque session token for the user (one active session per user).
 
     Mirrors the lecture's upsert: a fresh login replaces the previous session row.
     """
     token = secrets.token_urlsafe(32)
-    conn = get_db()
+    own = conn is None
+    conn = conn or get_db()
     try:
         conn.execute(
             "INSERT INTO sessions (user_id, session_id, created_at) VALUES (?, ?, ?) "
@@ -109,14 +114,16 @@ def create_session(user_id: int) -> str:
         conn.commit()
         return token
     finally:
-        conn.close()
+        if own:
+            conn.close()
 
 
-def get_user_by_session(token: str):
+def get_user_by_session(token: str, conn=None):
     """Resolve a session token to its public user, or None."""
     if not token:
         return None
-    conn = get_db()
+    own = conn is None
+    conn = conn or get_db()
     try:
         row = conn.execute(
             "SELECT u.* FROM users u JOIN sessions s ON s.user_id = u.id "
@@ -125,24 +132,28 @@ def get_user_by_session(token: str):
         ).fetchone()
         return _public_user(row) if row else None
     finally:
-        conn.close()
+        if own:
+            conn.close()
 
 
-def delete_session(token: str) -> None:
+def delete_session(token: str, conn=None) -> None:
     """Destroy a session (logout). No-op if the token is missing/unknown."""
     if not token:
         return
-    conn = get_db()
+    own = conn is None
+    conn = conn or get_db()
     try:
         conn.execute("DELETE FROM sessions WHERE session_id = ?", (token,))
         conn.commit()
     finally:
-        conn.close()
+        if own:
+            conn.close()
 
 
-def list_users(search=None, limit=None, offset=0) -> list:
+def list_users(search=None, limit=None, offset=0, conn=None) -> list:
     """Users with a computed post_count; optional name/email search; paginated."""
-    conn = get_db()
+    own = conn is None
+    conn = conn or get_db()
     try:
         sql = (
             "SELECT u.*, COUNT(p.id) AS post_count "
@@ -160,16 +171,18 @@ def list_users(search=None, limit=None, offset=0) -> list:
         rows = conn.execute(sql, params).fetchall()
         return [{**_public_user(r), "post_count": r["post_count"]} for r in rows]
     finally:
-        conn.close()
+        if own:
+            conn.close()
 
 
-def get_user_profile(user_id: int, viewer_id=None):
+def get_user_profile(user_id: int, viewer_id=None, conn=None):
     """Return {user, posts, followers_count, following_count, is_following} or None.
 
     `viewer_id` is the currently logged-in user (if any); `is_following` reflects
     whether that viewer follows this profile.
     """
-    conn = get_db()
+    own = conn is None
+    conn = conn or get_db()
     try:
         user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         if not user:
@@ -197,12 +210,14 @@ def get_user_profile(user_id: int, viewer_id=None):
             "is_following": is_following,
         }
     finally:
-        conn.close()
+        if own:
+            conn.close()
 
 
-def update_profile(user_id: int, bio=None, avatar_url=None) -> dict:
+def update_profile(user_id: int, bio=None, avatar_url=None, conn=None) -> dict:
     """Patch the editable profile fields; only provided (non-None) fields change."""
-    conn = get_db()
+    own = conn is None
+    conn = conn or get_db()
     try:
         sets, params = [], []
         if bio is not None:
@@ -218,22 +233,26 @@ def update_profile(user_id: int, bio=None, avatar_url=None) -> dict:
         row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         return _public_user(row)
     finally:
-        conn.close()
+        if own:
+            conn.close()
 
 
 # ---------------------------------------------------------------------- follows
 
-def user_exists(user_id: int) -> bool:
-    conn = get_db()
+def user_exists(user_id: int, conn=None) -> bool:
+    own = conn is None
+    conn = conn or get_db()
     try:
         return conn.execute("SELECT 1 FROM users WHERE id = ?", (user_id,)).fetchone() is not None
     finally:
-        conn.close()
+        if own:
+            conn.close()
 
 
-def follow_user(follower_id: int, followee_id: int) -> None:
+def follow_user(follower_id: int, followee_id: int, conn=None) -> None:
     """Create a follow edge (idempotent). Self-follow is rejected by the caller/CHECK."""
-    conn = get_db()
+    own = conn is None
+    conn = conn or get_db()
     try:
         conn.execute(
             "INSERT OR IGNORE INTO follows (follower_id, followee_id, created_at) "
@@ -242,11 +261,13 @@ def follow_user(follower_id: int, followee_id: int) -> None:
         )
         conn.commit()
     finally:
-        conn.close()
+        if own:
+            conn.close()
 
 
-def unfollow_user(follower_id: int, followee_id: int) -> None:
-    conn = get_db()
+def unfollow_user(follower_id: int, followee_id: int, conn=None) -> None:
+    own = conn is None
+    conn = conn or get_db()
     try:
         conn.execute(
             "DELETE FROM follows WHERE follower_id = ? AND followee_id = ?",
@@ -254,18 +275,20 @@ def unfollow_user(follower_id: int, followee_id: int) -> None:
         )
         conn.commit()
     finally:
-        conn.close()
+        if own:
+            conn.close()
 
 
 # ------------------------------------------------------------------------ posts
 
-def list_posts(limit=None, offset=0, follower_id=None) -> list:
+def list_posts(limit=None, offset=0, follower_id=None, conn=None) -> list:
     """Newest-first feed, paginated. ISO timestamps sort lexically == chronologically.
 
     When `follower_id` is given, restricts the feed to posts authored by users that
     `follower_id` follows (the "individual"/following feed).
     """
-    conn = get_db()
+    own = conn is None
+    conn = conn or get_db()
     try:
         sql = POSTS_SELECT
         params = []
@@ -281,12 +304,14 @@ def list_posts(limit=None, offset=0, follower_id=None) -> list:
         rows = conn.execute(sql, params).fetchall()
         return [_post_to_dict(conn, r) for r in rows]
     finally:
-        conn.close()
+        if own:
+            conn.close()
 
 
 def create_post(author_id: int, title: str, body: str, defendant: str,
-                charges=None, image_url=None) -> dict:
-    conn = get_db()
+                charges=None, image_url=None, conn=None) -> dict:
+    own = conn is None
+    conn = conn or get_db()
     try:
         cur = conn.execute(
             "INSERT INTO posts (title, body, defendant, image_url, author_id, created_at) "
@@ -303,4 +328,5 @@ def create_post(author_id: int, title: str, body: str, defendant: str,
         row = conn.execute(POSTS_SELECT + " WHERE p.id = ?", (post_id,)).fetchone()
         return _post_to_dict(conn, row)
     finally:
-        conn.close()
+        if own:
+            conn.close()
