@@ -1,4 +1,20 @@
 services:
+  db:
+    image: mysql:8.0
+    environment:
+      - MYSQL_ROOT_PASSWORD=change-me-in-production
+      - MYSQL_DATABASE=lolsuit
+    ports:
+      - "3306:3306"
+    volumes:
+      # Persist the MySQL data files across container restarts.
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   server:
     build:
       context: .
@@ -6,11 +22,22 @@ services:
     ports:
       - "5001:5001"
     environment:
-      # Keep the SQLite file on a named volume so data survives container restarts.
-      - DATABASE_PATH=/data/lolsuit.db
+      # For Amazon RDS, point DB_HOST at the instance endpoint and set DB_USER/
+      # DB_PASSWORD to the master credentials (keep them out of source control).
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=change-me-in-production
+      - DB_NAME=lolsuit
+      - UPLOAD_DIR=/data/uploads
       - JWT_SECRET=change-me-in-production
     volumes:
-      - server-data:/data
+      # Keep uploaded images on a named volume so they survive container restarts.
+      - server-uploads:/data
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
-  server-data:
+  db-data:
+  server-uploads:

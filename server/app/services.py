@@ -3,7 +3,6 @@ shapes the client expects (see client/src/types.ts).
 """
 import secrets
 import datetime
-import sqlite3
 
 from .models import get_db
 from .utils import hash_password, verify_password
@@ -20,7 +19,7 @@ def _now_iso() -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%S.") + f"{dt.microsecond // 1000:03d}Z"
 
 
-def _public_user(row: sqlite3.Row) -> dict:
+def _public_user(row) -> dict:
     """User without the password hash."""
     return {
         "id": row["id"],
@@ -32,14 +31,14 @@ def _public_user(row: sqlite3.Row) -> dict:
     }
 
 
-def _charges_for(conn: sqlite3.Connection, post_id: int) -> list:
+def _charges_for(conn, post_id: int) -> list:
     rows = conn.execute(
         "SELECT charge FROM post_charges WHERE post_id = ? ORDER BY id", (post_id,)
     ).fetchall()
     return [r["charge"] for r in rows]
 
 
-def _post_to_dict(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
+def _post_to_dict(conn, row) -> dict:
     charges = _charges_for(conn, row["id"])
     return {
         "id": row["id"],
@@ -107,8 +106,8 @@ def create_session(user_id: int, conn=None) -> str:
     try:
         conn.execute(
             "INSERT INTO sessions (user_id, session_id, created_at) VALUES (?, ?, ?) "
-            "ON CONFLICT(user_id) DO UPDATE SET "
-            "session_id = excluded.session_id, created_at = excluded.created_at",
+            "ON DUPLICATE KEY UPDATE "
+            "session_id = VALUES(session_id), created_at = VALUES(created_at)",
             (user_id, token, _now_iso()),
         )
         conn.commit()
@@ -255,7 +254,7 @@ def follow_user(follower_id: int, followee_id: int, conn=None) -> None:
     conn = conn or get_db()
     try:
         conn.execute(
-            "INSERT OR IGNORE INTO follows (follower_id, followee_id, created_at) "
+            "INSERT IGNORE INTO follows (follower_id, followee_id, created_at) "
             "VALUES (?, ?, ?)",
             (follower_id, followee_id, _now_iso()),
         )

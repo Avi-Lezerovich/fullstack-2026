@@ -17,7 +17,7 @@ dist-ssr
 __pycache__/
 *.pyc
 
-# SQLite database (generated + seeded at runtime)
+# Local SQLite leftovers (the app now uses MySQL; safe to keep ignoring)
 *.db
 
 # Uploaded images (generated at runtime)
