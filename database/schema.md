@@ -1,7 +1,7 @@
 # LolSuit — Database Schema
 
-SQLite database (`database/lolsuit.db`), created from [`init.sql`](init.sql) and seeded from
-[`server/app/models.py`](../server/app/models.py).
+MySQL 8 database (`lolsuit`, e.g. on Amazon RDS), created from [`init.sql`](init.sql) and seeded
+from [`server/app/models.py`](../server/app/models.py). All tables are InnoDB / `utf8mb4`.
 
 ## Entity-Relationship Diagram
 
@@ -14,41 +14,41 @@ erDiagram
     users ||--o{ follows        : "is followed (followee)"
 
     users {
-        INTEGER id PK
-        TEXT    name
-        TEXT    email "UNIQUE"
-        TEXT    password_hash "bcrypt"
-        TEXT    bio "nullable"
-        TEXT    avatar_url "nullable"
-        TEXT    created_at "ISO-8601"
+        INT          id PK
+        VARCHAR      name
+        VARCHAR      email "UNIQUE"
+        VARCHAR      password_hash "bcrypt"
+        TEXT         bio "nullable"
+        VARCHAR      avatar_url "nullable"
+        VARCHAR      created_at "ISO-8601"
     }
 
     sessions {
-        INTEGER user_id FK "UNIQUE — one active session/user"
-        TEXT    session_id "opaque token"
-        TEXT    created_at "ISO-8601"
+        INT          user_id FK "UNIQUE — one active session/user"
+        VARCHAR      session_id "opaque token"
+        VARCHAR      created_at "ISO-8601"
     }
 
     posts {
-        INTEGER id PK
-        TEXT    title
-        TEXT    body "sanitized rich-text HTML"
-        TEXT    defendant
-        TEXT    image_url "nullable"
-        INTEGER author_id FK
-        TEXT    created_at "ISO-8601"
+        INT          id PK
+        VARCHAR      title
+        TEXT         body "sanitized rich-text HTML"
+        VARCHAR      defendant
+        VARCHAR      image_url "nullable"
+        INT          author_id FK
+        VARCHAR      created_at "ISO-8601"
     }
 
     post_charges {
-        INTEGER id PK
-        INTEGER post_id FK
-        TEXT    charge
+        INT          id PK
+        INT          post_id FK
+        VARCHAR      charge
     }
 
     follows {
-        INTEGER follower_id FK "PK part"
-        INTEGER followee_id FK "PK part"
-        TEXT    created_at "ISO-8601"
+        INT          follower_id FK "PK part"
+        INT          followee_id FK "PK part"
+        VARCHAR      created_at "ISO-8601"
     }
 ```
 

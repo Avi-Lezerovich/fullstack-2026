@@ -17,8 +17,8 @@ tier.
 | Tier | Responsibility | Technology | Lives in |
 |---|---|---|---|
 | **Presentation** | Render UI, hold view state, talk to the API | React 18 · TypeScript · Vite · MUI 5 (RTL/Hebrew) | [`client/`](../client/) |
-| **Application** | HTTP routing, auth, business rules, SQL | Python · Flask · raw `sqlite3` (no ORM) | [`server/`](../server/) |
-| **Data** | Persist & relate entities | SQLite | [`database/`](../database/) |
+| **Application** | HTTP routing, auth, business rules, SQL | Python · Flask · raw `PyMySQL` (no ORM) | [`server/`](../server/) |
+| **Data** | Persist & relate entities | MySQL 8 (Amazon RDS) | [`database/`](../database/) |
 
 Each tier knows only about the tier directly beneath it. The browser never touches the
 database; the database never calls out. All coupling happens at two well-defined seams:
@@ -45,7 +45,7 @@ flowchart TD
     end
 
     subgraph Data["Data tier — database/"]
-        DB[("SQLite<br/>lolsuit.db")]
+        DB[("MySQL 8<br/>(Amazon RDS)")]
     end
 
     API -->|"HTTP JSON over /api<br/>(cookie: session_id)"| Vite
@@ -86,7 +86,7 @@ Read in this order for a top-to-bottom tour, or jump straight to a tier:
 |---|---|
 | 📱 [**presentation-tier.md**](presentation-tier.md) | The React frontend: provider stack, routing, state model, the `api.ts` layer, client-side validation & HTML sanitization. |
 | ⚙️ [**application-tier.md**](application-tier.md) | The Flask backend: app factory, layered design, REST routing, bcrypt + stateful sessions, business rules, file uploads. |
-| 🗄️ [**data-tier.md**](data-tier.md) | The SQLite database: connection helper, full schema walkthrough, bootstrap/seeding, and the parameterized-query patterns. |
+| 🗄️ [**data-tier.md**](data-tier.md) | The MySQL database: connection helper, full schema walkthrough, bootstrap/seeding, and the parameterized-query patterns. |
 | 🔁 [**data-flow.md**](data-flow.md) | End-to-end walkthroughs (login, feed load, filing a lawsuit) with sequence diagrams tracing a request through all three tiers. |
 
 ### See also

@@ -8,8 +8,8 @@ Mid-semester project — Full Stack course, Reichman University (RUNI) 2026.
 | Tier | Technology | Location |
 |---|---|---|
 | Frontend | React 18 + TypeScript + Vite + MUI 5 | [`client/`](client/) |
-| Backend | Python + Flask + raw sqlite3 (no ORM) | [`server/`](server/) |
-| Database | SQLite | [`database/lolsuit.db`](database/lolsuit.db) |
+| Backend | Python + Flask + raw PyMySQL (no ORM) | [`server/`](server/) |
+| Database | MySQL 8 (Amazon RDS in production) | [`database/init.sql`](database/init.sql) |
 
 The frontend talks to the backend through `/api`. In development, the Vite dev server (port 5173) proxies all `/api` requests to Flask (port 5001) — see [`client/vite.config.ts`](client/vite.config.ts).
 
@@ -17,6 +17,11 @@ The frontend talks to the backend through `/api`. In development, the Vite dev s
 
 - **Node.js** 18+ and **npm**
 - **Python** 3.10+
+- **MySQL** 8 — either a local server/container or an Amazon RDS endpoint
+
+The server reads its connection from the environment (defaults in parentheses):
+`DB_HOST` (`localhost`), `DB_PORT` (`3306`), `DB_USER` (`root`), `DB_PASSWORD` (empty),
+`DB_NAME` (`lolsuit`). It creates the database/schema and seeds it on first run.
 
 ## Running locally
 
@@ -60,12 +65,16 @@ On first run, 12 sample users are created. They all share the same password:
 
 ## Resetting the database
 
-The schema uses `CREATE TABLE IF NOT EXISTS`, so to apply schema changes you must delete the file and restart the server (it will recreate and reseed it):
+The schema uses `CREATE TABLE IF NOT EXISTS`, so to apply schema changes you must drop the
+database and restart the server (it will recreate and reseed it):
 
 ```bash
-rm database/lolsuit.db
+mysql -h "$DB_HOST" -u "$DB_USER" -p -e "DROP DATABASE lolsuit;"
 cd server && python run.py
 ```
+
+With Docker, `docker compose down -v` removes the MySQL data volume and forces a fresh seed on
+the next `up`.
 
 ## Production build (Frontend)
 
@@ -82,11 +91,13 @@ cd client
 npm test           # run the Vitest suite
 ```
 
-## Running with Docker (server only)
+## Running with Docker (server + MySQL)
 
 ```bash
-docker compose up --build    # brings up the Flask server on port 5001
+docker compose up --build    # brings up MySQL + the Flask server on port 5001
 ```
+
+Compose starts a `mysql:8.0` service and waits for it to be healthy before launching the server.
 
 ## Key features
 
