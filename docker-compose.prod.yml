@@ -1,0 +1,40 @@
+# Production stack for a single EC2 instance.
+# This file does NOT build anything — it only RUNS pre-built images that you
+# built on your own machine and uploaded to the box (see scripts/ below).
+# The database lives in Amazon RDS (no local db container here).
+#
+# Usage on the EC2 box:
+#   cp .env.example .env   # then fill in the RDS endpoint + secrets
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Only the frontend (port 80) is published. The backend is reachable only on
+# the internal compose network, via nginx's /api proxy.
+services:
+  server:
+    image: lolsuit-server:latest
+    # --preload imports the app (and runs init_db once) in the gunicorn master
+    # BEFORE forking workers. Without it, all 3 workers race to seed the fresh
+    # RDS database and deadlock (MySQL error 1213), crashing the container.
+    command: ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "3", "--preload", "run:app"]
+    environment:
+      - DB_HOST=${DB_HOST}        # RDS instance endpoint
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME:-lolsuit}
+      - UPLOAD_DIR=/data/uploads
+      - JWT_SECRET=${JWT_SECRET}
+    volumes:
+      - server-uploads:/data
+    restart: unless-stopped
+
+  web:
+    image: lolsuit-web:latest
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  server-uploads:

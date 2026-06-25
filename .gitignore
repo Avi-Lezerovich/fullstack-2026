@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Local env / secrets (use .env.example as the template)
+.env
+
+# Built image bundle produced by scripts/build-and-save.sh
+lolsuit-images.tar
+
 # Python / server
 .venv
 __pycache__/

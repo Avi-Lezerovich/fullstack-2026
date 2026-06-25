@@ -12,4 +12,8 @@ COPY database/ ./database/
 
 WORKDIR /app/server
 EXPOSE 5001
-CMD ["python", "run.py"]
+# Production WSGI server (run.py's debug server is for local dev only).
+# run.py exposes `app = create_app()` at module level, so `run:app` works here.
+# --preload imports the app (running init_db once) in the master before forking
+# workers; otherwise the workers race to seed the DB and deadlock on first boot.
+CMD ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "3", "--preload", "run:app"]

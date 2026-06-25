@@ -4,7 +4,8 @@ import react from "@vitejs/plugin-react";
 
 // Forward all /api/* requests from the Vite dev server (5173) to Flask (5001).
 export default defineConfig({
-  base: '/intuit-runi-fullstack-2026/',
+  // Served from the domain root on EC2 (was a GitHub-Pages sub-path before).
+  base: '/',
   plugins: [react()],
   server: {
     port: 5173,
