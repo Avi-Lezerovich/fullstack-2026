@@ -60,9 +60,9 @@ const Login = () => {
 
         <Box component="form" onSubmit={handleSubmit} noValidate>
           <Stack spacing={2.5}>
-            <TextField label="אימייל" type="email" value={email} onChange={(e) => setEmail(e.target.value)} fullWidth autoComplete="email" autoFocus />
-            <TextField label="סיסמה" type="password" value={password} onChange={(e) => setPassword(e.target.value)} fullWidth autoComplete="current-password" />
-            <Button type="submit" variant="contained" color="secondary" size="large" disabled={submitting} startIcon={submitting ? <CircularProgress size={18} /> : <GavelIcon />}>
+            <TextField label="אימייל" type="email" value={email} onChange={(e) => setEmail(e.target.value)} fullWidth autoComplete="email" autoFocus inputProps={{ "data-testid": "login-email" }} />
+            <TextField label="סיסמה" type="password" value={password} onChange={(e) => setPassword(e.target.value)} fullWidth autoComplete="current-password" inputProps={{ "data-testid": "login-password" }} />
+            <Button type="submit" variant="contained" color="secondary" size="large" disabled={submitting} startIcon={submitting ? <CircularProgress size={18} /> : <GavelIcon />} data-testid="login-submit">
             {submitting ? "בתהליך התייצבות..." : "התייצבות"}              {/* {submitting ? "מתייצב..." : "התייצב בפני בית המשפט"} --- IGNORE --- */}
             </Button>
           </Stack>
