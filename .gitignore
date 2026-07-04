@@ -29,6 +29,17 @@ __pycache__/
 # Uploaded images (generated at runtime)
 server/uploads/
 
+# Test + coverage artifacts
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+# Cypress run output (screenshots on failure, videos)
+client/cypress/screenshots/
+client/cypress/videos/
+client/cypress/downloads/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
