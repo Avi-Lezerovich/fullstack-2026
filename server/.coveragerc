@@ -1,0 +1,41 @@
+# Coverage scoped to the AUTHENTICATION code specifically (assignment requirement:
+# "85% on the authentication-related code, not the whole-repo average").
+#
+# We measure the three auth-bearing files, then drop every NON-auth function from
+# the denominator with `exclude_also` (coverage excludes the whole def clause).
+# Each pattern is anchored with `\(` so the auth functions are never caught by
+# accident — e.g. `def get_user\(` excludes the non-auth handler but leaves
+# `get_user_by_session` (auth) measured.
+
+[run]
+source = app
+
+[report]
+show_missing = True
+fail_under = 85
+include =
+    */app/utils.py
+    */app/services.py
+    */app/routes.py
+exclude_also =
+    # --- non-auth route handlers (routes.py) ---
+    def get_posts\(
+    def create_post\(
+    def get_users\(
+    def get_user\(
+    def update_me\(
+    def follow\(
+    def unfollow\(
+    def upload_image\(
+    def serve_upload\(
+    def _current_user_id\(
+    # --- non-auth business logic (services.py) ---
+    def list_posts\(
+    def list_users\(
+    def get_user_profile\(
+    def update_profile\(
+    def user_exists\(
+    def follow_user\(
+    def unfollow_user\(
+    def _charges_for\(
+    def _post_to_dict\(

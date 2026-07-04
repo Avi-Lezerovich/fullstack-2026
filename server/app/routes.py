@@ -57,6 +57,10 @@ def signup():
     password = data.get("password") or ""
     if not name or not email or not password:
         return jsonify({"error": "נא למלא שם, אימייל וסיסמה"}), 400
+    # bcrypt reads at most 72 bytes of the password; bcrypt >= 5 raises instead of
+    # truncating, so reject early with a clear 400 rather than crash with a 500.
+    if len(password.encode("utf-8")) > 72:
+        return jsonify({"error": "הסיסמה ארוכה מדי"}), 400
     try:
         user = services.create_user(name, email, password)
     except ValueError as exc:
