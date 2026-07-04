@@ -66,18 +66,20 @@ const TopBar = () => {
                 to={`/user-posts/${user.id}`}
                 sx={{ color: "#FAF6E9", mx: 1, fontWeight: 500, textDecoration: "none", cursor: "pointer" }}
                 title={user.name}
+                data-testid="profile-link"
               >
                 שלום, {user.name}
               </Typography>
               <Button
                 onClick={handleLogout}
                 sx={{ color: "#FAF6E9", border: "1px solid rgba(250, 246, 233, 0.3)", "&:hover": { backgroundColor: "rgba(250, 246, 233, 0.08)" } }}
+                data-testid="logout-button"
               >
                התנתקות
               </Button>
             </>
           ) : (
-            <Button component={RouterLink} to="/login" variant="contained" color="secondary">
+            <Button component={RouterLink} to="/login" variant="contained" color="secondary" data-testid="login-cta">
              התחברות
             </Button>
           )}

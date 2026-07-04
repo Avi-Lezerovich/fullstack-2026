@@ -73,10 +73,10 @@ const Signup = () => {
 
         <Box component="form" onSubmit={handleSubmit} noValidate>
           <Stack spacing={2}>
-            <TextField label="שם מלא" value={name} onChange={(e) => setName(e.target.value)} fullWidth autoComplete="name" autoFocus />
-            <TextField label="אימייל" type="email" value={email} onChange={(e) => setEmail(e.target.value)} fullWidth autoComplete="email" />
+            <TextField label="שם מלא" value={name} onChange={(e) => setName(e.target.value)} fullWidth autoComplete="name" autoFocus inputProps={{ "data-testid": "signup-name" }} />
+            <TextField label="אימייל" type="email" value={email} onChange={(e) => setEmail(e.target.value)} fullWidth autoComplete="email" inputProps={{ "data-testid": "signup-email" }} />
             <Box>
-              <TextField label="סיסמה" type="password" value={password} onChange={(e) => setPassword(e.target.value)} fullWidth autoComplete="new-password" helperText={`לפחות ${MIN_PASSWORD} תווים, כולל אות וספרה`} />
+              <TextField label="סיסמה" type="password" value={password} onChange={(e) => setPassword(e.target.value)} fullWidth autoComplete="new-password" helperText={`לפחות ${MIN_PASSWORD} תווים, כולל אות וספרה`} inputProps={{ "data-testid": "signup-password" }} />
               {password && (
                 <Box sx={{ mt: 1 }}>
                   <LinearProgress
@@ -91,8 +91,8 @@ const Signup = () => {
                 </Box>
               )}
             </Box>
-            <TextField label="אימות סיסמה" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} fullWidth autoComplete="new-password" />
-            <Button type="submit" variant="contained" color="secondary" size="large" disabled={submitting} startIcon={submitting ? <CircularProgress size={18} /> : <HowToRegIcon />}>
+            <TextField label="אימות סיסמה" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} fullWidth autoComplete="new-password" inputProps={{ "data-testid": "signup-confirm" }} />
+            <Button type="submit" variant="contained" color="secondary" size="large" disabled={submitting} startIcon={submitting ? <CircularProgress size={18} /> : <HowToRegIcon />} data-testid="signup-submit">
             {submitting ? "בתהליך הרשמה..." : "הרשמה למערכת"}            </Button>
           </Stack>
         </Box>
