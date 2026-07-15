@@ -1,28 +1,18 @@
 
-import { useState } from "react";
 import {
   Box,
   Card,
   CardContent,
   CardMedia,
   Divider,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  CircularProgress,
-  Alert,
 } from "@mui/material";
-import DeleteIcon from "@mui/icons-material/Delete";
 
 import type { Post } from "../../types";
-import { deletePost } from "../../api";
 
 import AuthorHeader from "./AuthorHeader";
 import PostTitle from "./PostTitle";
 import PostBody from "./PostBody";
+import PostDelete from "./PostDelete";
 
 interface PostCardProps {
   post: Post;
@@ -39,40 +29,13 @@ interface PostCardProps {
  * author can delete it (with confirmation) via the trash icon.
  */
 const PostCard = ({ post, currentUserId, onDeleted }: PostCardProps) => {
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState("");
-  const isOwner = currentUserId !== undefined && currentUserId === post.author_id;
-
-  const handleDelete = async () => {
-    setDeleting(true);
-    setError("");
-    try {
-      await deletePost(post.id);
-      setConfirmOpen(false);
-      onDeleted?.(post.id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "מחיקת התביעה נכשלה");
-    } finally {
-      setDeleting(false);
-    }
-  };
-
   return (
     <Card>
       <CardContent>
         {/* Author header */}
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <AuthorHeader post={post} />
-          {isOwner && (
-            <IconButton
-              aria-label="מחק תביעה"
-              size="small"
-              onClick={() => setConfirmOpen(true)}
-            >
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          )}
+          <PostDelete post={post} currentUserId={currentUserId} onDeleted={onDeleted} />
         </Box>
 
         <Divider sx={{ my: 2 }} />
@@ -97,26 +60,6 @@ const PostCard = ({ post, currentUserId, onDeleted }: PostCardProps) => {
         )}
 
       </CardContent>
-
-      <Dialog open={confirmOpen} onClose={() => (deleting ? null : setConfirmOpen(false))}>
-        <DialogTitle>מחיקת תביעה</DialogTitle>
-        <DialogContent>
-          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-          האם אתה בטוח שברצונך למחוק תביעה זו? לא ניתן לשחזר פעולה זו.
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmOpen(false)} disabled={deleting}>ביטול</Button>
-          <Button
-            onClick={handleDelete}
-            variant="contained"
-            color="error"
-            disabled={deleting}
-            startIcon={deleting ? <CircularProgress size={16} /> : null}
-          >
-            מחק
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Card>
   );
 };
