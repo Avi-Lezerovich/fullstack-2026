@@ -9,9 +9,11 @@ type UserPostsProps = {
   userName: string;
   posts: Post[];
   pageSize?: number;
+  currentUserId?: number;
+  onPostDeleted?: (postId: number) => void;
 };
 
-const UserPosts = ({ userName, posts, pageSize = 5 }: UserPostsProps) => {
+const UserPosts = ({ userName, posts, pageSize = 5, currentUserId, onPostDeleted }: UserPostsProps) => {
   const [visibleCount, setVisibleCount] = useState(pageSize);
 
   useEffect(() => {
@@ -31,7 +33,7 @@ const UserPosts = ({ userName, posts, pageSize = 5 }: UserPostsProps) => {
   return (
     <Stack spacing={2}>
       {visiblePosts.map((post) => (
-        <PostCard key={post.id} post={post} />
+        <PostCard key={post.id} post={post} currentUserId={currentUserId} onDeleted={onPostDeleted} />
       ))}
 
       {visibleCount < posts.length && (
