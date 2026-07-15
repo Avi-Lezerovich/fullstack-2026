@@ -9,6 +9,8 @@ type PostListProps = {
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
+  currentUserId?: number;
+  onPostDeleted?: (postId: number) => void;
 };
 
 /**
@@ -16,7 +18,7 @@ type PostListProps = {
  * sentinel near the bottom and auto-loads the next page as it scrolls into view.
  * The "טען עוד" button stays as an explicit fallback (and for non-observer cases).
  */
-const PostList = ({ posts, hasMore, loadingMore, onLoadMore }: PostListProps) => {
+const PostList = ({ posts, hasMore, loadingMore, onLoadMore, currentUserId, onPostDeleted }: PostListProps) => {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -35,7 +37,7 @@ const PostList = ({ posts, hasMore, loadingMore, onLoadMore }: PostListProps) =>
   return (
     <Stack spacing={2}>
       {posts.map((post) => (
-        <PostCard key={post.id} post={post} />
+        <PostCard key={post.id} post={post} currentUserId={currentUserId} onDeleted={onPostDeleted} />
       ))}
 
       {hasMore && (

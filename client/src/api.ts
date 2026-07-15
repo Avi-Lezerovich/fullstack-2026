@@ -97,6 +97,10 @@ export const createPost = (payload: {
     body: JSON.stringify(payload),
   });
 
+/** Delete a post. The server rejects this (403) unless the caller is the post's author. */
+export const deletePost = (id: number): Promise<void> =>
+  request<void>(`${BASE}/posts/${id}`, { method: "DELETE" });
+
 // ----------------------------------------------------------------- users
 
 export const fetchUsers = (opts: { search?: string; limit?: number; offset?: number } = {}): Promise<UserListItem[]> => {

@@ -131,6 +131,18 @@ def create_post():
     return jsonify(post), 201
 
 
+# Delete a post — only the post's own author may delete it.
+@api.delete("/posts/<int:post_id>")
+@require_auth
+def delete_post(post_id):
+    result = services.delete_post(post_id, g.user_id)
+    if result == "not_found":
+        return jsonify({"error": "פוסט לא נמצא"}), 404
+    if result == "forbidden":
+        return jsonify({"error": "אין הרשאה למחוק פוסט זה"}), 403
+    return jsonify({"ok": True})
+
+
 # ------------------------------------------------------------------------ users
 
 @api.get("/users")

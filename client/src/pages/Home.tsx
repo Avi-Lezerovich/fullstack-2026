@@ -57,6 +57,10 @@ const Home = () => {
     }
   }, [posts.length, feed]);
 
+  const handlePostDeleted = useCallback((postId: number) => {
+    setPosts((prev) => prev.filter((p) => p.id !== postId));
+  }, []);
+
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
       <HomeHeader />
@@ -86,7 +90,14 @@ const Home = () => {
             : "אין תביעות להצגה."}
         </Typography>
       ) : (
-        <PostList posts={posts} hasMore={hasMore} loadingMore={loadingMore} onLoadMore={loadMore} />
+        <PostList
+          posts={posts}
+          hasMore={hasMore}
+          loadingMore={loadingMore}
+          onLoadMore={loadMore}
+          currentUserId={user?.id}
+          onPostDeleted={handlePostDeleted}
+        />
       )}
     </Container>
   );

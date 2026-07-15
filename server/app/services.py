@@ -329,3 +329,27 @@ def create_post(author_id: int, title: str, body: str, defendant: str,
     finally:
         if own:
             conn.close()
+
+
+def delete_post(post_id: int, author_id: int, conn=None) -> str:
+    """Delete a post if it belongs to `author_id`.
+
+    Returns "ok", "not_found", or "forbidden" so the route can pick the right
+    HTTP status without a second round trip.
+    """
+    own = conn is None
+    conn = conn or get_db()
+    try:
+        row = conn.execute(
+            "SELECT author_id FROM posts WHERE id = ?", (post_id,)
+        ).fetchone()
+        if row is None:
+            return "not_found"
+        if row["author_id"] != author_id:
+            return "forbidden"
+        conn.execute("DELETE FROM posts WHERE id = ?", (post_id,))
+        conn.commit()
+        return "ok"
+    finally:
+        if own:
+            conn.close()

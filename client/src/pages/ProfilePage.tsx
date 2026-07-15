@@ -42,6 +42,12 @@ const ProfilePage = () => {
     if (getStoredUser()?.id === updated.id) saveSession(updated);
   };
 
+  const handlePostDeleted = (postId: number) => {
+    setProfile((prev) =>
+      prev ? { ...prev, posts: prev.posts.filter((p) => p.id !== postId) } : prev,
+    );
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
@@ -85,7 +91,12 @@ const ProfilePage = () => {
         תיק תביעות {user.name}
       </Typography>
 
-      <UserPosts userName={user.name} posts={posts as Post[]} />
+      <UserPosts
+        userName={user.name}
+        posts={posts as Post[]}
+        currentUserId={currentUser?.id}
+        onPostDeleted={handlePostDeleted}
+      />
     </Container>
   );
 };
