@@ -21,6 +21,7 @@ exclude_also =
     # --- non-auth route handlers (routes.py) ---
     def get_posts\(
     def create_post\(
+    def delete_post\(
     def get_users\(
     def get_user\(
     def update_me\(

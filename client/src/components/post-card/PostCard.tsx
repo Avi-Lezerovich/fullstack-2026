@@ -30,7 +30,7 @@ interface PostCardProps {
  */
 const PostCard = ({ post, currentUserId, onDeleted }: PostCardProps) => {
   return (
-    <Card>
+    <Card data-testid="post-card">
       <CardContent>
         {/* Author header */}
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
