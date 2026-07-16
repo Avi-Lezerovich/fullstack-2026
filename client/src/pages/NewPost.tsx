@@ -123,8 +123,8 @@ const NewPost = () => {
 
         <Box component="form" onSubmit={handleSubmit} noValidate>
           <Stack spacing={2.5}>
-            <TextField label="כותרת התביעה" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth autoFocus />
-            <TextField label="שם הנתבע/ת" value={defendant} onChange={(e) => setDefendant(e.target.value)} fullWidth />
+            <TextField label="כותרת התביעה" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth autoFocus inputProps={{ "data-testid": "new-post-title" }} />
+            <TextField label="שם הנתבע/ת" value={defendant} onChange={(e) => setDefendant(e.target.value)} fullWidth inputProps={{ "data-testid": "new-post-defendant" }} />
             <FormControl fullWidth>
               <InputLabel id="charges-label">סעיפי אישום</InputLabel>
               <Select
@@ -149,7 +149,10 @@ const NewPost = () => {
 
             <Box>
               <Typography variant="body2" sx={{ mb: 0.5, color: "text.secondary" }}>תוכן התביעה</Typography>
-              <RichTextEditor value={body} onChange={setBody} placeholder="פירוט כתב האישום…" />            </Box>
+              <Box data-testid="new-post-body">
+                <RichTextEditor value={body} onChange={setBody} placeholder="פירוט כתב האישום…" />
+              </Box>
+            </Box>
 
             <Box>
               <Button
@@ -175,7 +178,7 @@ const NewPost = () => {
               )}
             </Box>
 
-            <Button type="submit" variant="contained" color="secondary" size="large" disabled={submitting || uploading} startIcon={submitting ? <CircularProgress size={18} /> : <GavelIcon />}>
+            <Button type="submit" variant="contained" color="secondary" size="large" disabled={submitting || uploading} startIcon={submitting ? <CircularProgress size={18} /> : <GavelIcon />} data-testid="new-post-submit">
               {submitting ? "מגיש..." : "הגש תביעה"}
             </Button>
           </Stack>

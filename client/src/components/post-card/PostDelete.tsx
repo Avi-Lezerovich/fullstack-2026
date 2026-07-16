@@ -54,6 +54,7 @@ const PostDelete = ({ post, currentUserId, onDeleted }: PostDeleteProps) => {
         aria-label="מחק תביעה"
         size="small"
         onClick={() => setConfirmOpen(true)}
+        data-testid="post-delete-button"
       >
         <DeleteIcon fontSize="small" />
       </IconButton>
@@ -72,6 +73,7 @@ const PostDelete = ({ post, currentUserId, onDeleted }: PostDeleteProps) => {
             color="error"
             disabled={deleting}
             startIcon={deleting ? <CircularProgress size={16} /> : null}
+            data-testid="post-delete-confirm"
           >
             מחק
           </Button>
