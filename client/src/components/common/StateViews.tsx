@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 
 /** The three states every data-loading view needs, so no page reinvents them. */
 
-export function Loading({ label = "טוען…" }: { label?: string }) {
+export const Loading = ({ label = "טוען…" }: { label?: string }) => {
   return (
     <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 2, py: 6 }}>
       <CircularProgress size={28} />
@@ -15,7 +15,7 @@ export function Loading({ label = "טוען…" }: { label?: string }) {
   );
 }
 
-export function ErrorNote({ message }: { message: string }) {
+export const ErrorNote = ({ message }: { message: string }) => {
   return (
     <Alert severity="error" sx={{ my: 2 }} data-testid="error-note">
       {message}
@@ -23,7 +23,7 @@ export function ErrorNote({ message }: { message: string }) {
   );
 }
 
-export function EmptyState({
+export const EmptyState = ({
   title,
   description,
   action,
@@ -31,7 +31,7 @@ export function EmptyState({
   title: string;
   description?: string;
   action?: ReactNode;
-}) {
+}) => {
   return (
     <Box sx={{ textAlign: "center", py: 6, px: 2 }} data-testid="empty-state">
       <Typography variant="h6" gutterBottom>

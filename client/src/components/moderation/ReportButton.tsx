@@ -24,7 +24,7 @@ interface Props {
  * The human half of the hybrid moderation system: anyone can flag anything,
  * and a moderator bot picks it up on the next tick.
  */
-export default function ReportButton({ targetType, targetId, size = "small" }: Props) {
+const ReportButton = ({ targetType, targetId, size = "small" }: Props) => {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<string>(REPORT_REASONS[0].value);
   const [details, setDetails] = useState("");
@@ -113,4 +113,4 @@ export default function ReportButton({ targetType, targetId, size = "small" }: P
       </Dialog>
     </>
   );
-}
+}; export default ReportButton;
