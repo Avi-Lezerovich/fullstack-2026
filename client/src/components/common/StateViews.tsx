@@ -13,7 +13,7 @@ export const Loading = ({ label = "טוען…" }: { label?: string }) => {
       <Typography color="text.secondary">{label}</Typography>
     </Box>
   );
-}
+};
 
 export const ErrorNote = ({ message }: { message: string }) => {
   return (
@@ -21,7 +21,7 @@ export const ErrorNote = ({ message }: { message: string }) => {
       {message}
     </Alert>
   );
-}
+};
 
 export const EmptyState = ({
   title,
@@ -45,4 +45,4 @@ export const EmptyState = ({
       {action}
     </Box>
   );
-}
+};

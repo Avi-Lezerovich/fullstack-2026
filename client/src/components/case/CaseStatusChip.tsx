@@ -7,7 +7,7 @@ import LockIcon from "@mui/icons-material/Lock";
 import DescriptionIcon from "@mui/icons-material/Description";
 
 import { CASE_STATUS_LABELS, type CaseStatus } from "../../types";
-import { timeUntil } from "../../utils/format";
+import { timeUntil, isPast} from "../../utils/format";
 
 type ChipColor = "default" | "info" | "secondary" | "success" | "primary";
 
@@ -37,7 +37,8 @@ interface Props {
 
 const CaseStatusChip = ({ status, deadline, size = "small" }: Props) => {
   const { color, icon, hint } = PRESENTATION[status];
-  const remaining = status === "closed" ? "" : timeUntil(deadline ?? null);
+  const remaining = status !== "closed" && !isPast(deadline ?? null) ? timeUntil(deadline ?? null) : "";
+
 
   return (
     <Tooltip title={remaining ? `${hint} השלב מסתיים ${remaining}.` : hint}>

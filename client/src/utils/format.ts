@@ -6,7 +6,7 @@ export const parseServerDate = (value: string | null): Date | null => {
   const normalised = value.endsWith("Z") ? value : `${value}Z`;
   const date = new Date(normalised);
   return Number.isNaN(date.getTime()) ? null : date;
-}
+};
 
 const rtf = new Intl.RelativeTimeFormat("he", { numeric: "auto" });
 
@@ -28,21 +28,27 @@ export const relativeTime = (value: string | null): string => {
     if (Math.abs(seconds) >= size) return rtf.format(Math.round(seconds / size), unit);
   }
   return "ממש עכשיו";
-}
+};
 
-/** "בעוד 3 שעות" / "הסתיים" — used for the countdown to the next phase. */
+/** Whether the date has passed (or is null). */
+export const isPast = (value: string | null): boolean => {
+  const date = parseServerDate(value);
+  return date === null || date.getTime() <= Date.now();
+};
+
+/** Always a continuation phrase, for example "in 3 hours". Call only when the date is known to be in the future. */
 export const timeUntil = (value: string | null): string => {
   const date = parseServerDate(value);
-  if (!date) return "";
-  return date.getTime() <= Date.now() ? "הסתיים" : relativeTime(value);
-}
+  if (!date || date.getTime() <= Date.now()) return "";
+  return relativeTime(value);
+};
 
 export const formatDate = (value: string | null): string => {
   const date = parseServerDate(value);
   return date
-    ? date.toLocaleDateString("he-IL", { day: "numeric", month: "long", year: "numeric" })
+    ? date.toLocaleDateString("he-IL", { day: "numeric", month: "long", year: "numeric" } )
     : "";
-}
+};
 
 /** Initials for an avatar, tolerant of one-word names. */
 export const initials = (name: string): string => {
@@ -50,4 +56,4 @@ export const initials = (name: string): string => {
   if (parts.length === 0) return "?";
   if (parts.length === 1) return parts[0].slice(0, 2);
   return parts[0][0] + parts[1][0];
-}
+};
