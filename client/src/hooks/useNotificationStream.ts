@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
-import { fetchNotifications, markNotificationsRead } from "../api";
 import type { Notification } from "../types";
 
 const POLL_INTERVAL_MS = 10_000;
@@ -103,7 +102,7 @@ export const useNotificationStream = ({ enabled, since, onNotification }: Option
           setTimeout(connect, 1000);
         }
       };
-    };
+    }; 
 
     connect();
 
@@ -113,97 +112,4 @@ export const useNotificationStream = ({ enabled, since, onNotification }: Option
       if (pollTimer) clearInterval(pollTimer);
     };
   }, [enabled]);
-};
-
-/** How many rows the bell's dropdown keeps in memory. */
-const MAX_ROWS = 50;
-
-export interface NotificationsState {
-  notifications: Notification[];
-  unreadCount: number;
-  /** Marks the given ids read, or every notification when called with no args. */
-  markRead: (ids?: number[]) => Promise<void>;
-  /**
-   * Id of the newest `message` notification seen so far. It changes exactly
-   * once per incoming DM, which is what <MessagesLink> watches to know its
-   * unread badge is stale.
-   */
-  latestMessageId: number;
-}
-
-/**
- * The notification feed as state: a history fetched once on sign-in, kept
- * current by `useNotificationStream`.
- *
- * There is no notification provider in this app, so <TopBar> calls this once
- * and passes the result down to the bell and the inbox badge. Mounting it
- * twice would open two streams.
- *
- * `enabled` is false for logged-out visitors — the endpoint requires auth.
- */
-export const useNotifications = (enabled: boolean): NotificationsState => {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [since, setSince] = useState(0);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    if (!enabled) {
-      setNotifications([]);
-      setUnreadCount(0);
-      setSince(0);
-      setLoaded(false);
-      return;
-    }
-
-    let cancelled = false;
-    void (async () => {
-      try {
-        const data = await fetchNotifications();
-        if (cancelled) return;
-        setNotifications(data.notifications.slice(0, MAX_ROWS));
-        setUnreadCount(data.unread_count);
-        setSince(data.latest_id);
-      } catch {
-        // Start empty rather than blocking the app bar on a failed history
-        // load; the stream still delivers anything that arrives from now on.
-      } finally {
-        if (!cancelled) setLoaded(true);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [enabled]);
-
-  const receive = useCallback((notification: Notification) => {
-    // A reconnect can replay from the cursor, so drop anything already held.
-    setNotifications((prev) =>
-      prev.some((n) => n.id === notification.id)
-        ? prev
-        : [notification, ...prev].slice(0, MAX_ROWS),
-    );
-    if (!notification.is_read) setUnreadCount((count) => count + 1);
-  }, []);
-
-  // Held until the history load has set the cursor — connecting at since=0
-  // would replay the whole table as if it were new.
-  useNotificationStream({ enabled: enabled && loaded, since, onNotification: receive });
-
-  const markRead = useCallback(async (ids?: number[]) => {
-    try {
-      const { unread_count } = await markNotificationsRead(ids);
-      setUnreadCount(unread_count);
-      setNotifications((prev) =>
-        prev.map((n) => (!ids || ids.includes(n.id) ? { ...n, is_read: true } : n)),
-      );
-    } catch {
-      // Leave the badge as-is rather than lying about it.
-    }
-  }, []);
-
-  const latestMessageId = notifications.find((n) => n.type === "message")?.id ?? 0;
-
-  return { notifications, unreadCount, markRead, latestMessageId };
 }; 
