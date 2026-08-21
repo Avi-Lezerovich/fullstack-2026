@@ -1,8 +1,10 @@
-import { Box, Container, Typography, Stack } from "@mui/material";
+import { Box, Container, Stack, Typography } from "@mui/material";
+
+const PARCHMENT_DIM = "rgba(250, 246, 233, 0.7)";
 
 /**
- * Small credit strip rendered at the bottom of every page.
- * Mirrors the navy + brass-gold styling of the AppBar (gold top-border ↔ AppBar's
+ * Credit strip rendered at the bottom of every page.
+ * Mirrors the purple + brass-gold styling of the AppBar (gold top-border ↔ AppBar's
  * gold bottom-border) so the page feels bookended.
  */
 const Footer = () => {
@@ -20,7 +22,7 @@ const Footer = () => {
     >
       <Container maxWidth="lg">
         <Stack
-          direction="row"
+          direction={{ xs: "column", sm: "row" }}
           spacing={1.5}
           alignItems="center"
           justifyContent="space-between"
@@ -42,7 +44,16 @@ const Footer = () => {
               LolSuit
             </Typography>
           </Stack>
-          <Typography variant="caption" sx={{ color: "rgba(250, 246, 233, 0.7)" }}>
+
+          <Typography
+            variant="body2"
+            align="center"
+            sx={{ color: PARCHMENT_DIM, maxWidth: 460 }}
+          >
+            בית המשפט לתביעות מצחיקות. כל התיקים בדיוניים, כל פסקי הדין סופיים.
+          </Typography>
+
+          <Typography variant="caption" sx={{ color: PARCHMENT_DIM }}>
             Mid term project · Full-Stack @ RUNI · 2026
           </Typography>
         </Stack>
@@ -50,4 +61,5 @@ const Footer = () => {
     </Box>
   );
 };
+
 export default Footer;
