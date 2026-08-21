@@ -1,82 +1,89 @@
 import { useState } from "react";
-import { Link as RouterLink, Navigate, useNavigate } from "react-router-dom";
-import { Container, Paper, TextField, Button, Typography, Box, Alert, Stack, Link, CircularProgress } from "@mui/material";
-import GavelIcon from "@mui/icons-material/Gavel";
+import Button from "@mui/material/Button";
+import Link from "@mui/material/Link";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import { Link as RouterLink, Navigate, useLocation, useNavigate } from "react-router-dom";
 
-import { isLoggedIn, login, saveSession } from "../api";
-import { EMAIL_RE } from "../utils/validationUtils";
+import { ErrorNote } from "../components/common/StateViews";
+import { useAuth } from "../context/AuthContext";
 
-/**
- * Login page — route `/login`.
- * Plain useState form: validate the email, call the API, save the session, go home.
- * Already-logged-in visitors are bounced to "/".
- */
 const Login = () => {
+  const { user, signIn } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  if (isLoggedIn()) return <Navigate to="/" replace />;
+  if (user) return <Navigate to="/" replace />;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!EMAIL_RE.test(email)) {
-      setError("כתובת אימייל לא תקינה");
-      return;
-    }
-    if (!password) {
-      setError("נא להזין סיסמה");
-      return;
-    }
-
-    setSubmitting(true);
-    setError("");
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError(null);
+    setBusy(true);
     try {
-      const res = await login(email, password);
-      saveSession(res.user);
-      navigate("/");
+      await signIn(email.trim(), password);
+      // Return the user to whatever they were trying to reach.
+      navigate((location.state as { from?: string })?.from ?? "/", { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "ההתחברות נכשלה");
-    } finally {
-      setSubmitting(false);
+      setError(err instanceof Error ? err.message : "ההתחברות נכשלה.");
+      setBusy(false);
     }
   };
 
   return (
-    <Container maxWidth="sm" sx={{ py: 8 }}>
-      <Paper sx={{ p: 5 }}>
-        <Box sx={{ textAlign: "center", mb: 3 }}>
-        <Typography variant="h4" sx={{ fontFamily: '"Frank Ruhl Libre", serif', fontWeight: 700, color: "primary.dark" }}>
-            התייצבות בפני בית המשפט
-          </Typography>
-          <Typography sx={{ color: "text.secondary", mt: 0.5 }}>
-            יש להזדהות כדי להגיש תביעות
-          </Typography>
-        </Box>
+    <Paper sx={{ p: { xs: 2, sm: 3 }, maxWidth: 440, mx: "auto" }} component="form" onSubmit={submit}>
+      <Typography variant="h4" gutterBottom>
+        כניסה
+      </Typography>
 
-        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {error && <ErrorNote message={error} />}
 
-        <Box component="form" onSubmit={handleSubmit} noValidate>
-          <Stack spacing={2.5}>
-            <TextField label="אימייל" type="email" value={email} onChange={(e) => setEmail(e.target.value)} fullWidth autoComplete="email" autoFocus inputProps={{ "data-testid": "login-email" }} />
-            <TextField label="סיסמה" type="password" value={password} onChange={(e) => setPassword(e.target.value)} fullWidth autoComplete="current-password" inputProps={{ "data-testid": "login-password" }} />
-            <Button type="submit" variant="contained" color="secondary" size="large" disabled={submitting} startIcon={submitting ? <CircularProgress size={18} /> : <GavelIcon />} data-testid="login-submit">
-            {submitting ? "בתהליך התייצבות..." : "התייצבות"}              {/* {submitting ? "מתייצב..." : "התייצב בפני בית המשפט"} --- IGNORE --- */}
-            </Button>
-          </Stack>
-        </Box>
+      <Stack spacing={2}>
+        <TextField
+          label="אימייל"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          fullWidth
+          autoComplete="email"
+          inputProps={{ "data-testid": "login-email" }}
+        />
+        <TextField
+          label="סיסמה"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          fullWidth
+          autoComplete="current-password"
+          inputProps={{ "data-testid": "login-password" }}
+        />
+        <Button
+          type="submit"
+          variant="contained"
+          size="large"
+          disabled={busy}
+          data-testid="login-submit"
+        >
+          {busy ? "מתחבר…" : "כניסה"}
+        </Button>
 
-          <Typography sx={{ textAlign: "center", mt: 3, color: "text.secondary" }}>
-          רוצה להצטרף כתובע/ת?{" "}
-          <Link component={RouterLink} to="/signup" sx={{ fontWeight: 700, color: "primary.main" }}>
-            הרשמה
+        <Typography variant="body2" align="center">
+          <Link component={RouterLink} to="/forgot-password">
+            שכחתי סיסמה
           </Link>
         </Typography>
-      </Paper>
-    </Container>
+        <Typography variant="body2" align="center" color="text.secondary">
+          אין לך חשבון? <Link component={RouterLink} to="/signup">הרשמה</Link>
+        </Typography>
+      </Stack>
+    </Paper>
   );
-};
-
-export default Login;
+}; export default Login;
