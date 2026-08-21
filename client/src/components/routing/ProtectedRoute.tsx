@@ -11,11 +11,11 @@ import { Loading } from "../common/StateViews";
  * login page for the split second before /auth/me answers — the cookie is
  * httpOnly, so there is no synchronous way to know who they are.
  */
-export default function ProtectedRoute({ children }: { children: ReactNode }) {
+const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   const { user, loading } = useAuth();
   const location = useLocation();
 
   if (loading) return <Loading />;
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   return <>{children}</>;
-}
+}; export default ProtectedRoute;
