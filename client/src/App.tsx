@@ -1,51 +1,53 @@
-import { Routes, Route, Navigate } from "react-router-dom";
-import { Box } from "@mui/material";
+import Box from "@mui/material/Box";
+import Container from "@mui/material/Container";
+import { Navigate, Route, Routes } from "react-router-dom";
 
-import TopBar from "./components/layout/TopBar";
 import Footer from "./components/layout/Footer";
+import TopBar from "./components/layout/TopBar";
 import ProtectedRoute from "./components/routing/ProtectedRoute";
-import ScrollToTop from "./components/routing/ScrollToTop";
-
-import Home from "./pages/Home";
-import Users from "./pages/Users";
-import ProfilePage from "./pages/ProfilePage";
-import About from "./pages/About";
+import AdminDashboard from "./pages/AdminDashboard";
+import CasePage from "./pages/CasePage";
+import Feed from "./pages/Feed";
+import ForgotPassword from "./pages/ForgotPassword";
 import Login from "./pages/Login";
+import Messages from "./pages/Messages";
+import NewCase from "./pages/NewCase";
+import Profile from "./pages/Profile";
+import ResetPassword from "./pages/ResetPassword";
 import Signup from "./pages/Signup";
-import NewPost from "./pages/NewPost";
+import Users from "./pages/Users";
 
-/**
- * Root application component — renders the main shell with TopBar, footer, and route table.
- * ProtectedRoute guards /new-post; unauthenticated visitors are redirected to /login.
- * ScrollToTop effect scrolls on route change. Unknown URLs redirect to "/".
- */
 const App = () => {
   return (
-    <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-      <ScrollToTop />
+    <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       <TopBar />
+
       <Box component="main" sx={{ flex: 1 }}>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/users" element={<Users />} />
-          <Route path="/user-posts/:userId" element={<ProfilePage />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route
-            path="/new-post"
-            element={
-              <ProtectedRoute>
-                <NewPost />
-              </ProtectedRoute>
-            }
-          />
-          {/* 404 fallback — redirect so the URL bar matches what they're seeing */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <Container maxWidth="md" sx={{ py: 3 }}>
+          <Routes>
+            <Route path="/" element={<Feed />} />
+            <Route path="/cases/new" element={<ProtectedRoute><NewCase /></ProtectedRoute>} />
+            <Route path="/cases/:caseId" element={<CasePage />} />
+            <Route path="/users" element={<Users />} />
+            <Route
+              path="/messages"
+              element={<ProtectedRoute><Messages /></ProtectedRoute>}
+            />
+            <Route path="/users/:userId" element={<Profile />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route
+              path="/admin"
+              element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>}
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Container>
       </Box>
+
       <Footer />
     </Box>
   );
-};
-export default App;
+}; export default App;

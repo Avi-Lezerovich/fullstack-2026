@@ -1,40 +1,41 @@
-/**
- * Application entry point. Builds the provider stack and mounts <App />.
- *
- * Provider ordering:
- *   CacheProvider (RTL Emotion cache — flips MUI styles for Hebrew)
- *     └ ThemeProvider (MUI theme)
- *         └ CssBaseline (must be inside ThemeProvider to read theme tokens)
- *             └ HashRouter (client-side routing)
- *                 └ App
- */
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { HashRouter } from "react-router-dom";
-import { ThemeProvider, CssBaseline } from "@mui/material";
+import { BrowserRouter } from "react-router-dom";
 import { CacheProvider } from "@emotion/react";
 import createCache from "@emotion/cache";
+import { ThemeProvider } from "@mui/material/styles";
+import CssBaseline from "@mui/material/CssBaseline";
 import { prefixer } from "stylis";
 import rtlPlugin from "stylis-plugin-rtl";
 
 import App from "./App";
+import { AuthProvider } from "./context/AuthContext";
+import { NotificationProvider } from "./context/NotificationContext";
 import { theme } from "./theme";
 
-// Emotion cache configured for RTL — required by MUI to flip styles (margins,
-// borders, etc.) correctly for Hebrew.
-const cacheRtl = createCache({
+/**
+ * Emotion has to be told about RTL separately from MUI: the theme's
+ * `direction` flips MUI's own logic, but the generated CSS still needs its
+ * physical properties mirrored, which is what stylis-plugin-rtl does.
+ */
+const rtlCache = createCache({
   key: "muirtl",
   stylisPlugins: [prefixer, rtlPlugin],
 });
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <CacheProvider value={cacheRtl}>
+    <CacheProvider value={rtlCache}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <HashRouter>
-          <App />
-        </HashRouter>
+        <BrowserRouter>
+          <AuthProvider>
+            {/* Inside AuthProvider: the stream only opens for a signed-in user. */}
+            <NotificationProvider>
+              <App />
+            </NotificationProvider>
+          </AuthProvider>
+        </BrowserRouter>
       </ThemeProvider>
     </CacheProvider>
   </React.StrictMode>,

@@ -1,88 +1,83 @@
-import { useState, useEffect } from "react";
-import {
-  Container, Box, Typography, CircularProgress, Alert,
-} from "@mui/material";
+import { useCallback, useEffect, useState } from "react";
+import Avatar from "@mui/material/Avatar";
+import Box from "@mui/material/Box";
+import Card from "@mui/material/Card";
+import CardActionArea from "@mui/material/CardActionArea";
+import Chip from "@mui/material/Chip";
+import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import SmartToyIcon from "@mui/icons-material/SmartToy";
+import { Link as RouterLink } from "react-router-dom";
 
-import UsersHeader from "../components/users/UsersHeader";
-import UserSearchField from "../components/users/UserSearchField";
-import UsersTable from "../components/users/UsersTable";
-import LoadMoreButton from "../components/users/LoadMoreButton";
-import { fetchUsers } from "../api";
-import type { UserListItem } from "../types";
+import * as api from "../api";
+import { EmptyState, ErrorNote, Loading } from "../components/common/StateViews";
+import { useAsync } from "../hooks/useAsync";
+import { initials } from "../utils/format";
 
-const PAGE_SIZE = 10;
-const DEBOUNCE_MS = 300;
-
-/**
- * Users directory — route `/users`.
- * A search box (debounced 300ms) filters by name/email; results render in a table.
- * "טען עוד" loads the next 10 users.
- */
 const Users = () => {
   const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [users, setUsers] = useState<UserListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [error, setError] = useState("");
+  const [debounced, setDebounced] = useState("");
 
-  // Debounce the search box so we don't refetch on every keystroke.
+  // Typing should not fire a request per keystroke.
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search.trim()), DEBOUNCE_MS);
+    const timer = setTimeout(() => setDebounced(search), 300);
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Fetch the first page whenever the (debounced) search term changes.
-  useEffect(() => {
-    setLoading(true);
-    fetchUsers({ search: debouncedSearch, limit: PAGE_SIZE, offset: 0 })
-      .then((data) => {
-        setUsers(data);
-        setHasMore(data.length === PAGE_SIZE);
-        setError("");
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : "שגיאה בטעינת התובעים"))
-      .finally(() => setLoading(false));
-  }, [debouncedSearch]);
-
-  const loadMore = async () => {
-    setLoadingMore(true);
-    try {
-      const next = await fetchUsers({ search: debouncedSearch, limit: PAGE_SIZE, offset: users.length });
-      setUsers((prev) => [...prev, ...next]);
-      setHasMore(next.length === PAGE_SIZE);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "שגיאה בטעינת התובעים");
-    } finally {
-      setLoadingMore(false);
-    }
-  };
+  const load = useCallback(() => api.fetchUsers({ search: debounced, limit: 50 }), [debounced]);
+  const { data, error, loading } = useAsync(load, [debounced]);
+  const users = data?.users ?? [];
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      <UsersHeader />
+    <Box>
+      <Typography variant="h4" gutterBottom>
+        אנשי החצר
+      </Typography>
+      <Typography color="text.secondary" sx={{ mb: 2 }}>
+        תובעים, נתבעים, ותשעה-עשר פקידי בית משפט שאף פעם לא הולכים הביתה.
+      </Typography>
 
-      <UserSearchField value={search} onChange={(e) => setSearch(e.target.value)} />
+      <TextField
+        label="חיפוש לפי שם"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        fullWidth
+        sx={{ mb: 2 }}
+        inputProps={{ "data-testid": "user-search" }}
+      />
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {error && <ErrorNote message={error} />}
+      {loading && users.length === 0 && <Loading />}
+      {!loading && users.length === 0 && !error && <EmptyState title="לא נמצאו משתמשים" />}
 
-      {loading ? (
-        <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
-          <CircularProgress />
-        </Box>
-      ) : users.length === 0 ? (
-        <Typography variant="h6" sx={{ textAlign: "center", color: "text.secondary", py: 6 }}>
-          {debouncedSearch ? "אין תוצאות לחיפוש." : "אין תובעים רשומים."}
-        </Typography>
-      ) : (
-        <>
-          <UsersTable users={users} />
-          {hasMore && <LoadMoreButton loadingMore={loadingMore} onLoadMore={loadMore} />}
-        </>
-      )}
-    </Container>
+      <Stack spacing={1}>
+        {users.map((user) => (
+          <Card key={user.id} data-testid="user-row">
+            <CardActionArea component={RouterLink} to={`/users/${user.id}`} sx={{ p: 1.5 }}>
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                <Avatar src={user.avatar_url ?? undefined}>{initials(user.name)}</Avatar>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Stack direction="row" spacing={0.75} alignItems="center">
+                    <Typography fontWeight={700} noWrap>
+                      {user.name}
+                    </Typography>
+                    {user.is_admin && <Chip label="מנהל" size="small" color="primary" />}
+                  </Stack>
+                  {user.bio && (
+                    <Typography variant="caption" color="text.secondary" noWrap display="block">
+                      {user.bio}
+                    </Typography>
+                  )}
+                </Box>
+                {user.is_bot && (
+                  <Chip icon={<SmartToyIcon />} label="בוט" size="small" variant="outlined" />
+                )}
+              </Stack>
+            </CardActionArea>
+          </Card>
+        ))}
+      </Stack>
+    </Box>
   );
-};
-
-export default Users;
+}; export default Users;

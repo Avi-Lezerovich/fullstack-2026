@@ -1,181 +1,292 @@
 /**
- * Centralized API layer.
- * Every fetch in the app goes through here — components never call fetch directly.
- * All requests hit the real backend at /api (proxied to Flask in dev — see vite.config.ts).
+ * The single place this application talks to the network.
  *
- * Auth is cookie-based (lecture 5 stateful sessions): the server sets an httpOnly
- * `session_id` cookie on login/signup. We send `credentials: "include"` on every
- * request so that cookie rides along; the token itself is invisible to JS.
+ * No component calls `fetch` directly. Everything goes through `request<T>`,
+ * which means credentials handling, JSON parsing and error translation exist
+ * once rather than in thirty components.
+ *
+ * Errors are thrown as `Error` carrying the server's own Hebrew `error` string,
+ * so a caller's `catch` block already has something worth showing a user.
  */
+
 import type {
   AuthResponse,
-  Post,
-  User,
-  UserListItem,
-  UserProfileResponse,
+  Case,
+  CaseListResponse,
+  Comment,
+  Conversation,
+  FlaggedItem,
+  MeResponse,
+  Message,
+  ModerationAction,
+  ModerationStatus,
+  NewCaseInput,
+  Notification,
+  OkResponse,
+  Report,
+  PendingSummons,
+  Summons,
+  TrialView,
+  UserListResponse,
+  UserProfile,
+  UserRef,
 } from "./types";
 
 const BASE = "/api";
 
-// ---------------------------------------------------------------- helpers
+/** An error that still knows the HTTP status and the server's error code. */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code: string;
 
-/** Wraps fetch with consistent error handling — throws the server's error message if !res.ok. */
-const request = async <T>(url: string, init: RequestInit = {}): Promise<T> => {
-  let res: Response;
+  constructor(message: string, status: number, code: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  let response: Response;
   try {
-    res = await fetch(url, {
-      credentials: "include", // send/receive the session cookie
+    response = await fetch(`${BASE}${path}`, {
+      // Authentication is an httpOnly cookie; without this the browser will
+      // not attach it and every request looks anonymous.
+      credentials: "include",
       ...init,
-      headers: { "Content-Type": "application/json", ...(init.headers || {}) },
+      headers: {
+        "Content-Type": "application/json",
+        ...(init.headers || {}),
+      },
     });
   } catch {
-    throw new Error("שגיאת רשת. ודא שהשרת פעיל.");
+    throw new ApiError("שגיאת רשת. ודא שהשרת פעיל ונסה שוב.", 0, "network");
   }
 
-  let body: unknown;
+  let body: unknown = null;
   try {
-    body = await res.json();
+    body = await response.json();
   } catch {
-    body = null;
+    // 204s and empty error pages are both legitimate.
   }
 
-  if (!res.ok) {
-    const msg =
-      body && typeof body === "object" && "error" in body && typeof (body as { error: unknown }).error === "string"
-        ? (body as { error: string }).error
-        : `שגיאה ${res.status}`;
-    throw new Error(msg);
+  if (!response.ok) {
+    const payload = (body ?? {}) as { error?: string; code?: string };
+    throw new ApiError(
+      payload.error || `שגיאה ${response.status}`,
+      response.status,
+      payload.code || "error",
+    );
   }
 
   return body as T;
-};
+}
 
-// ----------------------------------------------------------------- auth
+const json = (method: string, data?: unknown): RequestInit => ({
+  method,
+  ...(data === undefined ? {} : { body: JSON.stringify(data) }),
+});
 
-export const signup = (name: string, email: string, password: string): Promise<AuthResponse> =>
-  request<AuthResponse>(`${BASE}/auth/signup`, {
-    method: "POST",
-    body: JSON.stringify({ name, email, password }),
-  });
-
-export const login = (email: string, password: string): Promise<AuthResponse> =>
-  request<AuthResponse>(`${BASE}/auth/login`, {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  });
-
-/** Destroy the server-side session (and cookie), then clear the local UI hint. */
-export const logout = async (): Promise<void> => {
-  try {
-    await request(`${BASE}/auth/logout`, { method: "POST" });
-  } finally {
-    clearSession();
+const query = (params: Record<string, string | number | boolean | undefined>): string => {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") search.set(key, String(value));
   }
+  const text = search.toString();
+  return text ? `?${text}` : "";
 };
 
-// ----------------------------------------------------------------- posts
+// --- auth -------------------------------------------------------------------
 
-export const fetchPosts = (
-  opts: { limit?: number; offset?: number; feed?: "global" | "following" } = {},
-): Promise<Post[]> => {
-  const sp = new URLSearchParams();
-  if (typeof opts.limit === "number") sp.set("limit", String(opts.limit));
-  if (typeof opts.offset === "number") sp.set("offset", String(opts.offset));
-  if (opts.feed === "following") sp.set("feed", "following");
-  return request<Post[]>(`${BASE}/posts?${sp.toString()}`);
-};
+export const signup = (name: string, email: string, password: string) =>
+  request<AuthResponse>("/auth/signup", json("POST", { name, email, password }));
 
-export const createPost = (payload: {
-  title: string;
-  body: string;
-  defendant: string;
+export const login = (email: string, password: string) =>
+  request<AuthResponse>("/auth/login", json("POST", { email, password }));
+
+export const logout = () => request<OkResponse>("/auth/logout", json("POST"));
+
+export const fetchMe = () => request<MeResponse>("/auth/me");
+
+export const requestPasswordReset = (email: string) =>
+  request<OkResponse>("/auth/password-reset/request", json("POST", { email }));
+
+export const confirmPasswordReset = (token: string, password: string) =>
+  request<OkResponse>("/auth/password-reset/confirm", json("POST", { token, password }));
+
+// --- cases ------------------------------------------------------------------
+
+export const fetchCases = (params: {
+  limit?: number;
+  offset?: number;
+  author_id?: number;
+  status?: string;
+} = {}) => request<CaseListResponse>(`/cases${query(params)}`);
+
+export const fetchCase = (caseId: number) =>
+  request<{ case: Case }>(`/cases/${caseId}`).then((r) => r.case);
+
+export const createCase = (input: NewCaseInput) =>
+  request<{ case: Case }>("/cases", json("POST", input)).then((r) => r.case);
+
+export const deleteCase = (caseId: number) =>
+  request<OkResponse>(`/cases/${caseId}`, json("DELETE"));
+
+// --- likes and comments -----------------------------------------------------
+
+/** One endpoint for both directions: the server owns the current state. */
+export const toggleLike = (caseId: number) =>
+  request<{ liked: boolean; like_count: number }>(`/cases/${caseId}/like`, json("POST"));
+
+export const fetchLikers = (caseId: number) =>
+  request<{ users: UserRef[] }>(`/cases/${caseId}/likes`).then((r) => r.users);
+
+export const fetchComments = (caseId: number) =>
+  request<{ comments: Comment[] }>(`/cases/${caseId}/comments`).then((r) => r.comments);
+
+export const createComment = (caseId: number, body: string, parentCommentId?: number | null) =>
+  request<{ comment: Comment }>(
+    `/cases/${caseId}/comments`,
+    json("POST", { body, parent_comment_id: parentCommentId ?? null }),
+  ).then((r) => r.comment);
+
+// --- the trial --------------------------------------------------------------
+
+export const fetchTrial = (caseId: number) => request<TrialView>(`/cases/${caseId}/trial`);
+
+export const summonWitness = (caseId: number, witnessUserId: number) =>
+  request<{ summons: Summons[] }>(
+    `/cases/${caseId}/summons`,
+    json("POST", { witness_user_id: witnessUserId }),
+  ).then((r) => r.summons);
+
+export const testify = (caseId: number, body: string) =>
+  request<{ comment_id: number }>(`/cases/${caseId}/testify`, json("POST", { body }));
+
+export const fetchMySummons = () =>
+  request<{ summons: PendingSummons[] }>("/me/summons").then((r) => r.summons);
+
+// --- people -----------------------------------------------------------------
+
+export const fetchUsers = (params: {
+  search?: string;
+  limit?: number;
+  offset?: number;
+  include_bots?: boolean;
+} = {}) =>
+  request<UserListResponse>(
+    `/users${query({ ...params, include_bots: params.include_bots === false ? 0 : undefined })}`,
+  );
+
+export const fetchUser = (userId: number) =>
+  request<{ user: UserProfile }>(`/users/${userId}`).then((r) => r.user);
+
+export const updateMyProfile = (patch: { name?: string; bio?: string; avatar_url?: string }) =>
+  request<AuthResponse>("/users/me", json("PATCH", patch));
+
+// --- direct messages --------------------------------------------------------
+
+export const fetchConversations = () =>
+  request<{ conversations: Conversation[]; unread_total: number }>("/conversations");
+
+export const fetchThread = (conversationId: number) =>
+  request<{ messages: Message[] }>(`/conversations/${conversationId}`).then((r) => r.messages);
+
+export const startConversation = (userId: number) =>
+  request<{ conversation_id: number }>(`/conversations/with/${userId}`, json("POST")).then(
+    (r) => r.conversation_id,
+  );
+
+export const sendMessage = (recipientId: number, body: string) =>
+  request<{ message_id: number }>("/messages", json("POST", { recipient_id: recipientId, body }));
+
+// --- writing help -----------------------------------------------------------
+
+export const draftLawsuit = (input: {
+  defendant_text?: string;
+  title?: string;
   charges?: string[];
-  image_url?: string | null;
-}): Promise<Post> =>
-  request<Post>(`${BASE}/posts`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  hint?: string;
+}) => request<{ body: string; backend: string }>("/assist/draft-lawsuit", json("POST", input));
 
-/** Delete a post. The server rejects this (403) unless the caller is the post's author. */
-export const deletePost = (id: number): Promise<void> =>
-  request<void>(`${BASE}/posts/${id}`, { method: "DELETE" });
+export const suggestComment = (caseId: number) =>
+  request<{ body: string; backend: string }>("/assist/suggest-comment", json("POST", { case_id: caseId }));
 
-// ----------------------------------------------------------------- users
-
-export const fetchUsers = (opts: { search?: string; limit?: number; offset?: number } = {}): Promise<UserListItem[]> => {
-  const sp = new URLSearchParams();
-  if (opts.search) sp.set("search", opts.search);
-  if (typeof opts.limit === "number") sp.set("limit", String(opts.limit));
-  if (typeof opts.offset === "number") sp.set("offset", String(opts.offset));
-  return request<UserListItem[]>(`${BASE}/users?${sp.toString()}`);
-};
-
-export const fetchUserProfile = (id: number): Promise<UserProfileResponse> =>
-  request<UserProfileResponse>(`${BASE}/users/${id}`);
-
-export const followUser = (id: number): Promise<{ is_following: boolean }> =>
-  request<{ is_following: boolean }>(`${BASE}/users/${id}/follow`, { method: "POST" });
-
-export const unfollowUser = (id: number): Promise<{ is_following: boolean }> =>
-  request<{ is_following: boolean }>(`${BASE}/users/${id}/follow`, { method: "DELETE" });
-
-/** Patch the logged-in user's editable profile fields. Returns the updated user. */
-export const updateProfile = (payload: { bio?: string; avatar_url?: string }): Promise<AuthResponse> =>
-  request<AuthResponse>(`${BASE}/users/me`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
+// --- notifications ----------------------------------------------------------
 
 /**
- * Upload an image (multipart). Bypasses the JSON `request` helper because the
- * browser must set its own multipart boundary on the Content-Type header.
+ * `since` is the polling fallback's request; without it, the newest first.
+ * The SSE stream reads the same rows through the same cursor.
  */
-export const uploadImage = async (file: File): Promise<{ url: string }> => {
-  const form = new FormData();
-  form.append("file", file);
-  let res: Response;
-  try {
-    res = await fetch(`${BASE}/uploads`, { method: "POST", credentials: "include", body: form });
-  } catch {
-    throw new Error("שגיאת רשת. ודא שהשרת פעיל.");
-  }
-  const body = await res.json().catch(() => null);
-  if (!res.ok) {
-    const msg =
-      body && typeof body === "object" && "error" in body && typeof (body as { error: unknown }).error === "string"
-        ? (body as { error: string }).error
-        : `שגיאה ${res.status}`;
-    throw new Error(msg);
-  }
-  return body as { url: string };
-};
+export const fetchNotifications = (since?: number) =>
+  request<{ notifications: Notification[]; unread_count: number; latest_id: number }>(
+    `/notifications${query({ since })}`,
+  );
 
-// ----------------------------------------------------------- session helpers
-//
-// The real auth lives in the httpOnly cookie (unreadable from JS). We still cache
-// the public `user` object in localStorage as a UI hint — to greet the user and to
-// gate routes without a round-trip. A stale hint just yields a 401 the UI handles.
+export const markNotificationsRead = (ids?: number[]) =>
+  request<{ marked: number; unread_count: number }>(
+    "/notifications/read",
+    json("POST", ids ? { ids } : {}),
+  );
 
-export const getStoredUser = (): User | null => {
-  const raw = localStorage.getItem("user");
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as User;
-  } catch {
-    return null;
-  }
-};
+// --- moderation -------------------------------------------------------------
 
-export const isLoggedIn = (): boolean => !!getStoredUser();
+export const reportContent = (
+  targetType: "case" | "comment",
+  targetId: number,
+  reason: string,
+  details?: string,
+) =>
+  request<{ report_id: number; message: string }>(
+    "/reports",
+    json("POST", { target_type: targetType, target_id: targetId, reason, details }),
+  );
 
-export const saveSession = (user: User): void => {
-  localStorage.setItem("user", JSON.stringify(user));
-  // Notify same-tab listeners (the native "storage" event only fires for OTHER tabs).
-  window.dispatchEvent(new Event("auth-change"));
-};
+export const fetchReportQueue = (status?: string) =>
+  request<{ reports: Report[] }>(`/admin/queue${query({ status })}`).then((r) => r.reports);
 
-export const clearSession = (): void => {
-  localStorage.removeItem("user");
-  window.dispatchEvent(new Event("auth-change"));
-};
+export const fetchFlagged = () =>
+  request<{ items: FlaggedItem[] }>("/admin/flagged").then((r) => r.items);
+
+export const fetchModerationHistory = (targetType: string, targetId: number) =>
+  request<{ history: ModerationAction[] }>(`/admin/history/${targetType}/${targetId}`).then(
+    (r) => r.history,
+  );
+
+export const setContentStatus = (
+  targetType: "case" | "comment",
+  targetId: number,
+  status: ModerationStatus,
+  reason?: string,
+) =>
+  request<{ ok: true; status: string; changed: boolean }>(
+    `/admin/content/${targetType}/${targetId}/status`,
+    json("POST", { status, reason }),
+  );
+
+export const resolveReport = (reportId: number, decision: string, note?: string) =>
+  request<OkResponse>(`/admin/reports/${reportId}/resolve`, json("POST", { decision, note }));
+
+export const banUser = (userId: number, reason?: string) =>
+  request<OkResponse>(`/admin/users/${userId}/ban`, json("POST", { reason }));
+
+export const unbanUser = (userId: number) =>
+  request<OkResponse>(`/admin/users/${userId}/unban`, json("POST"));
+
+// --- diagnostics ------------------------------------------------------------
+
+export interface HealthResponse {
+  status: string;
+  database: string;
+  phase_minutes: number;
+  brain: string;
+  worker: {
+    tick_count: number;
+    last_tick_at: string | null;
+    seconds_since_tick: number | null;
+    last_error: string | null;
+  } | null;
+}
+
+export const fetchHealth = () => request<HealthResponse>("/health");
