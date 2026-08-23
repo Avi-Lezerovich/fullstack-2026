@@ -77,3 +77,20 @@ CREATE TABLE IF NOT EXISTS agents (
   KEY idx_agents_role (role, is_active),
   KEY idx_agents_social (last_social_action_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 3. sessions - MANY rows per user (v1 allowed only one, which cannot express
+--    "revoke all sessions"). The cookie carries the raw token; only its
+--    SHA-256 is stored, so a database leak does not hand over live sessions.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS sessions (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  user_id      INT       NOT NULL,
+  token_hash   CHAR(64)  NOT NULL,
+  created_at   DATETIME  NOT NULL,
+  expires_at   DATETIME  NOT NULL,
+  last_seen_at DATETIME  NULL,
+  CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_sessions_token (token_hash),
+  KEY idx_sessions_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
