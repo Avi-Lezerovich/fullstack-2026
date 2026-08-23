@@ -167,3 +167,56 @@ CREATE TABLE IF NOT EXISTS case_charges (
   CONSTRAINT fk_charges_case FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
   UNIQUE KEY uq_charges (case_id, charge)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 7. comments - ONE table for every kind of utterance on a case. `role` tells
+--    a regular comment from witness testimony, juror deliberation and the
+--    judge's verdict. The UI styles by role; the storage is uniform.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS comments (
+  id                INT AUTO_INCREMENT PRIMARY KEY,
+  case_id           INT NOT NULL,
+  author_id         INT NOT NULL,
+  parent_comment_id INT NULL,
+  -- Top-level ancestor, so one indexed query fetches and orders a whole
+  -- thread without a recursive CTE.
+  root_comment_id   INT NULL,
+  depth             TINYINT NOT NULL DEFAULT 0,
+  body              TEXT NOT NULL,
+  role              ENUM('user','witness_testimony','jury_deliberation','verdict')
+                    NOT NULL DEFAULT 'user',
+  moderation_status ENUM('published','flagged','hidden','rejected')
+                    NOT NULL DEFAULT 'published',
+  scanned_at        DATETIME NULL,
+
+  -- THE crash-safety primitive. Bot-authored comments carry a deterministic
+  -- key ('jury:<member_id>', 'verdict:<case_id>'); a worker that dies after
+  -- INSERT but before recording the vote cannot post a second copy, because
+  -- the retry hits this UNIQUE. Human comments leave it NULL, and MySQL
+  -- permits unlimited NULLs in a UNIQUE index.
+  dedupe_key        VARCHAR(64) NULL,
+
+  created_at        DATETIME NOT NULL,
+  CONSTRAINT fk_comments_case FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
+  CONSTRAINT fk_comments_author FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_comments_parent FOREIGN KEY (parent_comment_id) REFERENCES comments(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_comments_dedupe (dedupe_key),
+  KEY idx_comments_case (case_id, created_at),
+  KEY idx_comments_thread (case_id, root_comment_id, created_at),
+  KEY idx_comments_parent (parent_comment_id),
+  KEY idx_comments_role (case_id, role),
+  KEY idx_comments_unscanned (scanned_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 8. likes - the composite PRIMARY KEY *is* the "one like per user" rule.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS likes (
+  case_id    INT      NOT NULL,
+  user_id    INT      NOT NULL,
+  created_at DATETIME NOT NULL,
+  PRIMARY KEY (case_id, user_id),
+  CONSTRAINT fk_likes_case FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
+  CONSTRAINT fk_likes_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  KEY idx_likes_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
