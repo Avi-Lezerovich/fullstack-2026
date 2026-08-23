@@ -94,3 +94,20 @@ CREATE TABLE IF NOT EXISTS sessions (
   UNIQUE KEY uq_sessions_token (token_hash),
   KEY idx_sessions_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 4. password_resets - single-use, hashed at rest, short-lived.
+--    "Single use" is a guarded UPDATE whose rowcount is checked, never a
+--    read-then-write (which would race).
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS password_resets (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  user_id    INT      NOT NULL,
+  token_hash CHAR(64) NOT NULL,
+  created_at DATETIME NOT NULL,
+  expires_at DATETIME NOT NULL,
+  used_at    DATETIME NULL,
+  CONSTRAINT fk_resets_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_resets_token (token_hash),
+  KEY idx_resets_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
