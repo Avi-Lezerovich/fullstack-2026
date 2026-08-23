@@ -286,3 +286,138 @@ CREATE TABLE IF NOT EXISTS jury_panel_members (
   UNIQUE KEY uq_members_seat (case_id, seat),
   KEY idx_jurors_due (spoke_at, speaks_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 12. reports - the human report queue, worked by the clerk and arbiter bots
+--     and overridable by a human admin.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS reports (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  target_type     ENUM('case','comment','user') NOT NULL,
+  target_id       INT NOT NULL,
+  reported_by     INT NOT NULL,
+  reason          VARCHAR(64) NOT NULL,
+  details         TEXT NULL,
+  status          ENUM('open','claimed','resolved_hidden',
+                       'resolved_dismissed','resolved_banned')
+                  NOT NULL DEFAULT 'open',
+  claimed_by      INT NULL,
+  claimed_at      DATETIME NULL,
+  resolved_by     INT NULL,
+  resolved_at     DATETIME NULL,
+  resolution_note VARCHAR(255) NULL,
+  created_at      DATETIME NOT NULL,
+  CONSTRAINT fk_reports_reporter FOREIGN KEY (reported_by) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_reports_claimer FOREIGN KEY (claimed_by) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_reports_resolver FOREIGN KEY (resolved_by) REFERENCES users(id) ON DELETE SET NULL,
+  -- One report per person per target: no report spam, no queue flooding.
+  UNIQUE KEY uq_reports_once (target_type, target_id, reported_by),
+  KEY idx_reports_queue (status, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 13. moderation_scans - every sentiment verdict ever produced, whatever
+--     triggered it. Purely a record; the decision lives on the target's
+--     moderation_status.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS moderation_scans (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  target_type   ENUM('case','comment') NOT NULL,
+  target_id     INT NOT NULL,
+  source        ENUM('publish','sweep','report','admin') NOT NULL,
+  label         ENUM('ok','borderline','toxic') NOT NULL,
+  score         DECIMAL(4,3) NOT NULL DEFAULT 0.000,
+  matched_terms VARCHAR(255) NULL,
+  scanned_at    DATETIME NOT NULL,
+  KEY idx_scans_target (target_type, target_id),
+  KEY idx_scans_label (label, scanned_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 14. moderation_actions - the audit trail. This is what makes "a human admin
+--     can override any bot decision" *auditable*: an override records both the
+--     previous and the new status alongside who did it.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS moderation_actions (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  actor_user_id   INT NOT NULL,
+  actor_is_bot    TINYINT(1) NOT NULL DEFAULT 0,
+  action          ENUM('hide','unhide','flag','reject','ban','unban',
+                       'dismiss','override') NOT NULL,
+  target_type     ENUM('case','comment','user','report') NOT NULL,
+  target_id       INT NOT NULL,
+  previous_status VARCHAR(32) NULL,
+  new_status      VARCHAR(32) NULL,
+  reason          VARCHAR(255) NULL,
+  created_at      DATETIME NOT NULL,
+  CONSTRAINT fk_modact_actor FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  KEY idx_modact_target (target_type, target_id),
+  KEY idx_modact_actor (actor_user_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 15. notifications - also the real-time bus. The worker and the web process
+--     share nothing but this database, so the SSE endpoint is simply a cursor
+--     over the monotonically increasing `id` (see idx_notif_stream).
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS notifications (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  user_id        INT NOT NULL,
+  type           ENUM('summons','verdict','like','comment','message',
+                      'moderation','testimony') NOT NULL,
+  case_id        INT NULL,
+  actor_user_id  INT NULL,
+  payload        JSON NULL,
+  is_read        TINYINT(1) NOT NULL DEFAULT 0,
+  created_at     DATETIME NOT NULL,
+  CONSTRAINT fk_notif_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_notif_case FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE SET NULL,
+  CONSTRAINT fk_notif_actor FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE SET NULL,
+  KEY idx_notif_stream (user_id, id),
+  KEY idx_notif_unread (user_id, is_read)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 16. conversations - exactly one per pair of users. The service sorts the two
+--     ids before any lookup or insert, so (a,b) and (b,a) collapse onto the
+--     same row, and the UNIQUE below makes a duplicate impossible.
+--
+--     The ordering itself would ideally be a CHECK (user_a_id < user_b_id),
+--     but MySQL 8 rejects a CHECK over a column driven by a foreign key's
+--     referential action (error 3823), and ON DELETE CASCADE here is worth
+--     more. messages_service.conversation_for_pair() owns the invariant, with
+--     a test asserting that messaging in either direction reuses one row.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS conversations (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  user_a_id       INT NOT NULL,
+  user_b_id       INT NOT NULL,
+  created_at      DATETIME NOT NULL,
+  last_message_at DATETIME NULL,
+  CONSTRAINT fk_conv_a FOREIGN KEY (user_a_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_conv_b FOREIGN KEY (user_b_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_conv_pair (user_a_id, user_b_id),
+  KEY idx_conv_b (user_b_id),
+  KEY idx_conv_recent (last_message_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 17. messages - 1-on-1 chat inside a conversation.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS messages (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  conversation_id INT NOT NULL,
+  sender_id       INT NOT NULL,
+  body            TEXT NOT NULL,
+  read_at         DATETIME NULL,
+  created_at      DATETIME NOT NULL,
+  CONSTRAINT fk_msg_conv FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_msg_sender FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+  KEY idx_messages_thread (conversation_id, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 18. worker_state - the scheduler's durable counter. Keeping the tick count
+--     in the database (rather than in memory) is what makes "sweep every 4th
+--     tick" stable across restarts, and lets /api/health report worker health.
+-- ---------------------------------------------------------------------------
