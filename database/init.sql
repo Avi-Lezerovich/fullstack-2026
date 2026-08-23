@@ -421,3 +421,13 @@ CREATE TABLE IF NOT EXISTS messages (
 --     in the database (rather than in memory) is what makes "sweep every 4th
 --     tick" stable across restarts, and lets /api/health report worker health.
 -- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS worker_state (
+  name         VARCHAR(32) NOT NULL PRIMARY KEY,
+  tick_count   BIGINT      NOT NULL DEFAULT 0,
+  last_tick_at DATETIME    NULL,
+  last_error   VARCHAR(255) NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO worker_state (name, tick_count, last_tick_at, last_error)
+VALUES ('scheduler', 0, NULL, NULL)
+ON DUPLICATE KEY UPDATE name = name;
