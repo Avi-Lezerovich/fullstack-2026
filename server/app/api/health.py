@@ -24,7 +24,7 @@ def health():
         "status": "ok",
         "database": "down",
         "phase_minutes": settings.phase_minutes,
-        "brain": "claude" if settings.use_claude else "offline",
+        "brain": "llm" if settings.use_llm else "offline",
         "worker": None,
         "server_time": now_utc().isoformat(timespec="seconds"),
     }

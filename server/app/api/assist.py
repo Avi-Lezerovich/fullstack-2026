@@ -49,7 +49,7 @@ def draft_lawsuit():
     return jsonify(
         {
             "body": brain.generate(HOUSE_VOICE, "draft_lawsuit", context, max_chars=700),
-            "backend": "claude" if _live() else "offline",
+            "backend": "llm" if _live() else "offline",
         }
     ), 200
 
@@ -77,7 +77,7 @@ def suggest_comment():
     return jsonify(
         {
             "body": brain.generate(HOUSE_VOICE, "suggest_comment", context, max_chars=280),
-            "backend": "claude" if _live() else "offline",
+            "backend": "llm" if _live() else "offline",
         }
     ), 200
 
@@ -111,4 +111,4 @@ def in_character():
 def _live() -> bool:
     from ..config import get_settings
 
-    return get_settings().use_claude
+    return get_settings().use_llm
