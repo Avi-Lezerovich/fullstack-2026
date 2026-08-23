@@ -220,3 +220,69 @@ CREATE TABLE IF NOT EXISTS likes (
   CONSTRAINT fk_likes_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   KEY idx_likes_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 9. witness_summons - humans only, max 3 per side, during the witness phase.
+--    `deadline_at` is copied from the case so a summons row is self-describing.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS witness_summons (
+  id                   INT AUTO_INCREMENT PRIMARY KEY,
+  case_id              INT NOT NULL,
+  witness_user_id      INT NOT NULL,
+  summoned_by_user_id  INT NOT NULL,
+  side                 ENUM('plaintiff','defense') NOT NULL,
+  status               ENUM('pending','testified','no_show') NOT NULL DEFAULT 'pending',
+  summoned_at          DATETIME NOT NULL,
+  deadline_at          DATETIME NOT NULL,
+  responded_at         DATETIME NULL,
+  testimony_comment_id INT NULL,
+  CONSTRAINT fk_summons_case FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
+  CONSTRAINT fk_summons_witness FOREIGN KEY (witness_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_summons_by FOREIGN KEY (summoned_by_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_summons_comment FOREIGN KEY (testimony_comment_id) REFERENCES comments(id) ON DELETE SET NULL,
+  -- "No duplicates" enforced by the database, not merely by Python.
+  UNIQUE KEY uq_summons_case_witness (case_id, witness_user_id),
+  KEY idx_summons_case_side (case_id, side),
+  KEY idx_summons_witness (witness_user_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 10. jury_panels - one panel per case. case_id as the PRIMARY KEY makes panel
+--     creation idempotent for free: a second worker attempting the same
+--     transition hits a duplicate-key and rolls back.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS jury_panels (
+  case_id         INT NOT NULL PRIMARY KEY,
+  judge_user_id   INT NOT NULL,
+  drawn_at        DATETIME NOT NULL,
+  tally_guilty    TINYINT NULL,
+  tally_not_guilty TINYINT NULL,
+  tallied_at      DATETIME NULL,
+  tiebreak_used   TINYINT(1) NOT NULL DEFAULT 0,
+  CONSTRAINT fk_panels_case FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
+  CONSTRAINT fk_panels_judge FOREIGN KEY (judge_user_id) REFERENCES users(id),
+  KEY idx_panels_judge (judge_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 11. jury_panel_members - the 7 seated jurors.
+--     `speaks_at` is the staggering: each juror is given an absolute moment
+--     inside the deliberation window at draw time, so the schedule survives a
+--     worker crash with no in-memory state. `spoke_at IS NULL` is the claim.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS jury_panel_members (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  case_id        INT NOT NULL,
+  juror_user_id  INT NOT NULL,
+  seat           TINYINT NOT NULL,
+  speaks_at      DATETIME NOT NULL,
+  spoke_at       DATETIME NULL,
+  vote           ENUM('guilty','not_guilty') NULL,
+  comment_id     INT NULL,
+  CONSTRAINT fk_members_panel FOREIGN KEY (case_id) REFERENCES jury_panels(case_id) ON DELETE CASCADE,
+  CONSTRAINT fk_members_juror FOREIGN KEY (juror_user_id) REFERENCES users(id),
+  CONSTRAINT fk_members_comment FOREIGN KEY (comment_id) REFERENCES comments(id) ON DELETE SET NULL,
+  UNIQUE KEY uq_members_juror (case_id, juror_user_id),
+  UNIQUE KEY uq_members_seat (case_id, seat),
+  KEY idx_jurors_due (spoke_at, speaks_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
