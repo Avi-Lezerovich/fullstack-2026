@@ -83,9 +83,11 @@ class Settings:
     sse_max_streams: int
 
     # --- the bots' brain ---
-    anthropic_api_key: str
-    anthropic_model: str
-    anthropic_timeout_seconds: int
+    llm_provider: str
+    llm_api_key: str
+    llm_model: str
+    llm_timeout_seconds: int
+    aws_region: str
     brain_force_offline: bool
 
     # --- mail ---
@@ -112,9 +114,19 @@ class Settings:
         return sorted(origins)
 
     @property
-    def use_claude(self) -> bool:
-        """True when generate() should try the live Claude backend first."""
-        return bool(self.anthropic_api_key) and not self.brain_force_offline
+    def use_llm(self) -> bool:
+        """True when generate() should try the live model backend first.
+
+        What counts as "credentialed" is the provider's own business - Bedrock
+        authenticates through the AWS credential chain and has no API key at
+        all - so the answer comes from brain.llm. Imported inside the property
+        because that module reads this one.
+        """
+        if self.brain_force_offline:
+            return False
+        from .brain import llm
+
+        return llm.is_configured(self)
 
 
 def get_settings() -> Settings:
@@ -141,9 +153,15 @@ def get_settings() -> Settings:
         sse_poll_seconds=_float("SSE_POLL_SECONDS", 2.0),
         sse_max_seconds=_float("SSE_MAX_SECONDS", 300.0),
         sse_max_streams=_int("SSE_MAX_STREAMS", 50),
-        anthropic_api_key=_str("ANTHROPIC_API_KEY", ""),
-        anthropic_model=_str("ANTHROPIC_MODEL", "claude-sonnet-4-5"),
-        anthropic_timeout_seconds=_int("ANTHROPIC_TIMEOUT_SECONDS", 10),
+        llm_provider=_str("LLM_PROVIDER", "bedrock"),
+        # Only the direct Anthropic provider uses this. Bedrock reads the
+        # standard AWS credential chain instead.
+        llm_api_key=_str("LLM_API_KEY", ""),
+        # Empty means "whatever brain/llm.py defaults this provider to".
+        llm_model=_str("LLM_MODEL", ""),
+        llm_timeout_seconds=_int("LLM_TIMEOUT_SECONDS", 10),
+        # AWS_DEFAULT_REGION is boto3's spelling; accept either.
+        aws_region=_str("AWS_REGION", "") or _str("AWS_DEFAULT_REGION", ""),
         brain_force_offline=_bool("BRAIN_FORCE_OFFLINE", False),
         mail_backend=_str("MAIL_BACKEND", "console"),
         mail_from=_str("MAIL_FROM", "court@lolsuit.local"),

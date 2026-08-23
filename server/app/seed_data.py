@@ -7,7 +7,7 @@ logic be tested against it directly.
 Every `personality_prompt` embeds a `[tone:x]` marker. The one LLM entry point
 is `generate(personality_prompt, task, context)`, so the prompt is the only
 thing the brain receives about who is speaking - the marker is how the offline
-generator picks the right phrase bank, and it reads naturally to Claude too.
+generator picks the right phrase bank, and it reads naturally to a model too.
 
 `guilt_bias` is how readily a juror convicts (0 = never, 1 = always), blended
 with charge severity by brain.decide. `tiebreak_lean` decides a hung jury and

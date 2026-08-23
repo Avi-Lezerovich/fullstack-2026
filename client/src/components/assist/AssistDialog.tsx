@@ -25,7 +25,7 @@ interface Props {
 }
 
 const BACKEND_LABELS: Record<string, string> = {
-  claude: "נוסח על ידי Claude",
+  llm: "נוסח על ידי בינה מלאכותית",
   offline: "נוסח על ידי מנסח בית המשפט (מנוע מקומי)",
 };
 
