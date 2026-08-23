@@ -111,3 +111,59 @@ CREATE TABLE IF NOT EXISTS password_resets (
   UNIQUE KEY uq_resets_token (token_hash),
   KEY idx_resets_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS cases (
+  id                 INT AUTO_INCREMENT PRIMARY KEY,
+  title              VARCHAR(512)  NOT NULL,
+  body               TEXT          NOT NULL,
+  author_id          INT           NOT NULL,
+  defendant_text     VARCHAR(255)  NOT NULL,
+  defendant_user_id  INT           NULL,
+  image_url          VARCHAR(1024) NULL,
+
+  -- --- trial state machine ------------------------------------------------
+  status             ENUM('filed','witness_phase','jury_deliberation',
+                          'verdict_reached','closed') NOT NULL DEFAULT 'filed',
+  -- When the CURRENT phase ends. The worker's entire job is "find rows whose
+  -- deadline has passed", so this column plus idx_cases_due is the hot path.
+  phase_deadline_at  DATETIME      NULL,
+  filed_at           DATETIME      NOT NULL,
+  verdict            ENUM('guilty','not_guilty') NULL,
+  sentence_text      TEXT          NULL,
+  verdict_at         DATETIME      NULL,
+  closed_at          DATETIME      NULL,
+
+  -- --- moderation ---------------------------------------------------------
+  -- 'flagged' is still publicly visible (borderline content stays up, marked);
+  -- 'hidden'/'rejected' are not. Nothing is ever DELETEd.
+  moderation_status  ENUM('published','flagged','hidden','rejected')
+                     NOT NULL DEFAULT 'published',
+  scanned_at         DATETIME      NULL,
+
+  created_at         DATETIME      NOT NULL,
+  CONSTRAINT fk_cases_author FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE,
+  -- SET NULL, not CASCADE: deleting a user must not erase the lawsuits filed
+  -- against them, only detach the link.
+  --
+  -- "You cannot sue yourself" would naturally be a CHECK here, but MySQL 8
+  -- rejects any CHECK over a column that a foreign key's referential action
+  -- also writes (error 3823). The referential action is worth more than the
+  -- CHECK, so the rule lives in cases_service.create_case() instead and is
+  -- covered by tests/unit/test_cases_rules.py.
+  KEY idx_cases_due (status, phase_deadline_at),
+  KEY idx_cases_feed (moderation_status, created_at),
+  KEY idx_cases_author (author_id),
+  KEY idx_cases_defendant (defendant_user_id),
+  KEY idx_cases_unscanned (scanned_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 6. case_charges - the satirical charge chips on a filing.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS case_charges (
+  id      INT AUTO_INCREMENT PRIMARY KEY,
+  case_id INT         NOT NULL,
+  charge  VARCHAR(64) NOT NULL,
+  CONSTRAINT fk_charges_case FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_charges (case_id, charge)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
