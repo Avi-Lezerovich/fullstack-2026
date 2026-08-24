@@ -1,0 +1,48 @@
+# Everything the image must not carry. Keeping the context small is not just
+# tidiness: the repo-root virtualenvs and node_modules are ~400MB, and every
+# byte of them would be uploaded to the daemon on each build.
+
+# Virtualenvs - the image builds its own from requirements.txt.
+.venv/
+venv/
+env/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+
+# Secrets. Configuration reaches the container through the environment; a .env
+# baked into a layer is readable by anyone who can pull the image.
+.env
+.env.*
+!.env.example
+
+# Tests, coverage and their configuration: not needed to serve requests, and
+# leaving them out means a test-only edit does not invalidate the image.
+tests/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.coveragerc
+pytest.ini
+requirements-dev.txt
+
+# Local database leftovers from the SQLite era
+*.db
+*.sqlite3
+
+# Docker's own files
+Dockerfile
+.dockerignore
+
+# OS / editor noise
+.DS_Store
+*.swp
+.idea/
+.vscode/
