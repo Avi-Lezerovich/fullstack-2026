@@ -1,47 +1,81 @@
 # LolSuit ⚖️ — The Court of Funny Lawsuits
 
-A satirical social network where users file humorous "lawsuits" against one another.
+A satirical social network where users file humorous "lawsuits" against one another —
+and every filing gets a **real trial**: witnesses are summoned, a jury of AI
+personalities deliberates, a judge rules.
+
 Mid-semester project — Full Stack course, Reichman University (RUNI) 2026.
 
-## Architecture (3 tiers)
+## Architecture
 
 | Tier | Technology | Location |
 |---|---|---|
-| Frontend | React 18 + TypeScript + Vite + MUI 5 | [`client/`](client/) |
-| Backend | Python + Flask + raw PyMySQL (no ORM) | [`server/`](server/) |
+| Frontend | React 18 + TypeScript + Vite + MUI 5 (RTL/Hebrew) | [`client/`](client/) |
+| Backend | Python + Flask + raw PyMySQL (no ORM), under gunicorn | [`server/`](server/) |
+| Scheduler | A **separate process** that advances trials | [`server/run_worker.py`](server/run_worker.py) |
 | Database | MySQL 8 (Amazon RDS in production) | [`database/init.sql`](database/init.sql) |
 
-The frontend talks to the backend through `/api`. In development, the Vite dev server (port 5173) proxies all `/api` requests to Flask (port 5001) — see [`client/vite.config.ts`](client/vite.config.ts).
+Everything the frontend fetches goes through `/api`.
 
-## Prerequisites
+The **worker is its own process, not a thread**. It is a long-running loop, so gunicorn
+has no way to run it, and a background thread inside a web worker would tick once per
+worker process. It is safe to run several: the loop takes a MySQL advisory lock and
+every unit of work is claimed with `FOR UPDATE SKIP LOCKED`.
 
-- **Node.js** 18+ and **npm**
-- **Python** 3.10+
-- **MySQL** 8 — either a local server/container or an Amazon RDS endpoint
+`create_app()` has **no side effects** — it does not create the schema and does not
+seed. The schema comes from `database/init.sql`, and seeding is a separate one-shot
+process (`python -m app.seed`). That is what lets any number of gunicorn workers boot
+at once without racing to create the same tables.
 
-The server reads its connection from the environment (defaults in parentheses):
-`DB_HOST` (`localhost`), `DB_PORT` (`3306`), `DB_USER` (`root`), `DB_PASSWORD` (empty),
-`DB_NAME` (`lolsuit`). It creates the database/schema and seeds it on first run.
+---
 
-## Running locally
+## Quick start: Docker
 
-You need to run two processes in parallel — start the server first, then the client.
+The whole stack, one command:
 
-### 1. Server (Flask) — port 5001
+```bash
+docker compose up --build
+```
+
+Open **<http://localhost:8080>**. No `.env` required.
+
+Full details — services, ports, environment variables, resetting the database —
+are in **[DOCKER.md](DOCKER.md)**.
+
+---
+
+## Running locally without Docker
+
+You need MySQL 8. The easiest source is the compose stack's own database:
+
+```bash
+docker compose up -d db
+```
+
+That publishes MySQL on `127.0.0.1:3307` with the schema already applied.
+
+### 1. Server — port 5002
 
 ```bash
 cd server
 python -m venv .venv                 # first time only
-source .venv/bin/activate            # on Windows: .venv\Scripts\activate
+source .venv/bin/activate            # Windows: .venv\Scripts\activate
 pip install -r requirements.txt      # first time only
+python -m app.seed                   # first time only: bots, admin, demo accounts
 python run.py
 ```
 
-The server starts at http://localhost:5001 and automatically creates + seeds the database on first run.
+The API listens on <http://localhost:5002>.
 
-### 2. Client (React) — port 5173
+### 2. Worker (optional — only if you want trials to advance)
 
-In a separate terminal:
+In another terminal:
+
+```bash
+cd server && source .venv/bin/activate && python run_worker.py
+```
+
+### 3. Client — port 5174
 
 ```bash
 cd client
@@ -49,88 +83,131 @@ npm install                          # first time only
 npm run dev
 ```
 
-Open the printed URL (usually http://localhost:5173/intuit-runi-fullstack-2026/).
+Open <http://localhost:5174>. Vite proxies `/api` to the server on 5002.
 
-> **Note:** routing uses `HashRouter`, so routes live after the `#` in the URL (e.g. `#/users`, `#/user-posts/8`).
+### Configuration
 
-## Demo users (seed)
+The server reads everything from the environment; every value has a default
+(see [`server/app/config.py`](server/app/config.py)). Defaults in parentheses:
+`DB_HOST` (`127.0.0.1`), `DB_PORT` (`3307`), `DB_USER` (`root`), `DB_PASSWORD`
+(`lolsuit-dev`), `DB_NAME` (`lolsuit`), `PORT` (`5002`), `CLIENT_ORIGIN`
+(`http://localhost:5174`).
 
-On first run, 12 sample users are created. They all share the same password:
+`.env` in the repo root is read automatically for local runs — copy
+[`.env.example`](.env.example) and edit. Never commit it.
 
-| Email | Password |
+---
+
+## Demo accounts
+
+Created by `python -m app.seed`. All share the password **`demo1234`**.
+
+| Email | Role |
 |---|---|
-| `dana@example.com` (and the rest of the seed users) | `demo123` |
+| `admin@lolsuit.local` | Admin — sees the moderation queue |
+| `dana@lolsuit.local` | Regular user |
+| `yoni@lolsuit.local` | Regular user |
+| `maya@lolsuit.local` | Regular user |
 
-> Password-strength rules (8+ chars, a letter + a digit) are enforced on the signup form only; seed users are created directly in the DB and therefore still log in with `demo123`.
+Plus 19 bot accounts under `@bots.lolsuit.local`: 12 jurors, 4 judges, 3 moderators.
+
+Seeding is idempotent — keyed on email, safe to re-run, and it never resets a password
+that has since been changed.
+
+---
 
 ## Resetting the database
 
-The schema uses `CREATE TABLE IF NOT EXISTS`, so to apply schema changes you must drop the
-database and restart the server (it will recreate and reseed it):
+The schema is applied by MySQL's entrypoint from `database/init.sql`, which runs
+**only on an empty data volume**. To apply a schema change:
 
 ```bash
-mysql -h "$DB_HOST" -u "$DB_USER" -p -e "DROP DATABASE lolsuit;"
-cd server && python run.py
+docker compose down -v && docker compose up --build
 ```
 
-With Docker, `docker compose down -v` removes the MySQL data volume and forces a fresh seed on
-the next `up`.
+---
 
-## Production build (Frontend)
+## Features
+
+- **Authentication** — sign-up / login / logout / password reset, bcrypt hashing,
+  httpOnly cookie sessions stored server-side (only the SHA-256 of each token is kept,
+  and there may be many sessions per user, so a ban or a reset can revoke them all).
+- **Lawsuits** — file a case against a person or an abstraction, with charges. Feed
+  with pagination and lazy loading, filtered by trial phase.
+- **The trial engine** — `filed → witness_phase → jury_deliberation → verdict_reached
+  → closed`, advanced by the worker. Witnesses are summoned and testify; a seven-juror
+  panel is drawn deterministically; a judge breaks ties.
+- **AI court personalities** — 19 bots with distinct voices who comment, vote and rule.
+  They run on a **deterministic offline generator by default** — no credentials, no
+  network — or on Amazon Bedrock / the Anthropic API when configured.
+- **Social** — likes, threaded comments, user search, direct messages.
+- **Live notifications** — server-sent events over the same data as the REST view.
+- **Moderation** — automated content screening on filing, user reports, and an admin
+  queue with ban/unban and content status overrides.
+- **Assist** — draft-a-lawsuit and suggest-a-comment helpers.
+
+---
+
+## Tests
 
 ```bash
-cd client
-npm run build      # compiles TypeScript + produces an optimized dist/ folder
-npm run preview    # preview the local production build
+cd server && python -m pytest -v
 ```
 
-## Tests (Frontend)
+> **Note — the backend suite does not currently run.** Five of its six modules fail at
+> collection with `ModuleNotFoundError: No module named 'app.utils'`: the tests are
+> pre-MySQL-migration leftovers that still import `app/utils.py` and `app/models.py`,
+> and `conftest.py` still injects a SQLite database through a `services.get_db` seam
+> that no longer exists. Four tests collect; the rest error out. Repairing them is
+> separate work and was not part of the Docker task.
 
 ```bash
-cd client
-npm test           # run the Vitest suite
+cd client && npm test
 ```
 
-## Running with Docker (server + MySQL)
+> **Note — there are no frontend test files.** Vitest is configured and installed, but
+> the suite exits with "No test files found". `vite.config.ts` also points
+> `setupFiles` at `./src/test/setup.ts`, which does not exist.
 
-```bash
-docker compose up --build    # brings up MySQL + the Flask server on port 5001
-```
+---
 
-Compose starts a `mysql:8.0` service and waits for it to be healthy before launching the server.
+## Deployment
 
-## Key features
+Building production images, pushing them to Amazon ECR and running them on EC2
+against RDS: **[DEPLOYMENT.md](DEPLOYMENT.md)** *(added on the `aws-deploy` branch)*.
 
-- **User authentication** — sign-up / login / logout, with **bcrypt** password hashing and cookie-based sessions (httpOnly).
-- **Password-strength enforcement** at signup (minimum length + a letter-and-digit mix) with a live strength meter.
-- **User profiles** — name, bio, profile picture, and a list of the user's lawsuits.
-- **Social interactions** — user search, follow/unfollow, and relative timestamps ("2 hours ago").
-- **Feed** — a global feed plus a "following" feed, with lazy loading (infinite scroll) and pagination.
-- **Post creation** — text + image, with a rich-text (WYSIWYG) editor supporting bold, italics, lists, and links.
-
-## Database schema
-
-A full ER diagram and an explanation of how the entities relate live in [`database/schema.md`](database/schema.md).
+---
 
 ## Project structure
 
 ```
 .
-├── client/              # React + TypeScript app
+├── client/                   # React + TypeScript app
+│   ├── Dockerfile            # multi-stage: node builds, nginx serves
+│   ├── nginx.conf.template   # SPA fallback + /api reverse proxy + SSE
 │   └── src/
-│       ├── api.ts       # API layer (every fetch goes through here)
-│       ├── components/  # UI components
-│       ├── pages/       # route-level screens
-│       ├── hooks/       # custom React hooks
-│       └── utils/       # helpers (dates, validation, sanitization)
-├── server/              # Flask server
-│   └── app/
-│       ├── __init__.py  # application factory
-│       ├── routes.py    # REST API routes
-│       ├── services.py  # business logic + parameterized SQL queries
-│       ├── models.py    # DB access layer + seed data
-│       └── utils.py     # password hashing + session helpers
-└── database/
-    ├── init.sql         # schema definition
-    └── schema.md        # ER diagram
+│       ├── api.ts            # the only place the app calls fetch
+│       ├── components/       # UI, grouped by feature
+│       ├── pages/            # route-level screens
+│       ├── context/          # auth + notification providers
+│       └── hooks/
+├── server/
+│   ├── Dockerfile            # multi-stage, non-root; one image, three commands
+│   ├── run.py                # web entry point (gunicorn run:app)
+│   ├── run_worker.py         # scheduler entry point
+│   ├── app/
+│   │   ├── __init__.py       # application factory (side-effect free)
+│   │   ├── config.py         # environment -> frozen Settings
+│   │   ├── db.py             # connections + a thin query helper
+│   │   ├── security.py       # passwords, session tokens, auth decorators
+│   │   ├── seed.py           # one-shot seeding: python -m app.seed
+│   │   ├── seed_data.py      # the cast: 19 personalities, as pure data
+│   │   ├── api/              # one blueprint per resource group, all under /api
+│   │   ├── services/         # business logic + parameterised SQL
+│   │   └── brain/            # the bots: offline generator and LLM backends
+│   └── worker/               # the tick loop and its tasks
+├── database/
+│   └── init.sql              # the schema; mounted into MySQL's entrypoint
+├── docker-compose.yml        # the whole stack
+└── DOCKER.md                 # how to run it
 ```
