@@ -1,8 +1,7 @@
-# Test-only dependencies (unit + integration tests).
-# Deliberately kept OUT of requirements.txt so they are NOT baked into the
-# production Docker image — the prod image should ship runtime deps only.
-#
-#   py -m pip install -r requirements-dev.txt   (Windows: use the `py` launcher)
-#
+-r requirements.txt
 pytest>=8.0
 pytest-cov>=5.0
+# Optional: only needed to exercise the live Claude backend. brain/claude.py
+# imports it lazily, so everything works without it and the tests never
+# require it (they force the offline generator).
+# anthropic>=0.40
