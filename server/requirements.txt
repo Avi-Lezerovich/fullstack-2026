@@ -1,8 +1,9 @@
-Flask>=3.0
+Flask>=3.0,<4
 flask-cors>=4.0
-bcrypt>=4.0
 PyMySQL>=1.1
+# PyMySQL needs this to speak MySQL 8's default caching_sha2_password auth.
+# Without it the very first connection fails with a confusing auth error.
+cryptography>=42
+bcrypt>=4.1
 gunicorn>=21.2
-# The live brain. Optional at runtime - without it the bots fall back to the
-# deterministic offline generator - but required for LLM_PROVIDER=bedrock.
-anthropic[bedrock]
+python-dotenv>=1.0
