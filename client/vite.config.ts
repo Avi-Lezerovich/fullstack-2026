@@ -10,8 +10,11 @@ export default defineConfig({
       // Everything the app fetches goes through /api, so one proxy rule covers
       // it. http-proxy streams responses unbuffered by default, which is what
       // lets the SSE notification stream work in development.
+      // 5002 is the server's own default (server/app/config.py: PORT), and the
+      // port the container publishes to loopback. It used to say 5001, which
+      // matched nothing.
       "/api": {
-        target: "http://localhost:5001",
+        target: "http://localhost:5002",
         changeOrigin: true,
       },
     },

@@ -1,0 +1,38 @@
+# node_modules is 318MB and is rebuilt inside the image by `npm ci`, which
+# needs package-lock.json - not the installed tree - to be reproducible.
+node_modules/
+
+# Build output. The image runs its own `npm run build`; copying a stale dist/
+# in would risk shipping yesterday's bundle.
+dist/
+dist-ssr/
+*.local
+
+# Secrets and local overrides. Vite inlines anything prefixed VITE_ into the
+# bundle at build time, so a stray .env here would be published to browsers.
+.env
+.env.*
+!.env.example
+
+# Test artifacts
+coverage/
+cypress/screenshots/
+cypress/videos/
+cypress/downloads/
+
+# Logs
+*.log
+npm-debug.log*
+
+# TypeScript incremental state - machine-specific, invalidates layers
+*.tsbuildinfo
+
+# Docker's own files
+Dockerfile
+.dockerignore
+
+# OS / editor noise
+.DS_Store
+*.swp
+.idea/
+.vscode/

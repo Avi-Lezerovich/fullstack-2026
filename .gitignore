@@ -15,8 +15,8 @@ dist-ssr
 # Local env / secrets (use .env.example as the template)
 .env
 
-# Built image bundle produced by scripts/build-and-save.sh
-lolsuit-images.tar
+# TypeScript incremental build state - machine-specific
+*.tsbuildinfo
 
 # Python / server
 .venv
