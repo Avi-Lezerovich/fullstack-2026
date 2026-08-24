@@ -1,19 +1,22 @@
-# Build context is the repo root (see docker-compose.yml) so we can copy both
-# the server package and the database/ schema it reads at startup.
-FROM python:3.12-slim
+# Build context is the REPO ROOT, not server/ - the image needs database/
+# alongside the code so the schema is available to the container.
+FROM python:3.14-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
 WORKDIR /app
 
-COPY server/requirements.txt ./server/requirements.txt
-RUN pip install --no-cache-dir -r server/requirements.txt
+COPY server/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
-COPY server/ ./server/
+COPY server/ ./
 COPY database/ ./database/
 
-WORKDIR /app/server
 EXPOSE 5001
-# Production WSGI server (run.py's debug server is for local dev only).
-# run.py exposes `app = create_app()` at module level, so `run:app` works here.
-# --preload imports the app (running init_db once) in the master before forking
-# workers; otherwise the workers race to seed the DB and deadlock on first boot.
-CMD ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "3", "--preload", "run:app"]
+
+# Overridden per service in docker-compose.yml: the api runs gunicorn, the
+# worker runs run_worker.py, and seed runs app.seed once.
+CMD ["gunicorn", "--worker-class", "gthread", "--workers", "2", "--threads", "16", \
+     "--timeout", "120", "--graceful-timeout", "10", "--access-logfile", "-", \
+     "--bind", "0.0.0.0:5001", "run:app"]
