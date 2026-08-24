@@ -1,52 +1,187 @@
+# =============================================================================
+#  LolSuit - the whole stack, locally, with one command:
+#
+#      docker compose up --build
+#
+#  Five containers, four distinct roles:
+#    db     - MySQL 8, schema applied from database/init.sql on first boot
+#    seed   - one-shot; populates the nineteen court bots and the demo accounts
+#    server - the Flask API under gunicorn
+#    worker - the scheduler that advances trials (a SEPARATE process by design)
+#    web    - nginx serving the built bundle and reverse-proxying /api
+#
+#  Every value below has a working default, so a fresh clone needs no .env.
+#  Copy .env.example to .env to override any of them - and you MUST override
+#  the passwords for anything that is not your own laptop.
+# =============================================================================
+
 services:
+  # ---------------------------------------------------------------------------
   db:
     image: mysql:8.0
+    restart: unless-stopped
     environment:
-      - MYSQL_ROOT_PASSWORD=change-me-in-production
-      - MYSQL_DATABASE=lolsuit
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-lolsuit-root-dev}
+      MYSQL_DATABASE: ${DB_NAME:-lolsuit}
+      # The application connects as this user, never as root. It gets full
+      # rights on MYSQL_DATABASE and none anywhere else, which is all the API,
+      # the worker and the seed job need - the schema is applied by MySQL's own
+      # entrypoint, running as root, before any of them start.
+      MYSQL_USER: ${DB_USER:-lolsuit}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-lolsuit-dev}
     ports:
-      - "3306:3306"
+      # Bound to loopback, not 0.0.0.0: this is here so `mysql` and the pytest
+      # suite can reach the database from the host, not so the internet can.
+      # 3307 matches server/app/config.py's default, which sidesteps a MySQL
+      # already listening on 3306 on the host.
+      - "127.0.0.1:${DB_PUBLISH_PORT:-3307}:3306"
     volumes:
-      # Persist the MySQL data files across container restarts.
       - db-data:/var/lib/mysql
+      # /docker-entrypoint-initdb.d runs ONLY on an empty data volume. After
+      # editing init.sql: docker compose down -v && docker compose up --build.
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p$$MYSQL_ROOT_PASSWORD"]
+      # Deliberately over TCP (-h 127.0.0.1) rather than the unix socket. During
+      # initialisation MySQL runs a temporary server that listens on the socket
+      # only, so a socket ping would report "healthy" while init.sql was still
+      # being applied and let the API start against a half-built schema.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
+      start_period: 30s
 
-  server:
+  # ---------------------------------------------------------------------------
+  # Runs to completion and exits. Everything else waits for it, so the API is
+  # never briefly up against a database with no judges in it. Idempotent, so
+  # running on every `up` is harmless.
+  seed:
     build:
-      context: .
-      dockerfile: server/Dockerfile
-    ports:
-      - "5001:5001"
-    environment:
-      # For Amazon RDS, point DB_HOST at the instance endpoint and set DB_USER/
-      # DB_PASSWORD to the master credentials (keep them out of source control).
-      - DB_HOST=db
-      - DB_PORT=3306
-      - DB_USER=root
-      - DB_PASSWORD=change-me-in-production
-      - DB_NAME=lolsuit
-      - UPLOAD_DIR=/data/uploads
-      - JWT_SECRET=change-me-in-production
-    volumes:
-      # Keep uploaded images on a named volume so they survive container restarts.
-      - server-uploads:/data
+      context: ./server
+    image: lolsuit/server:local
+    command: ["python", "-m", "app.seed"]
+    restart: "no"
+    # The image's HEALTHCHECK probes /api/health, which this process does not
+    # serve. Left in place it would keep the container "unhealthy" forever, and
+    # `service_completed_successfully` would be judged against a false signal.
+    healthcheck:
+      disable: true
+    environment: &db-env
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-lolsuit}
+      DB_USER: ${DB_USER:-lolsuit}
+      DB_PASSWORD: ${DB_PASSWORD:-lolsuit-dev}
     depends_on:
       db:
         condition: service_healthy
 
+  # ---------------------------------------------------------------------------
+  server:
+    build:
+      context: ./server
+    image: lolsuit/server:local
+    restart: unless-stopped
+    environment:
+      <<: *db-env
+      PORT: 5002
+      # Only consulted when something reaches the API directly on 5002. Through
+      # `web` the request is same-origin and CORS never enters the picture.
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN:-http://localhost:8080}
+      # Lax + non-secure, because local development is plain HTTP. Set this to 1
+      # (and terminate TLS in front) for any real deployment.
+      FLASK_SESSION_SECURE: ${FLASK_SESSION_SECURE:-0}
+      # How long each trial phase lasts. 1440 (a day) is the product default;
+      # set PHASE_MINUTES=2 in .env if you want to watch a trial run to verdict
+      # over a coffee.
+      PHASE_MINUTES: ${PHASE_MINUTES:-1440}
+      # The bots' brain. Empty/unset means the deterministic offline generator,
+      # which is fully functional and needs no credentials. See .env.example.
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      AWS_REGION: ${AWS_REGION:-}
+      BRAIN_FORCE_OFFLINE: ${BRAIN_FORCE_OFFLINE:-1}
+    ports:
+      # Loopback only. In normal use the browser never talks to this port -
+      # it goes through nginx on 8080 - but it is invaluable for curl and
+      # Postman against /api/health.
+      - "127.0.0.1:${API_PUBLISH_PORT:-5002}:5002"
+    depends_on:
+      db:
+        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
+
+  # ---------------------------------------------------------------------------
+  # The trial engine. Its own container because it is a long-running loop, not
+  # a request handler: gunicorn would have no way to run it, and a background
+  # thread inside a web worker would tick once per worker process.
+  #
+  # Safe to scale (`--scale worker=3`): the loop takes a MySQL advisory lock,
+  # and every unit of work is claimed with FOR UPDATE SKIP LOCKED.
+  worker:
+    build:
+      context: ./server
+    image: lolsuit/server:local
+    command: ["python", "run_worker.py"]
+    restart: unless-stopped
+    environment:
+      <<: *db-env
+      PHASE_MINUTES: ${PHASE_MINUTES:-1440}
+      TICK_SECONDS: ${TICK_SECONDS:-15}
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      AWS_REGION: ${AWS_REGION:-}
+      BRAIN_FORCE_OFFLINE: ${BRAIN_FORCE_OFFLINE:-1}
+    # The worker serves no HTTP, so the image's own probe cannot apply. What
+    # "healthy" means for a scheduler is that it is still ticking - and it
+    # already records every tick in worker_state, so the check is a query
+    # rather than a new channel. The threshold is generous relative to
+    # TICK_SECONDS (15s) so one slow sweep is not mistaken for a stall.
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys
+          from app.clock import now_utc
+          from app.db import connect
+          db = connect()
+          row = db.query_one("SELECT last_tick_at FROM worker_state WHERE name = 'scheduler'")
+          db.close()
+          last = row and row["last_tick_at"]
+          sys.exit(0 if last and (now_utc() - last).total_seconds() < 120 else 1)
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    depends_on:
+      db:
+        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
+
+  # ---------------------------------------------------------------------------
   web:
     build:
       context: ./client
-      dockerfile: Dockerfile
+    image: lolsuit/web:local
+    restart: unless-stopped
+    environment:
+      # Which host:port nginx proxies /api to. Rendered into nginx.conf at
+      # container start, so the same image works against a compose service, an
+      # ALB or a host-network backend without a rebuild.
+      API_UPSTREAM: ${API_UPSTREAM:-server:5002}
     ports:
-      - "8080:80"
+      - "${WEB_PUBLISH_PORT:-8080}:8080"
     depends_on:
-      - server
+      server:
+        # Not just "started": nginx resolves the upstream's DNS name once at
+        # startup and would exit if `server` were not there yet.
+        condition: service_healthy
 
 volumes:
   db-data:
-  server-uploads:
