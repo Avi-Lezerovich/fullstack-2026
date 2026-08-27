@@ -16,6 +16,11 @@ interface Props {
    * caller does not have to lift state just to offer writing help.
    */
   assistLoad?: () => Promise<{ body: string; backend: string }>;
+  /**
+   * Text that identifies what is being commented on. Only used to seed an
+   * in-character draft, so two different cases do not get the same line.
+   */
+  assistHint?: string;
 }
 
 const CommentComposer = ({
@@ -23,6 +28,7 @@ const CommentComposer = ({
   placeholder = "מה יש לך לומר לבית המשפט?",
   submitLabel = "שלח תגובה",
   assistLoad,
+  assistHint,
 }: Props) => {
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +69,9 @@ const CommentComposer = ({
             size="small"
             label="נסח לי"
             title="הצעה לתגובה"
-            helper="בית המשפט מציע נוסח. אפשר לערוך אותו לפני השליחה."
+            helper="בית המשפט מציע נוסח — או שאחת מדמויות החצר תכתוב אותו בקולה. אפשר לערוך לפני השליחה."
+            inCharacter
+            hint={assistHint}
             load={assistLoad}
             onAccept={setBody}
             acceptLabel="הכנס לתגובה"

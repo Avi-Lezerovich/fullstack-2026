@@ -14,6 +14,7 @@ import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import * as api from "../api";
 import CaseStatusChip from "../components/case/CaseStatusChip";
 import LikeButton from "../components/case/LikeButton";
+import LikersDialog from "../components/case/LikersDialog";
 import PhaseTimeline from "../components/case/PhaseTimeline";
 import VerdictBanner from "../components/case/VerdictBanner";
 import CommentComposer from "../components/comments/CommentComposer";
@@ -50,6 +51,7 @@ const CasePage = () => {
   const trial = useAsync(useCallback(() => api.fetchTrial(id), [id]), [id]);
 
   const [summonOpen, setSummonOpen] = useState(false);
+  const [likersOpen, setLikersOpen] = useState(false);
 
   const reloadAll = useCallback(async () => {
     await Promise.all([reloadCase(), comments.reload(), trial.reload()]);
@@ -150,6 +152,29 @@ const CasePage = () => {
 
         <Divider sx={{ my: 2 }} />
 
+        {c.image_url && (
+          <Box
+            component="img"
+            src={c.image_url}
+            alt=""
+            // A dead link must not leave a broken-image glyph in the middle of
+            // a filing; the case reads fine without it.
+            onError={(event) => {
+              (event.currentTarget as HTMLImageElement).style.display = "none";
+            }}
+            sx={{
+              display: "block",
+              maxWidth: "100%",
+              maxHeight: 420,
+              borderRadius: 1,
+              border: "1px solid",
+              borderColor: "divider",
+              mb: 2,
+            }}
+            data-testid="case-image"
+          />
+        )}
+
         <Typography sx={{ fontFamily: DOC_FONT, whiteSpace: "pre-wrap", lineHeight: 1.8 }}>
           {c.body}
         </Typography>
@@ -157,12 +182,19 @@ const CasePage = () => {
         <Divider sx={{ my: 2 }} />
 
         <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap">
-          <LikeButton
-            caseId={c.id}
-            liked={c.viewer_has_liked}
-            count={c.like_count}
-            disabled={!user}
-          />
+          <Stack direction="row" spacing={0.5} alignItems="center">
+            <LikeButton
+              caseId={c.id}
+              liked={c.viewer_has_liked}
+              count={c.like_count}
+              disabled={!user}
+            />
+            {c.like_count > 0 && (
+              <Button size="small" color="inherit" onClick={() => setLikersOpen(true)} data-testid="show-likers">
+                מי אהב?
+              </Button>
+            )}
+          </Stack>
           <Stack direction="row" spacing={1}>
             {user && <ReportButton targetType="case" targetId={c.id} />}
             {viewer?.can_summon && (
@@ -220,6 +252,7 @@ const CasePage = () => {
             <CommentComposer
               onSubmit={(body) => addComment(body)}
               assistLoad={() => api.suggestComment(id)}
+              assistHint={c.title}
             />
           </Box>
         ) : (
@@ -228,6 +261,8 @@ const CasePage = () => {
           </Typography>
         )}
       </Paper>
+
+      <LikersDialog open={likersOpen} caseId={c.id} onClose={() => setLikersOpen(false)} />
 
       <SummonWitnessDialog
         open={summonOpen}

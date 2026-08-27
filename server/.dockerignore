@@ -46,3 +46,6 @@ Dockerfile
 *.swp
 .idea/
 .vscode/
+
+# Runtime uploads never belong in the image; compose mounts a volume there.
+uploads/

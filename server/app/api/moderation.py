@@ -144,6 +144,25 @@ def admin_resolve_report(report_id: int):
     return jsonify({"ok": True}), 200
 
 
+@bp.get("/admin/users/banned")
+@security.require_admin
+def admin_banned_users():
+    """Suspended accounts, so a ban can be undone.
+
+    Needed because `GET /users` only ever returns active accounts: without
+    this the unban endpoint existed but there was no way to find anybody to
+    point it at.
+    """
+    limit = positive_int(request.args.get("limit"), 50, maximum=200)
+    query = clean(request.args.get("search"), 100)
+    return jsonify(
+        {
+            "users": users_service.search_users(query, limit=limit, status="banned"),
+            "total": users_service.count_users(query, status="banned"),
+        }
+    ), 200
+
+
 @bp.post("/admin/users/<int:user_id>/ban")
 @security.require_admin
 def admin_ban(user_id: int):

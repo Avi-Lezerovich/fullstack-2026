@@ -102,6 +102,11 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-}
       AWS_REGION: ${AWS_REGION:-}
       BRAIN_FORCE_OFFLINE: ${BRAIN_FORCE_OFFLINE:-1}
+      # Uploaded images. Inside the image this is a plain directory; the named
+      # volume below is what makes them outlive `docker compose up --build`.
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads:/app/uploads
     ports:
       # Loopback only. In normal use the browser never talks to this port -
       # it goes through nginx on 8080 - but it is invaluable for curl and
@@ -185,3 +190,6 @@ services:
 
 volumes:
   db-data:
+  # Survives a rebuild, exactly like db-data. Without it every `up --build`
+  # would silently break every avatar and every piece of evidence on the site.
+  uploads:

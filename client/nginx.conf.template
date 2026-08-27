@@ -82,6 +82,27 @@ http {
       proxy_send_timeout 3600s;
     }
 
+    # --- image uploads -------------------------------------------------------
+    # nginx's default client_max_body_size is 1m, which would 413 every upload
+    # before it ever reached Flask. Raised here only, so the cap stays tight on
+    # every other endpoint - none of which has any reason to accept a body
+    # this large.
+    location = /api/uploads {
+      client_max_body_size 6m;
+
+      proxy_pass         http://api;
+      proxy_http_version 1.1;
+      proxy_set_header   Connection "";
+      proxy_set_header   Host              $host;
+      proxy_set_header   X-Real-IP         $remote_addr;
+      proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+      proxy_set_header   X-Forwarded-Proto $scheme;
+
+      proxy_request_buffering on;
+      proxy_read_timeout 120s;
+      proxy_send_timeout 120s;
+    }
+
     # --- everything else the app fetches ------------------------------------
     location /api/ {
       proxy_pass         http://api;

@@ -9,6 +9,7 @@ import { Link as RouterLink } from "react-router-dom";
 
 import * as api from "../api";
 import CaseCard from "../components/feed/CaseCard";
+import MySummonsPanel from "../components/trial/MySummonsPanel";
 import { EmptyState, ErrorNote, Loading } from "../components/common/StateViews";
 import { useAsync } from "../hooks/useAsync";
 import { useAuth } from "../context/AuthContext";
@@ -37,6 +38,10 @@ const Feed = () => {
 
   return (
     <Box>
+      {/* Above everything: a summons you have not answered is the most
+          time-critical thing on this page. */}
+      {user && <MySummonsPanel />}
+
       <Stack
         direction={{ xs: "column", sm: "row" }}
         justifyContent="space-between"

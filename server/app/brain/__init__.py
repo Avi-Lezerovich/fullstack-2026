@@ -32,6 +32,7 @@ Task = Literal[
     "suggest_comment",
     "bot_lawsuit",
     "bot_comment",
+    "bot_reply",
 ]
 
 TASKS: tuple[str, ...] = (
@@ -43,6 +44,7 @@ TASKS: tuple[str, ...] = (
     "suggest_comment",
     "bot_lawsuit",
     "bot_comment",
+    "bot_reply",
 )
 
 

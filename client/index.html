@@ -8,6 +8,25 @@
       name="description"
       content="רשת חברתית סאטירית שבה כל תביעה מצחיקה מקבלת משפט אמיתי: עדים, חבר מושבעים, ופסק דין."
     />
+
+    <link rel="icon" type="image/svg+xml" href="/lolsuit-icon.svg" />
+
+    <!--
+      The three faces src/theme.ts asks for. Without these the whole
+      typographic identity - including DOC_FONT, the legal-document face the
+      filings are set in - silently fell back to Times New Roman, because
+      naming a family in a theme does not load it.
+
+      preconnect first: the stylesheet and the font files come from two
+      different hosts, and the second one is only discovered after the first
+      has parsed.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=David+Libre:wght@400;500;700&family=Frank+Ruhl+Libre:wght@400;500;700;900&family=Heebo:wght@400;500;700&display=swap"
+    />
   </head>
   <body>
     <div id="root"></div>

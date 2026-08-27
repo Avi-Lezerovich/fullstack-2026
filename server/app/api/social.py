@@ -6,7 +6,7 @@ from flask import Blueprint, g, jsonify, request
 
 from .. import security
 from ..errors import fail
-from ..services import comments_service, likes_service
+from ..services import cases_service, comments_service, likes_service
 from ..validation import body_of, clean
 
 bp = Blueprint("social", __name__)
@@ -24,7 +24,17 @@ def toggle_like(case_id: int):
 
 
 @bp.get("/cases/<int:case_id>/likes")
+@security.optional_auth
 def list_likers(case_id: int):
+    """Who liked a case. Behind the same visibility rule as the case itself -
+    a hidden filing must not leak its audience either."""
+    case = cases_service.get_case(
+        case_id,
+        viewer_id=g.user_id,
+        viewer_is_admin=bool(g.user and g.user.get("is_admin")),
+    )
+    if case is None:
+        return fail("not_found", "התיק המבוקש לא נמצא.")
     return jsonify({"users": likes_service.likers(case_id)}), 200
 
 

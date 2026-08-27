@@ -11,6 +11,7 @@ import { useNavigate } from "react-router-dom";
 
 import * as api from "../api";
 import AssistButton from "../components/assist/AssistButton";
+import ImageUploadField from "../components/common/ImageUploadField";
 import { ErrorNote } from "../components/common/StateViews";
 import { CHARGE_SUGGESTIONS } from "../types";
 import type { User } from "../types";
@@ -22,6 +23,7 @@ const NewCase = () => {
   const [body, setBody] = useState("");
   const [defendantText, setDefendantText] = useState("");
   const [charges, setCharges] = useState<string[]>([]);
+  const [imageUrl, setImageUrl] = useState("");
   const [defendantUser, setDefendantUser] = useState<User | null>(null);
   const [candidates, setCandidates] = useState<User[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +53,7 @@ const NewCase = () => {
         defendant_text: defendantText || defendantUser?.name || "",
         defendant_user_id: defendantUser?.id ?? null,
         charges,
+        image_url: imageUrl || null,
       });
       navigate(`/cases/${created.id}`);
     } catch (err) {
@@ -124,6 +127,14 @@ const NewCase = () => {
           renderInput={(params) => (
             <TextField {...params} label="סעיפי האישום" helperText="עד חמישה סעיפים" />
           )}
+        />
+
+        <ImageUploadField
+          label="ראיה חזותית (אופציונלי)"
+          helper="JPG, PNG, GIF או WEBP, עד 5 מגה-בייט. התמונה תוצג בראש התיק."
+          value={imageUrl}
+          onChange={setImageUrl}
+          disabled={saving}
         />
 
         <Box>

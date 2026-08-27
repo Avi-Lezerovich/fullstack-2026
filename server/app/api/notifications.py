@@ -62,12 +62,6 @@ def list_notifications():
     ), 200
 
 
-@bp.get("/notifications/unread-count")
-@security.require_auth
-def unread_count():
-    return jsonify({"unread_count": notifications_service.unread_count(g.user_id)}), 200
-
-
 @bp.post("/notifications/read")
 @security.require_auth
 def mark_read():

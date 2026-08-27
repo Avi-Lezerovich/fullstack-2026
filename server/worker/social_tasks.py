@@ -18,9 +18,91 @@ from app import brain
 from app.brain import decide
 from app.config import get_settings
 from app.db import connect
-from app.services import agents_service, cases_service, comments_service, likes_service
+from app.services import (
+    agents_service,
+    cases_service,
+    comments_service,
+    likes_service,
+    messages_service,
+)
 
 log = logging.getLogger(__name__)
+
+
+# --- answering direct messages ----------------------------------------------
+#
+# Every bot has a profile, and a profile has a "send a message" button. Before
+# this, writing to one was a dead end: nineteen personalities who would argue a
+# case in public and ignore you in private.
+
+
+def _conversations_awaiting_a_bot(db, limit: int):
+    """Threads where a human spoke last and the other side is a bot.
+
+    "The newest message is not mine" IS the claim: once the bot answers, its
+    own message is newest and the row stops matching. That makes this
+    naturally idempotent without a status column - and harmless to re-run,
+    which matters because the tick can be retried.
+    """
+    return db.query_all(
+        "SELECT c.id AS conversation_id, "
+        "       CASE WHEN ua.is_bot = 1 THEN c.user_a_id ELSE c.user_b_id END AS bot_id, "
+        "       CASE WHEN ua.is_bot = 1 THEN c.user_b_id ELSE c.user_a_id END AS human_id, "
+        "       m.body AS last_body, m.id AS last_message_id "
+        "FROM conversations c "
+        "JOIN users ua ON ua.id = c.user_a_id "
+        "JOIN users ub ON ub.id = c.user_b_id "
+        "JOIN messages m ON m.id = ("
+        "    SELECT m2.id FROM messages m2 WHERE m2.conversation_id = c.id "
+        "    ORDER BY m2.id DESC LIMIT 1) "
+        "JOIN agents a ON a.user_id = "
+        "    CASE WHEN ua.is_bot = 1 THEN c.user_a_id ELSE c.user_b_id END "
+        # Exactly one side is a bot: bot-to-bot correspondence is not a feature.
+        "WHERE ua.is_bot <> ub.is_bot "
+        "  AND a.is_active = 1 "
+        "  AND ua.status = 'active' AND ub.status = 'active' "
+        "  AND m.sender_id <> CASE WHEN ua.is_bot = 1 THEN c.user_a_id ELSE c.user_b_id END "
+        "ORDER BY m.id ASC LIMIT %s",
+        (int(limit),),
+    )
+
+
+def reply_to_messages(limit: int = 5) -> int:
+    """Let each bot owed a reply answer once, in character.
+
+    Runs under the scheduler's advisory lock like every other task, so two
+    workers do not both answer. Even if they did, the worst case is one extra
+    message - nothing here is a state transition.
+    """
+    db = connect()
+    replied = 0
+    try:
+        for thread in _conversations_awaiting_a_bot(db, limit):
+            agent = agents_service.get_agent(thread["bot_id"], conn=db)
+            if agent is None:
+                continue
+
+            # The human's message seeds the generator, so the same message
+            # always gets the same answer and different messages do not.
+            text = brain.generate(
+                agent["personality_prompt"],
+                "bot_reply",
+                {"case_body": (thread["last_body"] or "")[:400]},
+                max_chars=240,
+            )
+
+            result, _message_id = messages_service.send_message(
+                thread["bot_id"], thread["human_id"], text, conn=db
+            )
+            if result != "ok":
+                db.rollback()
+                continue
+
+            db.commit()
+            replied += 1
+        return replied
+    finally:
+        db.close()
 
 
 def _next_bot(db, cooldown_minutes: int):
