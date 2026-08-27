@@ -111,7 +111,12 @@ def stream():
     global _open_streams
     with _streams_lock:
         if _open_streams >= settings.sse_max_streams:
-            return fail("conflict", "יותר מדי חיבורים פתוחים. נסה שוב בעוד רגע."), 503
+            # fail() already returns (response, status); 503 is the status we
+            # want here rather than the 409 "conflict" maps to, so unpack it
+            # instead of wrapping the pair in another tuple - Flask cannot read
+            # a nested tuple and answers 500.
+            body, _status = fail("conflict", "יותר מדי חיבורים פתוחים. נסה שוב בעוד רגע.")
+            return body, 503
         _open_streams += 1
 
     def events():

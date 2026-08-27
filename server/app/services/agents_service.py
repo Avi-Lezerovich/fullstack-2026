@@ -32,7 +32,8 @@ def pool_ids(role: str, conn: Db | None = None) -> list[int]:
 def get_agent(user_id: int, conn: Db | None = None) -> dict[str, Any] | None:
     with owned(conn) as db:
         return db.query_one(
-            "SELECT a.*, u.name FROM agents a JOIN users u ON u.id = a.user_id "
+            "SELECT a.*, u.name, u.bio, u.avatar_url "
+            "FROM agents a JOIN users u ON u.id = a.user_id "
             "WHERE a.user_id = %s",
             (user_id,),
         )

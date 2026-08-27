@@ -162,15 +162,22 @@ def my_summons():
 
 @bp.get("/agents")
 def list_agents():
-    """The court's permanent staff, for an "about the bots" view."""
+    """The court's permanent staff - what the /about page is built from.
+
+    Never returns `personality_prompt`: that is the instruction the brain is
+    given, not something the public needs, and publishing it would hand anyone
+    the exact text to imitate a juror.
+    """
     roster = []
-    for role in ("juror", "judge", "moderator"):
+    for role in ("judge", "juror", "moderator"):
         for user_id in agents_service.pool_ids(role):
             agent = agents_service.get_agent(user_id)
             roster.append(
                 {
                     "id": agent["user_id"],
                     "name": agent["name"],
+                    "bio": agent["bio"],
+                    "avatar_url": agent["avatar_url"],
                     "role": agent["role"],
                     "moderator_kind": agent["moderator_kind"],
                     "personality_name": agent["personality_name"],

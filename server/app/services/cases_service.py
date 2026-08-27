@@ -331,12 +331,24 @@ def list_cases(
     ]
 
 
-def count_cases(*, author_id: int | None = None, conn: Db | None = None) -> int:
+def count_cases(
+    *, author_id: int | None = None, status: str | None = None, conn: Db | None = None
+) -> int:
+    """How many cases a matching list_cases() would find.
+
+    The filters must be the SAME ones list_cases applies, or the caller cannot
+    use this to decide whether there is another page: the feed compares the
+    rows it holds against this number, and a total counted over a wider set
+    leaves a "load more" button that can never load anything.
+    """
     where = [PUBLIC_VISIBILITY]
     params: list[Any] = []
     if author_id is not None:
         where.append("c.author_id = %s")
         params.append(author_id)
+    if status:
+        where.append("c.status = %s")
+        params.append(status)
     with owned(conn) as db:
         return int(
             db.query_value(

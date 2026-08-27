@@ -129,9 +129,16 @@ def admin_resolve_report(report_id: int):
     if decision not in allowed:
         return fail("invalid", "החלטה לא חוקית.")
 
-    result = moderation_service.resolve_report(
-        report_id, decision, resolver_id=g.user_id, note=note
+    # admin_resolve, not resolve_report: the decision has to be carried out,
+    # not merely recorded. "resolved_hidden" hides the content and
+    # "resolved_banned" also suspends its author.
+    result = moderation_service.admin_resolve(
+        report_id, decision, actor_id=g.user_id, note=note
     )
+    if result == "not_found":
+        return fail("not_found", "הדיווח או התוכן המדווח לא נמצאו.")
+    if result == "invalid":
+        return fail("invalid", "אי אפשר להשעות את עצמך.")
     if result != "ok":
         return fail("conflict", "הדיווח כבר טופל.")
     return jsonify({"ok": True}), 200

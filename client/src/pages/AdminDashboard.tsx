@@ -113,8 +113,11 @@ const ReportRow = ({ report, onChanged }: { report: Report; onChanged: () => voi
             <Button size="small" onClick={() => resolve("resolved_dismissed")}>
               דחה דיווח
             </Button>
+            {/* This really does hide the content now, so it says so. It used
+                to be labelled "mark handled" while changing nothing but the
+                report's own status. */}
             <Button size="small" color="error" onClick={() => resolve("resolved_hidden")}>
-              סמן כטופל
+              הסתר את התוכן
             </Button>
           </>
         )}

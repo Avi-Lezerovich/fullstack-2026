@@ -6,11 +6,26 @@ import { useAuth } from "./AuthContext";
 import { useNotificationStream } from "../hooks/useNotificationStream";
 import type { Notification } from "../types";
 
+/**
+ * Every notification in the app, in one place.
+ *
+ * There is exactly ONE of these, mounted at the root. That is the whole point:
+ * the stream is a real network connection and the unread counter is real
+ * state, so a second copy would open a second EventSource against the same
+ * user and count every row twice. The bell, the inbox badge and the Messages
+ * page all read from here.
+ */
 interface NotificationState {
   notifications: Notification[];
   unreadCount: number;
   markRead: (ids?: number[]) => Promise<void>;
   refresh: () => Promise<void>;
+  /**
+   * Id of the newest `message` notification seen so far. It changes exactly
+   * once per incoming DM, which is what <MessagesLink> and the Messages page
+   * watch to know their view is stale.
+   */
+  latestMessageId: number;
 }
 
 const NotificationContext = createContext<NotificationState | undefined>(undefined);
@@ -22,6 +37,12 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [cursor, setCursor] = useState(0);
+  /**
+   * False until the initial history has landed and set the cursor. The stream
+   * must not connect before then: at `since=0` the server replays the user's
+   * entire notification history, and every row arrives looking new.
+   */
+  const [loaded, setLoaded] = useState(false);
 
   /**
    * Every notification id this session has already accounted for.
@@ -37,6 +58,8 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     if (!user) {
       setNotifications([]);
       setUnreadCount(0);
+      setCursor(0);
+      setLoaded(false);
       seen.current.clear();
       return;
     }
@@ -48,6 +71,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       for (const notification of body.notifications) seen.current.add(notification.id);
     } catch {
       // Leave whatever is on screen rather than blanking the bell.
+    } finally {
+      // Even a failed history load has to release the stream, or a signed-in
+      // user whose first request failed would never receive anything live.
+      if (user) setLoaded(true);
     }
   }, [user]);
 
@@ -67,7 +94,11 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     if (!incoming.is_read) setUnreadCount((count) => count + 1);
   }, []);
 
-  useNotificationStream({ enabled: Boolean(user), since: cursor, onNotification: receive });
+  useNotificationStream({
+    enabled: Boolean(user) && loaded,
+    since: cursor,
+    onNotification: receive,
+  });
 
   const markRead = useCallback(async (ids?: number[]) => {
     try {
@@ -81,9 +112,11 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const latestMessageId = notifications.find((n) => n.type === "message")?.id ?? 0;
+
   const value = useMemo(
-    () => ({ notifications, unreadCount, markRead, refresh }),
-    [notifications, unreadCount, markRead, refresh],
+    () => ({ notifications, unreadCount, markRead, refresh, latestMessageId }),
+    [notifications, unreadCount, markRead, refresh, latestMessageId],
   );
 
   return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;

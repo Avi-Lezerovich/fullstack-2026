@@ -15,6 +15,7 @@ import type {
   CaseListResponse,
   Comment,
   Conversation,
+  CourtAgent,
   FlaggedItem,
   MeResponse,
   Message,
@@ -166,6 +167,10 @@ export const testify = (caseId: number, body: string) =>
 
 export const fetchMySummons = () =>
   request<{ summons: PendingSummons[] }>("/me/summons").then((r) => r.summons);
+
+/** The court's permanent staff — the nineteen bots behind /about. */
+export const fetchAgents = () =>
+  request<{ agents: CourtAgent[] }>("/agents").then((r) => r.agents);
 
 // --- people -----------------------------------------------------------------
 

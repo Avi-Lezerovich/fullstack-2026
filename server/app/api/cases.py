@@ -28,7 +28,7 @@ def list_cases():
     cases = cases_service.list_cases(
         viewer_id=g.user_id, author_id=author_id, status=status, limit=limit, offset=offset
     )
-    total = cases_service.count_cases(author_id=author_id)
+    total = cases_service.count_cases(author_id=author_id, status=status)
     return jsonify({"cases": cases, "total": total, "limit": limit, "offset": offset}), 200
 
 

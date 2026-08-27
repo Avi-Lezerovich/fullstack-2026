@@ -146,6 +146,43 @@ export interface JuryPanel {
   members: JuryMember[];
 }
 
+/** One of the nineteen permanent court personalities, as /about shows them. */
+export interface CourtAgent {
+  id: number;
+  name: string;
+  bio: string | null;
+  avatar_url: string | null;
+  role: "juror" | "judge" | "moderator";
+  /** Only ever set for moderators; the three of them are fixed, never drawn. */
+  moderator_kind: "sweeper" | "clerk" | "arbiter" | null;
+  personality_name: string;
+  tone_tag: string;
+}
+
+export const AGENT_ROLE_LABELS: Record<CourtAgent["role"], string> = {
+  judge: "הרכב השופטים",
+  juror: "מאגר המושבעים",
+  moderator: "צוות הפיקוח",
+};
+
+export const MODERATOR_KIND_LABELS: Record<string, string> = {
+  clerk: "פקיד התורנות",
+  arbiter: "הבורר",
+  sweeper: "הסורק",
+};
+
+/** The eight voices the offline generator can write in (server/app/seed_data.py). */
+export const TONE_LABELS: Record<string, string> = {
+  pedantic: "דקדקן",
+  sentimental: "רגשן",
+  deadpan: "יבש",
+  pompous: "רברבן",
+  chaotic: "כאוטי",
+  bureaucratic: "בירוקרטי",
+  folksy: "עממי",
+  theatrical: "תיאטרלי",
+};
+
 export type SummonsStatus = "pending" | "testified" | "no_show";
 
 export interface Summons {
