@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardActionArea from "@mui/material/CardActionArea";
 import Chip from "@mui/material/Chip";
@@ -15,9 +16,13 @@ import { EmptyState, ErrorNote, Loading } from "../components/common/StateViews"
 import { useAsync } from "../hooks/useAsync";
 import { initials } from "../utils/format";
 
+/** The server caps a page at fifty, so this is as large as one request gets. */
+const PAGE_SIZE = 50;
+
 const Users = () => {
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
+  const [limit, setLimit] = useState(PAGE_SIZE);
 
   // Typing should not fire a request per keystroke.
   useEffect(() => {
@@ -25,9 +30,35 @@ const Users = () => {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const load = useCallback(() => api.fetchUsers({ search: debounced, limit: 50 }), [debounced]);
-  const { data, error, loading } = useAsync(load, [debounced]);
+  // A new search starts from the top; keeping the grown page size would ask
+  // for five hundred strangers the moment somebody types a letter.
+  useEffect(() => {
+    setLimit(PAGE_SIZE);
+  }, [debounced]);
+
+  /**
+   * Pages are accumulated by asking for more rows from the start rather than
+   * by walking `offset`. The list is ordered by name, so a page boundary is
+   * stable, and this keeps the rendered list a single consistent snapshot.
+   */
+  const load = useCallback(
+    async () => {
+      const pages = Math.ceil(limit / PAGE_SIZE);
+      const responses = await Promise.all(
+        Array.from({ length: pages }, (_, index) =>
+          api.fetchUsers({ search: debounced, limit: PAGE_SIZE, offset: index * PAGE_SIZE }),
+        ),
+      );
+      return {
+        users: responses.flatMap((response) => response.users),
+        total: responses[responses.length - 1].total,
+      };
+    },
+    [debounced, limit],
+  );
+  const { data, error, loading } = useAsync(load, [debounced, limit]);
   const users = data?.users ?? [];
+  const hasMore = data ? users.length < data.total : false;
 
   return (
     <Box>
@@ -78,6 +109,14 @@ const Users = () => {
           </Card>
         ))}
       </Stack>
+
+      {hasMore && (
+        <Box sx={{ textAlign: "center", mt: 2 }}>
+          <Button onClick={() => setLimit((n) => n + PAGE_SIZE)} disabled={loading}>
+            {loading ? "טוען…" : "טען עוד"}
+          </Button>
+        </Box>
+      )}
     </Box>
   );
 }; export default Users;

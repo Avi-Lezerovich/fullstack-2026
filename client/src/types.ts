@@ -36,8 +36,15 @@ export interface UserProfile extends User {
 // --- the trial --------------------------------------------------------------
 
 /**
- * The case lifecycle. `filed` exists for fidelity with the domain but is never
- * observed: a new filing goes straight to `witness_phase`.
+ * The case lifecycle.
+ *
+ * `filed` is never observed in normal operation - `create_case` writes
+ * `witness_phase` directly. It is kept deliberately, not left behind: it is
+ * the state a row inserted by hand (a fixture, a restored dump, a migration)
+ * would land in, and `trial_service.open_filed_cases` exists to sweep exactly
+ * those onto the trial calendar. Without the status there is no name for that
+ * case, and without the sweep such a row would sit forever with no deadline
+ * and nothing to move it.
  */
 export type CaseStatus =
   | "filed"
@@ -264,6 +271,8 @@ export interface Report {
   resolution_note: string | null;
   created_at: string;
   excerpt: string;
+  /** The case the reported item lives on. Null only if it has been deleted. */
+  case_id: number | null;
 }
 
 export interface FlaggedItem {
@@ -343,6 +352,8 @@ export interface CaseListResponse {
 
 export interface UserListResponse {
   users: User[];
+  /** Matches the same filters as `users`, so it is safe to page against. */
+  total: number;
   limit: number;
   offset: number;
 }

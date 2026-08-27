@@ -70,6 +70,14 @@ TEMPLATES: dict[str, list[str]] = {
         "{stance}",
         "{evidence} {stance}",
     ],
+    # A private reply. Same banks as bot_comment - the voice does not change
+    # because the room did - but its own task, so the seed differs and the LLM
+    # brief can say "this is a direct message" rather than "this is a filing".
+    "bot_reply": [
+        "{opening} {stance}",
+        "{stance} {closing}",
+        "{stance}",
+    ],
 }
 
 # Titles for lawsuits a bot files on its own initiative.

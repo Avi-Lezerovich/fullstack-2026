@@ -26,7 +26,12 @@ def list_users():
     users = users_service.search_users(
         query, limit=limit, offset=offset, include_bots=include_bots
     )
-    return jsonify({"users": users, "limit": limit, "offset": offset}), 200
+    # `total` is what lets the directory page past the first fifty. It counts
+    # the same filters the list applies, so the two cannot disagree.
+    total = users_service.count_users(query, include_bots=include_bots)
+    return jsonify(
+        {"users": users, "total": total, "limit": limit, "offset": offset}
+    ), 200
 
 
 @bp.get("/users/<int:user_id>")

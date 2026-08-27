@@ -141,6 +141,10 @@ def _periodic_tasks(number: int) -> list[tuple[str, int, Callable[[], int]]]:
             lambda: social_tasks.one_bot_social_action(number),
         )
     )
+    # Answering a direct message is reactive, not initiative, so it is not
+    # paced by `last_social_action_at` the way the feed activity is - a bot
+    # that has just liked something should still answer you.
+    tasks.append(("bot_replies", settings.social_every_ticks, social_tasks.reply_to_messages))
 
     return tasks
 

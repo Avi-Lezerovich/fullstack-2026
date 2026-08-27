@@ -26,7 +26,8 @@ __pycache__/
 # Local SQLite leftovers (the app now uses MySQL; safe to keep ignoring)
 *.db
 
-# Uploaded images (generated at runtime)
+# Uploaded images. Runtime data: in Docker these live in the `uploads` volume,
+# and locally in server/uploads/. Never in the repository.
 server/uploads/
 
 # Test + coverage artifacts

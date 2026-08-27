@@ -52,6 +52,13 @@ WORKDIR /app
 # duplicate the whole tree into an extra layer.
 COPY --chown=lolsuit:lolsuit . /app
 
+# The upload directory has to exist AND be owned by lolsuit before the volume
+# is mounted over it: Docker seeds a fresh named volume from the image's
+# directory, ownership included, but if the mount point does not exist it
+# creates one owned by root - and the non-root app then cannot write a single
+# file. Silent until the first upload, which is the worst time to find out.
+RUN mkdir -p /app/uploads && chown lolsuit:lolsuit /app/uploads
+
 USER lolsuit
 
 EXPOSE 5002

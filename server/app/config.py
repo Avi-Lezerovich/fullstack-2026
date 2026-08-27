@@ -90,6 +90,10 @@ class Settings:
     aws_region: str
     brain_force_offline: bool
 
+    # --- uploads ---
+    upload_dir: str
+    upload_max_bytes: int
+
     # --- mail ---
     mail_backend: str
     mail_from: str
@@ -163,6 +167,14 @@ def get_settings() -> Settings:
         # AWS_DEFAULT_REGION is boto3's spelling; accept either.
         aws_region=_str("AWS_REGION", "") or _str("AWS_DEFAULT_REGION", ""),
         brain_force_offline=_bool("BRAIN_FORCE_OFFLINE", False),
+        # Where uploaded images land. A directory rather than object storage
+        # because the compose stack mounts a volume over it; on EC2 the same
+        # variable can point at a mounted EBS path.
+        upload_dir=_str("UPLOAD_DIR", str(_REPO_ROOT / "server" / "uploads")),
+        # 5 MB. Enforced in three places, deliberately: nginx rejects the body
+        # before it reaches Python, Flask's MAX_CONTENT_LENGTH rejects it
+        # before the view runs, and the view checks what it actually received.
+        upload_max_bytes=_int("UPLOAD_MAX_BYTES", 5 * 1024 * 1024),
         mail_backend=_str("MAIL_BACKEND", "console"),
         mail_from=_str("MAIL_FROM", "court@lolsuit.local"),
         smtp_host=_str("SMTP_HOST", "localhost"),

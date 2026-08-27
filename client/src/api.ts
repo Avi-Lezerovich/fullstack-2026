@@ -30,6 +30,7 @@ import type {
   TrialView,
   UserListResponse,
   UserProfile,
+  User,
   UserRef,
 } from "./types";
 
@@ -218,6 +219,60 @@ export const draftLawsuit = (input: {
 export const suggestComment = (caseId: number) =>
   request<{ body: string; backend: string }>("/assist/suggest-comment", json("POST", { case_id: caseId }));
 
+/** The same suggestion, written in the voice of one of the court's own. */
+export const suggestInCharacter = (agentUserId: number, hint: string) =>
+  request<{ body: string; personality_name: string }>(
+    "/assist/in-character",
+    json("POST", { agent_user_id: agentUserId, hint }),
+  );
+
+// --- image uploads ----------------------------------------------------------
+
+/**
+ * Upload one image and get back the URL to reference it by.
+ *
+ * Deliberately does NOT go through `request<T>`: that helper sets
+ * `Content-Type: application/json` on every call, and a multipart body must be
+ * left alone so the browser can generate the boundary itself. Setting it by
+ * hand is the classic way to make an upload fail with a parse error the
+ * server cannot explain.
+ */
+export async function uploadImage(file: File): Promise<string> {
+  const form = new FormData();
+  form.append("file", file);
+
+  let response: Response;
+  try {
+    response = await fetch(`${BASE}/uploads`, {
+      method: "POST",
+      credentials: "include",
+      body: form,
+    });
+  } catch {
+    throw new ApiError("שגיאת רשת. ודא שהשרת פעיל ונסה שוב.", 0, "network");
+  }
+
+  if (!response.ok) {
+    // A 413 comes from nginx or Werkzeug, not from our code, so it has no
+    // Hebrew body to read - say the useful thing ourselves.
+    if (response.status === 413) {
+      throw new ApiError("הקובץ גדול מדי.", 413, "invalid");
+    }
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      code?: string;
+    };
+    throw new ApiError(
+      payload.error || `שגיאה ${response.status}`,
+      response.status,
+      payload.code || "error",
+    );
+  }
+
+  const body = (await response.json()) as { url: string };
+  return body.url;
+}
+
 // --- notifications ----------------------------------------------------------
 
 /**
@@ -273,11 +328,15 @@ export const setContentStatus = (
 export const resolveReport = (reportId: number, decision: string, note?: string) =>
   request<OkResponse>(`/admin/reports/${reportId}/resolve`, json("POST", { decision, note }));
 
+/** Suspended accounts. `GET /users` only ever returns active ones. */
+export const fetchBannedUsers = () =>
+  request<{ users: User[]; total: number }>("/admin/users/banned").then((r) => r.users);
+
 export const banUser = (userId: number, reason?: string) =>
-  request<OkResponse>(`/admin/users/${userId}/ban`, json("POST", { reason }));
+  request<{ ok: true; changed: boolean }>(`/admin/users/${userId}/ban`, json("POST", { reason }));
 
 export const unbanUser = (userId: number) =>
-  request<OkResponse>(`/admin/users/${userId}/unban`, json("POST"));
+  request<{ ok: true; changed: boolean }>(`/admin/users/${userId}/unban`, json("POST"));
 
 // --- diagnostics ------------------------------------------------------------
 

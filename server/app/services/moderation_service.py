@@ -389,6 +389,20 @@ def target_text(target_type: str, target_id: int, conn: Db | None = None) -> str
         return row["body"] if row else ""
 
 
+def target_case_id(target_type: str, target_id: int, conn: Db | None = None) -> int | None:
+    """Which case a reported item lives on.
+
+    A reported comment is only judgeable in context, and the admin queue had
+    no way to reach it: the report row names the comment, and a comment's case
+    is one join away that nothing was making.
+    """
+    if target_type == "case":
+        return target_id
+    with owned(conn) as db:
+        row = db.query_one("SELECT case_id FROM comments WHERE id = %s", (target_id,))
+        return int(row["case_id"]) if row else None
+
+
 def list_reports(
     status: str | None = None, limit: int = 50, conn: Db | None = None
 ) -> list[dict[str, Any]]:
@@ -427,6 +441,9 @@ def list_reports(
                 "resolution_note": row["resolution_note"],
                 "created_at": row["created_at"].isoformat(timespec="seconds"),
                 "excerpt": target_text(row["target_type"], row["target_id"], conn=db.db)[:200],
+                # Null only if the content has since been deleted. The queue
+                # uses it to link to the case a reported comment sits on.
+                "case_id": target_case_id(row["target_type"], row["target_id"], conn=db.db),
             }
             for row in rows
         ]

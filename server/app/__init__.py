@@ -25,6 +25,11 @@ def create_app() -> Flask:
     settings = get_settings()
     app.config["SETTINGS"] = settings
 
+    # Werkzeug aborts the request with 413 once the body passes this, so an
+    # oversized upload never reaches a view and never occupies memory. The
+    # small headroom is for the multipart envelope around the file itself.
+    app.config["MAX_CONTENT_LENGTH"] = settings.upload_max_bytes + 8192
+
     # supports_credentials because authentication is an httpOnly cookie, not a
     # bearer token - the browser will not attach it otherwise.
     CORS(

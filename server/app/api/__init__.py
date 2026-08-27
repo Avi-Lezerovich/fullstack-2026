@@ -20,6 +20,7 @@ from . import (
     notifications,
     social,
     trial,
+    uploads,
     users,
 )
 
@@ -34,6 +35,7 @@ _BLUEPRINTS = [
     notifications.bp,
     messages.bp,
     assist.bp,
+    uploads.bp,
 ]
 
 

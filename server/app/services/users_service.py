@@ -120,7 +120,14 @@ def update_profile(
     avatar_url: str | None = None,
     conn: Db | None = None,
 ) -> str:
-    """Partial update. Only the fields actually supplied are written."""
+    """Partial update. Only the fields actually supplied are written.
+
+    None means "not supplied" and is skipped. An empty STRING means "clear
+    it", and is stored as NULL rather than "" - the difference is not
+    cosmetic: `<Avatar src="">` asks the browser for an empty URL, so an
+    emptied avatar field would render as a broken image instead of falling
+    back to the user's initials.
+    """
     sets: list[str] = []
     params: list[Any] = []
     if name is not None:
@@ -128,10 +135,10 @@ def update_profile(
         params.append(name)
     if bio is not None:
         sets.append("bio = %s")
-        params.append(bio)
+        params.append(bio or None)
     if avatar_url is not None:
         sets.append("avatar_url = %s")
-        params.append(avatar_url)
+        params.append(avatar_url or None)
     if not sets:
         return "ok"
 
@@ -143,17 +150,20 @@ def update_profile(
         return "ok"
 
 
-def search_users(
-    query: str = "",
-    *,
-    limit: int = 20,
-    offset: int = 0,
-    include_bots: bool = True,
-    exclude_ids: tuple[int, ...] = (),
-    conn: Db | None = None,
-) -> list[dict[str, Any]]:
-    where = ["u.status = 'active'"]
-    params: list[Any] = []
+def _search_where(
+    query: str,
+    include_bots: bool,
+    exclude_ids: tuple[int, ...],
+    status: str,
+) -> tuple[list[str], list[Any]]:
+    """The WHERE shared by search_users and count_users.
+
+    Built once so the list and its total can never disagree about what they
+    are looking at - a page that counts more rows than it can ever show is
+    exactly the bug this shape prevents.
+    """
+    where = ["u.status = %s"]
+    params: list[Any] = [status]
     if query:
         where.append("u.name LIKE %s")
         params.append(f"%{query}%")
@@ -163,7 +173,43 @@ def search_users(
         placeholders = ", ".join(["%s"] * len(exclude_ids))
         where.append(f"u.id NOT IN ({placeholders})")
         params.extend(exclude_ids)
+    return where, params
 
+
+def count_users(
+    query: str = "",
+    *,
+    include_bots: bool = True,
+    exclude_ids: tuple[int, ...] = (),
+    status: str = "active",
+    conn: Db | None = None,
+) -> int:
+    where, params = _search_where(query, include_bots, exclude_ids, status)
+    with owned(conn) as db:
+        return int(
+            db.query_value(
+                f"SELECT COUNT(*) FROM users u WHERE {' AND '.join(where)}", params, default=0
+            )
+        )
+
+
+def search_users(
+    query: str = "",
+    *,
+    limit: int = 20,
+    offset: int = 0,
+    include_bots: bool = True,
+    exclude_ids: tuple[int, ...] = (),
+    status: str = "active",
+    conn: Db | None = None,
+) -> list[dict[str, Any]]:
+    """A page of people.
+
+    `status` is a parameter rather than a hardcoded 'active' so the admin
+    dashboard can list suspended accounts - otherwise a ban is irreversible
+    through the UI, because a banned user is invisible to every search.
+    """
+    where, params = _search_where(query, include_bots, exclude_ids, status)
     params.extend([int(limit), int(offset)])
     with owned(conn) as db:
         rows = db.query_all(

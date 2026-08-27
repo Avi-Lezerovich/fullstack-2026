@@ -12,6 +12,8 @@ import PersonIcon from "@mui/icons-material/Person";
 import { Link as RouterLink, Navigate } from "react-router-dom";
 
 import * as api from "../api";
+import BannedUsers from "../components/moderation/BannedUsers";
+import CourtStatus from "../components/moderation/CourtStatus";
 import { EmptyState, ErrorNote, Loading } from "../components/common/StateViews";
 import { useAsync } from "../hooks/useAsync";
 import { useAuth } from "../context/AuthContext";
@@ -75,9 +77,18 @@ const AuditTrail = ({ targetType, targetId }: { targetType: string; targetId: nu
 };
 
 const ReportRow = ({ report, onChanged }: { report: Report; onChanged: () => void }) => {
+  const [failure, setFailure] = useState<string | null>(null);
+
   const resolve = async (decision: string) => {
-    await api.resolveReport(report.id, decision, "הוכרע על ידי מנהל.");
-    onChanged();
+    setFailure(null);
+    try {
+      await api.resolveReport(report.id, decision, "הוכרע על ידי מנהל.");
+      onChanged();
+    } catch (err) {
+      // A refusal is meaningful here — "you cannot ban yourself" is a real
+      // answer, and swallowing it would look like the button did nothing.
+      setFailure(err instanceof Error ? err.message : "הפעולה נכשלה.");
+    }
   };
 
   const resolved = report.status.startsWith("resolved");
@@ -96,6 +107,8 @@ const ReportRow = ({ report, onChanged }: { report: Report; onChanged: () => voi
         “{report.excerpt}”
       </Typography>
 
+      {failure && <ErrorNote message={failure} />}
+
       {report.resolution_note && (
         <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
           {report.resolver?.name}: {report.resolution_note}
@@ -103,9 +116,12 @@ const ReportRow = ({ report, onChanged }: { report: Report; onChanged: () => voi
       )}
 
       <Stack direction="row" spacing={1} sx={{ mt: 1 }} flexWrap="wrap" useFlexGap>
-        {report.target_type === "case" && (
-          <Button size="small" component={RouterLink} to={`/cases/${report.target_id}`}>
-            הצג תיק
+        {/* A comment is only judgeable in context, and its case is now on the
+            report payload — before this the row was a 200-character excerpt
+            with nowhere to go. */}
+        {report.case_id !== null && (
+          <Button size="small" component={RouterLink} to={`/cases/${report.case_id}`}>
+            {report.target_type === "case" ? "הצג תיק" : "הצג בהקשר"}
           </Button>
         )}
         {!resolved && (
@@ -118,6 +134,22 @@ const ReportRow = ({ report, onChanged }: { report: Report; onChanged: () => voi
                 report's own status. */}
             <Button size="small" color="error" onClick={() => resolve("resolved_hidden")}>
               הסתר את התוכן
+            </Button>
+            {/* Hides the content AND suspends its author, revoking every
+                session. Confirmed first, because it is the heaviest thing an
+                admin can do from this screen. */}
+            <Button
+              size="small"
+              color="error"
+              variant="outlined"
+              onClick={() => {
+                if (window.confirm("להסתיר את התוכן ולהשעות את המשתמש? אפשר לבטל בלשונית המושעים.")) {
+                  void resolve("resolved_banned");
+                }
+              }}
+              data-testid="ban-from-report"
+            >
+              הסתר והשעה את המשתמש
             </Button>
           </>
         )}
@@ -181,10 +213,18 @@ const FlaggedRow = ({ item, onChanged }: { item: FlaggedItem; onChanged: () => v
   );
 };
 
+type View = "reports" | "flagged" | "banned";
+
+const VIEWS: { id: View; label: string }[] = [
+  { id: "reports", label: "תור הדיווחים" },
+  { id: "flagged", label: "תוכן מסומן" },
+  { id: "banned", label: "משתמשים מושעים" },
+];
+
 const AdminDashboard = () => {
   const { user, loading } = useAuth();
   const [tab, setTab] = useState(0);
-  const [showFlagged, setShowFlagged] = useState(false);
+  const [view, setView] = useState<View>("reports");
 
   const status = QUEUE_TABS[tab].status;
   const reports = useAsync(useCallback(() => api.fetchReportQueue(status), [status]), [status]);
@@ -202,16 +242,24 @@ const AdminDashboard = () => {
         בוטי הפיקוח מטפלים בתור באופן שוטף. כל החלטה שלהם ניתנת לביטול כאן, וכל שינוי נרשם ביומן.
       </Typography>
 
-      <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-        <Button variant={showFlagged ? "outlined" : "contained"} onClick={() => setShowFlagged(false)}>
-          תור הדיווחים
-        </Button>
-        <Button variant={showFlagged ? "contained" : "outlined"} onClick={() => setShowFlagged(true)}>
-          תוכן מסומן
-        </Button>
+      <CourtStatus />
+
+      <Stack direction="row" spacing={1} sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
+        {VIEWS.map((option) => (
+          <Button
+            key={option.id}
+            variant={view === option.id ? "contained" : "outlined"}
+            onClick={() => setView(option.id)}
+            data-testid={`admin-view-${option.id}`}
+          >
+            {option.label}
+          </Button>
+        ))}
       </Stack>
 
-      {showFlagged ? (
+      {view === "banned" ? (
+        <BannedUsers />
+      ) : view === "flagged" ? (
         <>
           {flagged.error && <ErrorNote message={flagged.error} />}
           {flagged.loading && !flagged.data && <Loading />}

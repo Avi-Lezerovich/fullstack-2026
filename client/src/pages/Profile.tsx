@@ -17,6 +17,7 @@ import { Link as RouterLink, useParams } from "react-router-dom";
 
 import * as api from "../api";
 import CaseCard from "../components/feed/CaseCard";
+import ImageUploadField from "../components/common/ImageUploadField";
 import { EmptyState, ErrorNote, Loading } from "../components/common/StateViews";
 import { useAsync } from "../hooks/useAsync";
 import { useAuth } from "../context/AuthContext";
@@ -34,7 +35,10 @@ const Profile = () => {
   const cases = useAsync(loadCases, [id]);
 
   const [editing, setEditing] = useState(false);
+  const [name, setName] = useState("");
   const [bio, setBio] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   if (profile.loading) return <Loading />;
@@ -45,21 +49,37 @@ const Profile = () => {
   const isMe = me?.id === person.id;
 
   const openEditor = () => {
+    setName(person.name);
     setBio(person.bio ?? "");
+    setAvatarUrl(person.avatar_url ?? "");
+    setSaveError(null);
     setEditing(true);
   };
 
   const save = async () => {
     setSaving(true);
+    setSaveError(null);
     try {
-      const { user: updated } = await api.updateMyProfile({ bio });
+      // All three go in one PATCH; the endpoint has always accepted them and
+      // only `bio` was ever being sent, so nobody could change their display
+      // name or set a picture.
+      const { user: updated } = await api.updateMyProfile({
+        name: name.trim(),
+        bio,
+        avatar_url: avatarUrl,
+      });
       setUser(updated);
       await profile.reload();
       setEditing(false);
+    } catch (err) {
+      // The server validates the name independently and answers in Hebrew.
+      setSaveError(err instanceof Error ? err.message : "השמירה נכשלה.");
     } finally {
       setSaving(false);
     }
   };
+
+  const nameTooShort = name.trim().length < 2;
 
   return (
     <Stack spacing={2}>
@@ -128,20 +148,45 @@ const Profile = () => {
       <Dialog open={editing} onClose={() => setEditing(false)} fullWidth maxWidth="sm">
         <DialogTitle>עריכת פרופיל</DialogTitle>
         <DialogContent>
-          <TextField
-            label="קצת עליי"
-            value={bio}
-            onChange={(e) => setBio(e.target.value)}
-            multiline
-            minRows={3}
-            fullWidth
-            sx={{ mt: 1 }}
-            inputProps={{ maxLength: 500 }}
-          />
+          {saveError && <ErrorNote message={saveError} />}
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="שם מלא"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              fullWidth
+              required
+              error={nameTooShort}
+              helperText={nameTooShort ? "השם חייב להכיל לפחות שני תווים." : " "}
+              inputProps={{ maxLength: 80, "data-testid": "profile-name" }}
+            />
+            <ImageUploadField
+              label="תמונת פרופיל"
+              helper="JPG, PNG, GIF או WEBP, עד 5 מגה-בייט. בלי תמונה יוצגו ראשי התיבות של שמך."
+              value={avatarUrl}
+              onChange={setAvatarUrl}
+              shape="square"
+              disabled={saving}
+            />
+            <TextField
+              label="קצת עליי"
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+              multiline
+              minRows={3}
+              fullWidth
+              inputProps={{ maxLength: 500, "data-testid": "profile-bio" }}
+            />
+          </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditing(false)}>ביטול</Button>
-          <Button onClick={save} variant="contained" disabled={saving}>
+          <Button
+            onClick={save}
+            variant="contained"
+            disabled={saving || nameTooShort}
+            data-testid="profile-save"
+          >
             {saving ? "שומר…" : "שמירה"}
           </Button>
         </DialogActions>
