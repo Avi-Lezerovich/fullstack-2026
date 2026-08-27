@@ -18,9 +18,8 @@ import { Link as RouterLink, useLocation, useNavigate } from "react-router-dom";
 
 import MessagesLink from "./MessagesLink";
 import NotificationBell from "./NotificationBell";
-import { logout } from "../../api";
-import { signalAuthChange, useCurrentUser } from "../../hooks/useCurrentUser";
-import { useNotifications } from "../../hooks/useNotifications";
+import { useAuth } from "../../context/AuthContext";
+import { useNotifications } from "../../context/NotificationContext";
 import { initials } from "../../utils/format";
 
 const BASE = import.meta.env.BASE_URL;
@@ -44,29 +43,29 @@ const HOVER = { backgroundColor: "rgba(250, 246, 233, 0.08)" };
  * The logo links home. From sm upwards the nav links sit inline; below that
  * they collapse into a right-anchored drawer behind the hamburger, which also
  * absorbs the actions that are too wide for a phone toolbar (file a lawsuit,
- * profile, logout). Signed-in users additionally get the inbox badge and the
- * notification bell, both fed by a single `useNotifications` poll owned here.
+ * profile, logout).
+ *
+ * Identity comes from `useAuth`, and notifications from `useNotifications` —
+ * the same two providers every page reads. This used to keep its own copies of
+ * both (a module-level `useCurrentUser` cache and a second `useNotifications`
+ * hook), which meant signing in updated the pages but not the app bar, signing
+ * out updated the app bar but not the pages, and every tab held two SSE
+ * connections. There is one source for each now, so they cannot disagree.
  */
 const TopBar = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const user = useCurrentUser();
+  const { user, signOut } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const { notifications, unreadCount, markRead, latestMessageId } = useNotifications(
-    Boolean(user),
-  );
+  const { notifications, unreadCount, markRead, latestMessageId } = useNotifications();
 
   const handleLogout = async () => {
     setDrawerOpen(false);
-    try {
-      await logout();
-    } finally {
-      // Drop the cached identity even if the request failed — the user asked
-      // to be signed out, so the UI should not keep showing them as signed in.
-      signalAuthChange();
-      navigate("/");
-    }
+    // signOut clears the context even if the request failed — the user asked
+    // to be signed out, so the UI must not keep showing them as signed in.
+    await signOut();
+    navigate("/");
   };
 
   return (
@@ -144,7 +143,7 @@ const TopBar = () => {
               />
               <Button
                 component={RouterLink}
-                to="/new-post"
+                to="/cases/new"
                 variant="contained"
                 color="secondary"
                 startIcon={<GavelIcon />}
@@ -156,7 +155,7 @@ const TopBar = () => {
               <Tooltip title={user.name}>
                 <IconButton
                   component={RouterLink}
-                  to={`/user-posts/${user.id}`}
+                  to={`/users/${user.id}`}
                   sx={{ p: 0.5 }}
                   aria-label="הפרופיל שלי"
                   data-testid="profile-link"
@@ -227,13 +226,13 @@ const TopBar = () => {
           <List>
             {user ? (
               <>
-                <ListItemButton component={RouterLink} to="/new-post">
+                <ListItemButton component={RouterLink} to="/cases/new">
                   <ListItemText primary="הגשת תביעה" />
                 </ListItemButton>
                 <ListItemButton component={RouterLink} to="/messages">
                   <ListItemText primary="הודעות" />
                 </ListItemButton>
-                <ListItemButton component={RouterLink} to={`/user-posts/${user.id}`}>
+                <ListItemButton component={RouterLink} to={`/users/${user.id}`}>
                   <ListItemText primary="הפרופיל שלי" />
                 </ListItemButton>
                 {user.is_admin && (

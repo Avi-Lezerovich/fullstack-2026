@@ -304,6 +304,81 @@ def resolve_report(
         return "ok" if result.rowcount == 1 else "already_done"
 
 
+def admin_resolve(
+    report_id: int,
+    decision: str,
+    *,
+    actor_id: int,
+    note: str | None = None,
+    conn: Db | None = None,
+) -> str:
+    """Resolve a report AND carry out what the decision says, in one transaction.
+
+    `resolve_report` on its own only moves the report's own status - which is
+    correct for the bots, because `work_report_queue` and `arbiter_pass` hide
+    (and ban) first and record the resolution afterwards. A human admin has no
+    such preceding step, so routing them straight at `resolve_report` marked
+    reports "hidden" and "banned" while the content stayed public and the
+    account stayed active.
+
+    The consequences are idempotent: hiding something already hidden and
+    banning someone already banned both return "already_done" and change
+    nothing, so this stays safe to retry.
+    """
+    if decision not in (RESOLVED_HIDDEN, RESOLVED_DISMISSED, RESOLVED_BANNED):
+        return "invalid"
+
+    with owned(conn) as db:
+        report = db.query_one(
+            "SELECT id, target_type, target_id, status FROM reports WHERE id = %s",
+            (report_id,),
+        )
+        if report is None:
+            return "not_found"
+        if report["status"] not in (OPEN, CLAIMED):
+            return "already_done"
+
+        if decision in (RESOLVED_HIDDEN, RESOLVED_BANNED):
+            content = get_content(report["target_type"], report["target_id"], conn=db.db)
+            if content is None:
+                # The content is gone (a withdrawn filing cascades its
+                # comments away). Nothing to hide, and nobody to ban.
+                return "not_found"
+
+            # An admin must not be able to ban themselves out of the dashboard.
+            if decision == RESOLVED_BANNED and int(content["author_id"]) == int(actor_id):
+                return "invalid"
+
+            set_content_status(
+                report["target_type"],
+                report["target_id"],
+                "hidden",
+                actor_id=actor_id,
+                actor_is_bot=False,
+                action="hide",
+                reason=(note or "החלטת מנהל.")[:255],
+                conn=db.db,
+            )
+
+            if decision == RESOLVED_BANNED:
+                ban_user(
+                    int(content["author_id"]),
+                    actor_id=actor_id,
+                    actor_is_bot=False,
+                    reason=(note or "החלטת מנהל.")[:255],
+                    conn=db.db,
+                )
+
+        result = resolve_report(
+            report_id, decision, resolver_id=actor_id, note=note, conn=db.db
+        )
+        if result != "ok":
+            return result
+
+        db.commit_if_owned()
+        return "ok"
+
+
 def target_text(target_type: str, target_id: int, conn: Db | None = None) -> str:
     """The words a scanner should look at, whatever kind of content it is."""
     with owned(conn) as db:

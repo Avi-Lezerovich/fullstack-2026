@@ -5,6 +5,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import Footer from "./components/layout/Footer";
 import TopBar from "./components/layout/TopBar";
 import ProtectedRoute from "./components/routing/ProtectedRoute";
+import About from "./pages/About";
 import AdminDashboard from "./pages/AdminDashboard";
 import CasePage from "./pages/CasePage";
 import Feed from "./pages/Feed";
@@ -29,6 +30,7 @@ const App = () => {
             <Route path="/cases/new" element={<ProtectedRoute><NewCase /></ProtectedRoute>} />
             <Route path="/cases/:caseId" element={<CasePage />} />
             <Route path="/users" element={<Users />} />
+            <Route path="/about" element={<About />} />
             <Route
               path="/messages"
               element={<ProtectedRoute><Messages /></ProtectedRoute>}
