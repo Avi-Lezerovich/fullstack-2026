@@ -19,7 +19,7 @@ import * as api from "../api";
 import { EmptyState, ErrorNote, Loading } from "../components/common/StateViews";
 import { useAsync } from "../hooks/useAsync";
 import { useNotifications } from "../context/NotificationContext";
-import type { Conversation, Message } from "../types";
+import type { Conversation, Message, UserRef } from "../types";
 import { initials, relativeTime } from "../utils/format";
 
 /**
@@ -37,6 +37,12 @@ const Messages = () => {
 
   const conversations = useAsync(api.fetchConversations, []);
   const [activeId, setActiveId] = useState<number | null>(null);
+  /**
+   * Somebody we are about to write to for the first time. There is no
+   * conversation row yet and there must not be one until a message is
+   * actually sent, so the thread pane composes against this instead.
+   */
+  const [pending, setPending] = useState<UserRef | null>(null);
   const [thread, setThread] = useState<Message[]>([]);
   const [threadError, setThreadError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -44,35 +50,21 @@ const Messages = () => {
   const bottom = useRef<HTMLDivElement | null>(null);
 
   const list = conversations.data?.conversations ?? [];
-  const active = list.find((c) => c.id === activeId) ?? null;
+  const existing = list.find((c) => c.id === activeId) ?? null;
 
-  /**
-   * `?to=<userId>` is how the rest of the app starts a conversation — from a
-   * profile, or from a message notification. The id is resolved to the one
-   * conversation for the pair, then dropped from the URL so a refresh does not
-   * re-open it over whatever the user has since selected.
-   */
-  const to = params.get("to");
-  useEffect(() => {
-    if (!to) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const id = await api.startConversation(Number(to));
-        if (cancelled) return;
-        setActiveId(id);
-        await conversations.reload();
-      } catch (err) {
-        if (!cancelled) setThreadError(err instanceof Error ? err.message : "לא הצלחנו לפתוח שיחה.");
-      } finally {
-        if (!cancelled) setParams({}, { replace: true });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [to]);
+  // One shape for both cases, so the pane below does not care which it has.
+  const active = existing
+    ? { id: existing.id as number | null, other: existing.other }
+    : pending
+      ? { id: null as number | null, other: pending }
+      : null;
+
+  // Reloading the inbox is needed by three different effects; a ref keeps them
+  // honest about their dependencies without re-running whenever useAsync hands
+  // back a new function identity.
+  const reloadConversations = conversations.reload;
+  const reloadRef = useRef(reloadConversations);
+  reloadRef.current = reloadConversations;
 
   const openThread = useCallback(async (conversationId: number) => {
     setThreadError(null);
@@ -83,6 +75,41 @@ const Messages = () => {
       setThreadError(err instanceof Error ? err.message : "לא הצלחנו לטעון את השיחה.");
     }
   }, []);
+
+  /**
+   * `?to=<userId>` is how the rest of the app opens a conversation — from a
+   * profile, or from a message notification. It resolves to an existing thread
+   * when there is one and to an empty composer when there is not, then drops
+   * itself from the URL so a refresh does not reopen it over whatever the user
+   * has since selected.
+   */
+  const to = params.get("to");
+  useEffect(() => {
+    if (!to) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const found = await api.findConversationWith(Number(to));
+        if (cancelled) return;
+        if (found.conversation_id === null) {
+          setPending(found.recipient);
+          setActiveId(null);
+          setThread([]);
+        } else {
+          setPending(null);
+          setActiveId(found.conversation_id);
+          await reloadRef.current();
+        }
+      } catch (err) {
+        if (!cancelled) setThreadError(err instanceof Error ? err.message : "לא הצלחנו לפתוח שיחה.");
+      } finally {
+        if (!cancelled) setParams({}, { replace: true });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [to, setParams]);
 
   useEffect(() => {
     if (activeId === null) {
@@ -98,16 +125,23 @@ const Messages = () => {
     () => notifications.find((n) => n.type === "message")?.id ?? 0,
     [notifications],
   );
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
   useEffect(() => {
     if (!latestMessageNotification) return;
-    void conversations.reload();
-    if (activeId !== null) void openThread(activeId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [latestMessageNotification]);
+    void reloadRef.current();
+    const open = activeIdRef.current;
+    if (open !== null) void openThread(open);
+  }, [latestMessageNotification, openThread]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "nearest" });
   }, [thread]);
+
+  const select = (conversationId: number) => {
+    setPending(null);
+    setActiveId(conversationId);
+  };
 
   const send = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -117,9 +151,13 @@ const Messages = () => {
     setSending(true);
     setThreadError(null);
     try {
-      await api.sendMessage(active.other.id, body);
+      // Sending is what creates the conversation, so the id comes back from
+      // the response rather than from a row we made in advance.
+      const { conversation_id } = await api.sendMessage(active.other.id, body);
       setDraft("");
-      await Promise.all([openThread(active.id), conversations.reload()]);
+      setPending(null);
+      setActiveId(conversation_id);
+      await Promise.all([openThread(conversation_id), reloadRef.current()]);
     } catch (err) {
       setThreadError(err instanceof Error ? err.message : "לא הצלחנו לשלוח את ההודעה.");
     } finally {
@@ -164,7 +202,7 @@ const Messages = () => {
                 key={conversation.id}
                 conversation={conversation}
                 selected={conversation.id === activeId}
-                onSelect={() => setActiveId(conversation.id)}
+                onSelect={() => select(conversation.id)}
               />
             ))}
           </List>
@@ -184,7 +222,10 @@ const Messages = () => {
           <>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ px: 2, py: 1.5 }}>
               <IconButton
-                onClick={() => setActiveId(null)}
+                onClick={() => {
+                  setActiveId(null);
+                  setPending(null);
+                }}
                 sx={{ display: { xs: "inline-flex", md: "none" } }}
                 aria-label="חזרה לרשימה"
               >

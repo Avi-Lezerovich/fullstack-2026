@@ -96,22 +96,6 @@ def set_password(user_id: int, password_hash: str, conn: Db | None = None) -> st
         return "ok" if result.rowcount else "not_found"
 
 
-def set_status(user_id: int, status: str, conn: Db | None = None) -> str:
-    """Ban or reinstate. Revoking the sessions of a banned user is the caller's
-    job (moderation_service does it in the same transaction)."""
-    if status not in ("active", "banned"):
-        return "invalid"
-    with owned(conn) as db:
-        result = db.execute(
-            "UPDATE users SET status = %s, banned_at = "
-            "CASE WHEN %s = 'banned' THEN UTC_TIMESTAMP() ELSE NULL END "
-            "WHERE id = %s",
-            (status, status, user_id),
-        )
-        db.commit_if_owned()
-        return "ok" if result.rowcount else "not_found"
-
-
 def update_profile(
     user_id: int,
     *,

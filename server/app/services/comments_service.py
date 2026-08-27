@@ -246,24 +246,24 @@ def list_for_case(
     ]
 
 
-def count_for_case(case_id: int, conn: Db | None = None) -> int:
-    with owned(conn) as db:
-        return int(
-            db.query_value(
-                "SELECT COUNT(*) FROM comments cm "
-                f"WHERE cm.case_id = %s AND {PUBLIC_VISIBILITY}",
-                (case_id,),
-                default=0,
-            )
-        )
-
-
 def get_comment(comment_id: int, conn: Db | None = None) -> dict[str, Any] | None:
     with owned(conn) as db:
         return db.query_one("SELECT * FROM comments WHERE id = %s", (comment_id,))
 
 
-def find_by_dedupe_key(dedupe_key: str, conn: Db | None = None) -> int | None:
+def get_shaped(
+    comment_id: int, *, viewer_id: int | None = None, conn: Db | None = None
+) -> dict[str, Any] | None:
+    """One comment, in the same shape list_for_case returns.
+
+    Exists so creating a comment does not have to re-read the entire thread
+    and then scan it linearly for the row it just inserted - which was both
+    wasteful on a long case and quietly returned null if the scan missed.
+    """
     with owned(conn) as db:
-        row = db.query_one("SELECT id FROM comments WHERE dedupe_key = %s", (dedupe_key,))
-        return int(row["id"]) if row else None
+        row = db.query_one(
+            f"SELECT {_COMMENT_COLUMNS} {_COMMENT_JOINS} WHERE cm.id = %s", (comment_id,)
+        )
+    if row is None:
+        return None
+    return shape_comment(row, can_see_hidden=row["author_id"] == viewer_id)

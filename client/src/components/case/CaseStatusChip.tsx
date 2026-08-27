@@ -32,10 +32,9 @@ interface Props {
   status: CaseStatus;
   /** When the current phase ends; adds a countdown to the tooltip. */
   deadline?: string | null;
-  size?: "small" | "medium";
 }
 
-const CaseStatusChip = ({ status, deadline, size = "small" }: Props) => {
+const CaseStatusChip = ({ status, deadline }: Props) => {
   const { color, icon, hint } = PRESENTATION[status];
   const remaining = status !== "closed" && !isPast(deadline ?? null) ? timeUntil(deadline ?? null) : "";
 
@@ -46,7 +45,7 @@ const CaseStatusChip = ({ status, deadline, size = "small" }: Props) => {
         icon={icon}
         label={CASE_STATUS_LABELS[status]}
         color={color}
-        size={size}
+        size="small"
         variant={status === "closed" ? "outlined" : "filled"}
         data-testid="case-status-chip"
         data-status={status}

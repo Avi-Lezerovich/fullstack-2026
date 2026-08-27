@@ -39,20 +39,6 @@ def get_agent(user_id: int, conn: Db | None = None) -> dict[str, Any] | None:
         )
 
 
-def get_agents(user_ids: list[int], conn: Db | None = None) -> dict[int, dict[str, Any]]:
-    """Several agents in one query, keyed by user id."""
-    if not user_ids:
-        return {}
-    placeholders = ", ".join(["%s"] * len(user_ids))
-    with owned(conn) as db:
-        rows = db.query_all(
-            f"SELECT a.*, u.name FROM agents a JOIN users u ON u.id = a.user_id "
-            f"WHERE a.user_id IN ({placeholders})",
-            user_ids,
-        )
-    return {int(row["user_id"]): row for row in rows}
-
-
 def moderator_id(kind: str, conn: Db | None = None) -> int | None:
     """The single bot responsible for a moderation job.
 
@@ -67,8 +53,3 @@ def moderator_id(kind: str, conn: Db | None = None) -> int | None:
             (kind,),
         )
     return int(row["user_id"]) if row else None
-
-
-def is_bot(user_id: int, conn: Db | None = None) -> bool:
-    with owned(conn) as db:
-        return bool(db.query_value("SELECT is_bot FROM users WHERE id = %s", (user_id,), default=0))

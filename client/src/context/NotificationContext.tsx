@@ -19,7 +19,6 @@ interface NotificationState {
   notifications: Notification[];
   unreadCount: number;
   markRead: (ids?: number[]) => Promise<void>;
-  refresh: () => Promise<void>;
   /**
    * Id of the newest `message` notification seen so far. It changes exactly
    * once per incoming DM, which is what <MessagesLink> and the Messages page
@@ -115,8 +114,8 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const latestMessageId = notifications.find((n) => n.type === "message")?.id ?? 0;
 
   const value = useMemo(
-    () => ({ notifications, unreadCount, markRead, refresh, latestMessageId }),
-    [notifications, unreadCount, markRead, refresh, latestMessageId],
+    () => ({ notifications, unreadCount, markRead, latestMessageId }),
+    [notifications, unreadCount, markRead, latestMessageId],
   );
 
   return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;

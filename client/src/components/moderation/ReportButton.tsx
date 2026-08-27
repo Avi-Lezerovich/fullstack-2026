@@ -17,14 +17,13 @@ import { REPORT_REASONS } from "../../types";
 interface Props {
   targetType: "case" | "comment";
   targetId: number;
-  size?: "small" | "medium";
 }
 
 /**
  * The human half of the hybrid moderation system: anyone can flag anything,
  * and a moderator bot picks it up on the next tick.
  */
-const ReportButton = ({ targetType, targetId, size = "small" }: Props) => {
+const ReportButton = ({ targetType, targetId }: Props) => {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<string>(REPORT_REASONS[0].value);
   const [details, setDetails] = useState("");
@@ -58,7 +57,7 @@ const ReportButton = ({ targetType, targetId, size = "small" }: Props) => {
   return (
     <>
       <Button
-        size={size}
+        size="small"
         color="inherit"
         startIcon={<FlagOutlinedIcon fontSize="small" />}
         onClick={() => setOpen(true)}

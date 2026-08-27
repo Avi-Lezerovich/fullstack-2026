@@ -6,7 +6,7 @@ from flask import Blueprint, g, jsonify, request
 
 from .. import security
 from ..errors import fail
-from ..services import messages_service
+from ..services import messages_service, users_service
 from ..validation import body_of, clean, positive_int
 
 bp = Blueprint("messages", __name__)
@@ -37,14 +37,32 @@ def get_thread(conversation_id: int):
     return jsonify({"messages": messages}), 200
 
 
-@bp.post("/conversations/with/<int:user_id>")
+@bp.get("/conversations/with/<int:user_id>")
 @security.require_auth
-def start_conversation(user_id: int):
-    """Open (or reopen) the one conversation with this person."""
-    conversation_id = messages_service.conversation_for_pair(g.user_id, user_id)
-    if conversation_id is None:
+def conversation_with(user_id: int):
+    """Which conversation, if any, this user already has with that person.
+
+    A GET that creates nothing. `conversation_id` is null when they have never
+    spoken - the client then composes against `recipient` and the row is
+    written by the first message, so opening a profile and changing your mind
+    no longer leaves an empty thread in two inboxes.
+    """
+    if user_id == g.user_id:
         return fail("invalid", "לא ניתן לפתוח שיחה עם עצמך.")
-    return jsonify({"conversation_id": conversation_id}), 200
+
+    # Validated here rather than left to a foreign-key violation further down,
+    # which surfaced as "you cannot message yourself" - an error about a
+    # completely different problem.
+    recipient = users_service.get_by_id(user_id)
+    if recipient is None or recipient["status"] != "active":
+        return fail("not_found", "המשתמש/ת המבוקש לא נמצא.")
+
+    return jsonify(
+        {
+            "conversation_id": messages_service.find_conversation(g.user_id, user_id),
+            "recipient": users_service.public_user(recipient),
+        }
+    ), 200
 
 
 @bp.post("/messages")
@@ -57,10 +75,22 @@ def send_message():
     except (TypeError, ValueError):
         return fail("invalid", "הנמען אינו תקין.")
 
+    if not body:
+        return fail("invalid", "לא ניתן לשלוח הודעה ריקה.")
+    if recipient_id == g.user_id:
+        return fail("invalid", "לא ניתן לשלוח הודעה לעצמך.")
+
     result, message_id = messages_service.send_message(g.user_id, recipient_id, body)
     if result == "not_found":
         return fail("not_found", "הנמען לא נמצא.")
     if result != "ok":
         return fail("invalid", "לא ניתן לשלוח את ההודעה.")
 
-    return jsonify({"message_id": message_id}), 201
+    # The conversation may have been created by this very message, and the
+    # client needs its id to open the thread it just started.
+    return jsonify(
+        {
+            "message_id": message_id,
+            "conversation_id": messages_service.find_conversation(g.user_id, recipient_id),
+        }
+    ), 201

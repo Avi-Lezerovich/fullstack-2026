@@ -37,5 +37,5 @@ export function useAsync<T>(loader: () => Promise<T>, deps: unknown[] = []) {
     void run();
   }, [run]);
 
-  return { data, error, loading, reload: run, setData };
+  return { data, error, loading, reload: run };
 }

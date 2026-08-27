@@ -56,13 +56,6 @@ def toggle_like(case_id: int, user_id: int, conn: Db | None = None) -> tuple[str
         return "ok", {"liked": liked, "like_count": total}
 
 
-def count_for_case(case_id: int, conn: Db | None = None) -> int:
-    with owned(conn) as db:
-        return int(
-            db.query_value("SELECT COUNT(*) FROM likes WHERE case_id = %s", (case_id,), default=0)
-        )
-
-
 def has_liked(case_id: int, user_id: int | None, conn: Db | None = None) -> bool:
     if not user_id:
         return False

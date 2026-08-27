@@ -42,24 +42,6 @@ from . import (
 
 log = logging.getLogger(__name__)
 
-# Which phases each trial action is available in. Likes and ordinary comments
-# are absent on purpose: they are allowed in every phase, including `closed`.
-# A verdict ends the trial, not the conversation.
-ACTION_PHASES: dict[str, tuple[str, ...]] = {
-    "summon": ("witness_phase",),
-    "testify": ("witness_phase",),
-    "withdraw": ("filed", "witness_phase"),
-}
-
-
-def assert_open(case: dict[str, Any], action: str) -> str:
-    """"ok" if the action is available in this case's phase, else "closed"."""
-    allowed = ACTION_PHASES.get(action)
-    if allowed is None:
-        return "ok"
-    return "ok" if case["status"] in allowed else "closed"
-
-
 def due_cases(status: str, limit: int = 20, conn: Db | None = None) -> list[dict[str, Any]]:
     """Cases whose current phase has run out.
 

@@ -79,7 +79,6 @@ def create_comment(case_id: int):
     if result == "rejected":
         return fail("rejected", "התגובה נחסמה על ידי מנגנון סינון התוכן.")
 
-    comment = comments_service.get_comment(comment_id)
-    shaped = comments_service.list_for_case(case_id, viewer_id=g.user_id)
-    created = next((c for c in shaped if c["id"] == comment["id"]), None)
-    return jsonify({"comment": created}), 201
+    return jsonify(
+        {"comment": comments_service.get_shaped(comment_id, viewer_id=g.user_id)}
+    ), 201

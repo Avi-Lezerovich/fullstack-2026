@@ -73,6 +73,7 @@ class Settings:
     tick_seconds: int
     sweep_every_ticks: int
     social_every_ticks: int
+    housekeeping_every_ticks: int
     bot_cooldown_minutes: int
     jury_seed_salt: str
     repeat_offender_threshold: int
@@ -151,6 +152,8 @@ def get_settings() -> Settings:
         tick_seconds=_int("TICK_SECONDS", 15),
         sweep_every_ticks=_int("SWEEP_EVERY_TICKS", 4),
         social_every_ticks=_int("SOCIAL_EVERY_TICKS", 4),
+        # 240 ticks is an hour at the default TICK_SECONDS=15.
+        housekeeping_every_ticks=_int("HOUSEKEEPING_EVERY_TICKS", 240),
         bot_cooldown_minutes=_int("BOT_COOLDOWN_MINUTES", 30),
         jury_seed_salt=_str("JURY_SEED_SALT", "lolsuit-v2"),
         repeat_offender_threshold=_int("REPEAT_OFFENDER_THRESHOLD", 3),
