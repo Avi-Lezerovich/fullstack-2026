@@ -1,7 +1,6 @@
 """Outbound mail, with a backend chosen by configuration.
 
     console  print the message, including the reset link, to stdout (development)
-    memory   collect messages in a list the tests can read
     smtp     actually send
 
 The console backend is what makes the password-reset flow demonstrable without
@@ -34,23 +33,6 @@ class Message:
     body: str
     sender: str
     sent_at: str = field(default_factory=lambda: now_utc().isoformat(timespec="seconds"))
-
-
-# The memory backend's store. Module-level so tests can inspect it without
-# threading a mailer object through the application.
-_outbox: list[Message] = []
-
-
-def outbox() -> list[Message]:
-    return _outbox
-
-
-def clear_outbox() -> None:
-    _outbox.clear()
-
-
-def last_message() -> Message | None:
-    return _outbox[-1] if _outbox else None
 
 
 def _send_console(message: Message) -> None:  # pragma: no cover - dev output only
@@ -93,11 +75,8 @@ def send_mail(to: str, subject: str, body: str) -> Message:
     settings = get_settings()
     message = Message(to=to, subject=subject, body=body, sender=settings.mail_from)
 
-    backend = settings.mail_backend
     try:
-        if backend == "memory":
-            _outbox.append(message)
-        elif backend == "smtp":
+        if settings.mail_backend == "smtp":
             _send_smtp(message)
         else:
             _send_console(message)

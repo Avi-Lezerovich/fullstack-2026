@@ -32,6 +32,10 @@ from ..validation import positive_int
 bp = Blueprint("notifications", __name__)
 
 # Long-lived responses occupy a worker thread each, so their number is capped.
+#
+# The counter is per PROCESS, not per deployment: with N gunicorn workers the
+# real ceiling is N * SSE_MAX_STREAMS. That is the right shape anyway, since
+# what is being protected is one process's thread pool.
 _open_streams = 0
 _streams_lock = threading.Lock()
 
@@ -113,8 +117,24 @@ def stream():
             return body, 503
         _open_streams += 1
 
-    def events():
+    # Released exactly once, whatever happens to the response.
+    #
+    # The decrement used to live in the generator's `finally`, which only runs
+    # if the generator was actually started - so a response the server never
+    # iterated (a client that vanished between headers and body) leaked a slot
+    # permanently, and the cap tightened for the life of the process.
+    # `call_on_close` fires either way.
+    released = threading.Event()
+
+    def release():
         global _open_streams
+        if released.is_set():
+            return
+        released.set()
+        with _streams_lock:
+            _open_streams -= 1
+
+    def events():
         last_id = cursor
         deadline = time.monotonic() + settings.sse_max_seconds
         try:
@@ -141,10 +161,9 @@ def stream():
 
                 time.sleep(settings.sse_poll_seconds)
         finally:
-            with _streams_lock:
-                _open_streams -= 1
+            release()
 
-    return Response(
+    response = Response(
         events(),
         mimetype="text/event-stream",
         headers={
@@ -155,3 +174,5 @@ def stream():
             "X-Accel-Buffering": "no",
         },
     )
+    response.call_on_close(release)
+    return response

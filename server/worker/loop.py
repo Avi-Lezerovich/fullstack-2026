@@ -127,7 +127,7 @@ def _periodic_tasks(number: int) -> list[tuple[str, int, Callable[[], int]]]:
     settings = get_settings()
     tasks: list[tuple[str, int, Callable[[], int]]] = []
 
-    from . import moderation_tasks, social_tasks
+    from . import housekeeping_tasks, moderation_tasks, social_tasks
 
     tasks.append(("reports_worked", 1, moderation_tasks.work_report_queue))
     tasks.append(("swept", settings.sweep_every_ticks, moderation_tasks.sweep_unscanned))
@@ -145,6 +145,11 @@ def _periodic_tasks(number: int) -> list[tuple[str, int, Callable[[], int]]]:
     # paced by `last_social_action_at` the way the feed activity is - a bot
     # that has just liked something should still answer you.
     tasks.append(("bot_replies", settings.social_every_ticks, social_tasks.reply_to_messages))
+    # Rare on purpose: nothing here is time-critical, and a DELETE across the
+    # authentication tables has no business running every few seconds.
+    tasks.append(
+        ("auth_rows_purged", settings.housekeeping_every_ticks, housekeeping_tasks.purge_stale_auth_rows)
+    )
 
     return tasks
 

@@ -70,22 +70,6 @@ def decide_vote(
     return GUILTY if rng.random() < threshold else NOT_GUILTY
 
 
-def decide_sentence_severity(
-    *, case_id: int, judge_user_id: int, guilty_votes: int, salt: str = ""
-) -> str:
-    """How harsh the invented punishment should read.
-
-    A near-unanimous jury gets a harsher sentence, which makes the tally
-    visible in the outcome rather than buried in the panel table.
-    """
-    if guilty_votes >= 6:
-        return "harsh"
-    if guilty_votes <= 4:
-        return "light"
-    rng = _rng(salt, "severity", case_id, judge_user_id)
-    return rng.choice(["light", "medium", "harsh"])
-
-
 # What an idle bot does when it is not serving on a jury. Weighted so the feed
 # gains a steady trickle of activity without being buried in bot lawsuits.
 SOCIAL_ACTIONS = (("like", 0.60), ("comment", 0.25), ("file_case", 0.15))

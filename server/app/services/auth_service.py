@@ -107,20 +107,31 @@ def delete_all_sessions(user_id: int, conn: Db | None = None) -> int:
         return result.rowcount
 
 
-def count_sessions(user_id: int, conn: Db | None = None) -> int:
-    with owned(conn) as db:
-        return int(
-            db.query_value(
-                "SELECT COUNT(*) FROM sessions WHERE user_id = %s AND expires_at > UTC_TIMESTAMP()",
-                (user_id,),
-                default=0,
-            )
-        )
-
-
 def purge_expired_sessions(conn: Db | None = None) -> int:
+    """Drop sessions the database already considers dead.
+
+    `resolve_session` refuses them anyway, so this is housekeeping rather than
+    a security control - but nothing was calling it, and both tables below
+    grow forever without it.
+    """
     with owned(conn) as db:
         result = db.execute("DELETE FROM sessions WHERE expires_at <= UTC_TIMESTAMP()")
+        db.commit_if_owned()
+        return result.rowcount
+
+
+def purge_spent_password_resets(conn: Db | None = None) -> int:
+    """Drop reset tokens that are used or expired.
+
+    Kept for a day after the fact rather than deleted on sight, so a support
+    question like "did that link ever get used?" is still answerable.
+    """
+    with owned(conn) as db:
+        result = db.execute(
+            "DELETE FROM password_resets "
+            "WHERE (used_at IS NOT NULL AND used_at <= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 DAY)) "
+            "   OR expires_at <= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 DAY)"
+        )
         db.commit_if_owned()
         return result.rowcount
 

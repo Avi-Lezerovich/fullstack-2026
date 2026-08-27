@@ -53,10 +53,14 @@ const CasePage = () => {
   const [summonOpen, setSummonOpen] = useState(false);
   const [likersOpen, setLikersOpen] = useState(false);
 
+  // All three reloads are `useCallback`s from useAsync, stable for as long as
+  // their own deps are, so naming them here is honest rather than a lie the
+  // linter had to be silenced about.
+  const reloadComments = comments.reload;
+  const reloadTrial = trial.reload;
   const reloadAll = useCallback(async () => {
-    await Promise.all([reloadCase(), comments.reload(), trial.reload()]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reloadCase]);
+    await Promise.all([reloadCase(), reloadComments(), reloadTrial()]);
+  }, [reloadCase, reloadComments, reloadTrial]);
 
   const live = c ? c.status !== "closed" : false;
   useEffect(() => {
@@ -84,7 +88,11 @@ const CasePage = () => {
   if (error) return <ErrorNote message={error} />;
   if (!c) return <ErrorNote message="התיק לא נמצא." />;
 
-  const canWithdraw = user?.id === c.author.id && c.status === "witness_phase";
+  // Mirrors cases_service.delete_case, which allows both pre-jury phases. The
+  // client used to allow only witness_phase, so the two disagreed about a rule
+  // that is written down in exactly one place.
+  const canWithdraw =
+    user?.id === c.author.id && (c.status === "filed" || c.status === "witness_phase");
   const viewer = trial.data?.viewer;
 
   return (

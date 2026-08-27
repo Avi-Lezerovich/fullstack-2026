@@ -199,13 +199,23 @@ export const fetchConversations = () =>
 export const fetchThread = (conversationId: number) =>
   request<{ messages: Message[] }>(`/conversations/${conversationId}`).then((r) => r.messages);
 
-export const startConversation = (userId: number) =>
-  request<{ conversation_id: number }>(`/conversations/with/${userId}`, json("POST")).then(
-    (r) => r.conversation_id,
+/**
+ * Which conversation, if any, you already have with this person.
+ *
+ * A GET: it creates nothing. `conversation_id` is null when you have never
+ * spoken, and the row is written by the first message instead — so opening a
+ * profile and walking away no longer leaves an empty thread behind.
+ */
+export const findConversationWith = (userId: number) =>
+  request<{ conversation_id: number | null; recipient: UserRef }>(
+    `/conversations/with/${userId}`,
   );
 
 export const sendMessage = (recipientId: number, body: string) =>
-  request<{ message_id: number }>("/messages", json("POST", { recipient_id: recipientId, body }));
+  request<{ message_id: number; conversation_id: number }>(
+    "/messages",
+    json("POST", { recipient_id: recipientId, body }),
+  );
 
 // --- writing help -----------------------------------------------------------
 

@@ -66,7 +66,3 @@ def fail(result: str, message: str | None = None, **extra: Any):
     }
     body.update(extra)
     return jsonify(body), status_for(result)
-
-
-def ok(payload: Any = None, status: int = 200):
-    return jsonify(payload if payload is not None else {"ok": True}), status

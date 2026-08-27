@@ -11,7 +11,7 @@ import * as api from "../api";
 import CaseCard from "../components/feed/CaseCard";
 import MySummonsPanel from "../components/trial/MySummonsPanel";
 import { EmptyState, ErrorNote, Loading } from "../components/common/StateViews";
-import { useAsync } from "../hooks/useAsync";
+import { usePagedList } from "../hooks/usePagedList";
 import { useAuth } from "../context/AuthContext";
 import type { CaseStatus } from "../types";
 
@@ -27,14 +27,22 @@ const FILTERS: { label: string; status?: CaseStatus }[] = [
 const Feed = () => {
   const { user } = useAuth();
   const [tab, setTab] = useState(0);
-  const [limit, setLimit] = useState(PAGE_SIZE);
 
   const status = FILTERS[tab].status;
-  const load = useCallback(() => api.fetchCases({ limit, status }), [limit, status]);
-  const { data, error, loading } = useAsync(load, [limit, status]);
-
-  const cases = data?.cases ?? [];
-  const hasMore = data ? cases.length < data.total : false;
+  const loadPage = useCallback(
+    async (offset: number, limit: number) => {
+      const page = await api.fetchCases({ limit, offset, status });
+      return { items: page.cases, total: page.total };
+    },
+    [status],
+  );
+  const {
+    items: cases,
+    error,
+    loading,
+    hasMore,
+    loadMore,
+  } = usePagedList(loadPage, [status], PAGE_SIZE);
 
   return (
     <Box>
@@ -66,10 +74,7 @@ const Feed = () => {
 
       <Tabs
         value={tab}
-        onChange={(_, next) => {
-          setTab(next);
-          setLimit(PAGE_SIZE);
-        }}
+        onChange={(_, next) => setTab(next)}
         variant="scrollable"
         scrollButtons="auto"
         sx={{ mb: 2 }}
@@ -104,7 +109,7 @@ const Feed = () => {
 
       {hasMore && (
         <Box sx={{ textAlign: "center", mt: 2 }}>
-          <Button onClick={() => setLimit((n) => n + PAGE_SIZE)} disabled={loading}>
+          <Button onClick={loadMore} disabled={loading}>
             {loading ? "טוען…" : "טען עוד תיקים"}
           </Button>
         </Box>

@@ -248,7 +248,7 @@ def create_case(
         return ("rejected" if moderation_status == "rejected" else "ok"), case_id
 
 
-def delete_case(case_id: int, user_id: int, *, is_admin: bool = False, conn: Db | None = None) -> str:
+def delete_case(case_id: int, user_id: int, conn: Db | None = None) -> str:
     """Withdraw a filing.
 
     Only the author, and only while the case is still in the witness phase -
@@ -259,7 +259,7 @@ def delete_case(case_id: int, user_id: int, *, is_admin: bool = False, conn: Db 
         row = db.query_one("SELECT author_id, status FROM cases WHERE id = %s", (case_id,))
         if row is None:
             return "not_found"
-        if row["author_id"] != user_id and not is_admin:
+        if row["author_id"] != user_id:
             return "forbidden"
         if row["status"] not in ("filed", "witness_phase"):
             return "closed"

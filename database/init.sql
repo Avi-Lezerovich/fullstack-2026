@@ -293,7 +293,7 @@ CREATE TABLE IF NOT EXISTS jury_panel_members (
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS reports (
   id              INT AUTO_INCREMENT PRIMARY KEY,
-  target_type     ENUM('case','comment','user') NOT NULL,
+  target_type     ENUM('case','comment') NOT NULL,
   target_id       INT NOT NULL,
   reported_by     INT NOT NULL,
   reason          VARCHAR(64) NOT NULL,
@@ -324,7 +324,7 @@ CREATE TABLE IF NOT EXISTS moderation_scans (
   id            INT AUTO_INCREMENT PRIMARY KEY,
   target_type   ENUM('case','comment') NOT NULL,
   target_id     INT NOT NULL,
-  source        ENUM('publish','sweep','report','admin') NOT NULL,
+  source        ENUM('publish','sweep','report') NOT NULL,
   label         ENUM('ok','borderline','toxic') NOT NULL,
   score         DECIMAL(4,3) NOT NULL DEFAULT 0.000,
   matched_terms VARCHAR(255) NULL,
@@ -343,7 +343,7 @@ CREATE TABLE IF NOT EXISTS moderation_actions (
   actor_user_id   INT NOT NULL,
   actor_is_bot    TINYINT(1) NOT NULL DEFAULT 0,
   action          ENUM('hide','unhide','flag','reject','ban','unban',
-                       'dismiss','override') NOT NULL,
+                       'override') NOT NULL,
   target_type     ENUM('case','comment','user','report') NOT NULL,
   target_id       INT NOT NULL,
   previous_status VARCHAR(32) NULL,

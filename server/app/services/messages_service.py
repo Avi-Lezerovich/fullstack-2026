@@ -28,8 +28,30 @@ def _ordered(a: int, b: int) -> tuple[int, int]:
     return (a, b) if a < b else (b, a)
 
 
+def find_conversation(user_a: int, user_b: int, conn: Db | None = None) -> int | None:
+    """The conversation these two share, or None. Creates nothing.
+
+    Opening somebody's profile and clicking "send a message" used to call the
+    creating version, so walking away without typing left an empty thread in
+    both inboxes forever, showing a dash as its preview. A conversation now
+    begins when somebody actually says something.
+    """
+    if user_a == user_b:
+        return None
+    low, high = _ordered(user_a, user_b)
+    with owned(conn) as db:
+        row = db.query_one(
+            "SELECT id FROM conversations WHERE user_a_id = %s AND user_b_id = %s", (low, high)
+        )
+        return int(row["id"]) if row else None
+
+
 def conversation_for_pair(user_a: int, user_b: int, conn: Db | None = None) -> int | None:
-    """Find or create the one conversation these two share."""
+    """Find or create the one conversation these two share.
+
+    Called on the send path only - see find_conversation for the read-only
+    lookup the UI uses.
+    """
     if user_a == user_b:
         return None
 
@@ -100,58 +122,60 @@ def send_message(
 
 def list_conversations(user_id: int, conn: Db | None = None) -> list[dict[str, Any]]:
     """Every conversation this user is in, most recent first, with the other
-    person and the unread count."""
+    person, the last line, and the unread count.
+
+    One query. It used to be 1 + 3N - a separate round trip per conversation
+    for the other user, the last message and the unread count - and the inbox
+    badge refetches this on every navigation, so the cost was paid constantly.
+    """
     with owned(conn) as db:
         rows = db.query_all(
-            "SELECT c.id, c.last_message_at, "
-            "       CASE WHEN c.user_a_id = %s THEN c.user_b_id ELSE c.user_a_id END AS other_id "
+            "SELECT c.id, "
+            "       o.id AS other_id, o.name AS other_name, "
+            "       o.avatar_url AS other_avatar, o.is_bot AS other_is_bot, "
+            "       lm.body AS last_body, lm.sender_id AS last_sender_id, "
+            "       lm.created_at AS last_created_at, "
+            "       COALESCE(unread.n, 0) AS unread_count "
             "FROM conversations c "
+            # The other participant, whichever column they happen to sit in.
+            "JOIN users o ON o.id = CASE WHEN c.user_a_id = %s "
+            "                            THEN c.user_b_id ELSE c.user_a_id END "
+            # The newest message, by id rather than timestamp: ids are unique,
+            # so this cannot pick two rows for a conversation.
+            "LEFT JOIN messages lm ON lm.id = ("
+            "    SELECT m2.id FROM messages m2 WHERE m2.conversation_id = c.id "
+            "    ORDER BY m2.id DESC LIMIT 1) "
+            "LEFT JOIN (SELECT conversation_id, COUNT(*) AS n FROM messages "
+            "           WHERE sender_id <> %s AND read_at IS NULL "
+            "           GROUP BY conversation_id) AS unread "
+            "       ON unread.conversation_id = c.id "
             "WHERE c.user_a_id = %s OR c.user_b_id = %s "
             "ORDER BY COALESCE(c.last_message_at, c.created_at) DESC",
-            (user_id, user_id, user_id),
+            (user_id, user_id, user_id, user_id),
         )
-        conversations = []
-        for row in rows:
-            other = db.query_one(
-                "SELECT id, name, avatar_url, is_bot FROM users WHERE id = %s", (row["other_id"],)
-            )
-            last = db.query_one(
-                "SELECT body, sender_id, created_at FROM messages "
-                "WHERE conversation_id = %s ORDER BY id DESC LIMIT 1",
-                (row["id"],),
-            )
-            unread = int(
-                db.query_value(
-                    "SELECT COUNT(*) FROM messages "
-                    "WHERE conversation_id = %s AND sender_id <> %s AND read_at IS NULL",
-                    (row["id"], user_id),
-                    default=0,
-                )
-            )
-            conversations.append(
+
+    return [
+        {
+            "id": row["id"],
+            "other": {
+                "id": row["other_id"],
+                "name": row["other_name"],
+                "avatar_url": row["other_avatar"],
+                "is_bot": bool(row["other_is_bot"]),
+            },
+            "last_message": (
                 {
-                    "id": row["id"],
-                    "other": {
-                        "id": other["id"],
-                        "name": other["name"],
-                        "avatar_url": other["avatar_url"],
-                        "is_bot": bool(other["is_bot"]),
-                    }
-                    if other
-                    else None,
-                    "last_message": (
-                        {
-                            "body": last["body"][:120],
-                            "sender_id": last["sender_id"],
-                            "created_at": last["created_at"].isoformat(timespec="seconds"),
-                        }
-                        if last
-                        else None
-                    ),
-                    "unread_count": unread,
+                    "body": row["last_body"][:120],
+                    "sender_id": row["last_sender_id"],
+                    "created_at": row["last_created_at"].isoformat(timespec="seconds"),
                 }
-            )
-        return conversations
+                if row["last_body"] is not None
+                else None
+            ),
+            "unread_count": int(row["unread_count"]),
+        }
+        for row in rows
+    ]
 
 
 def is_participant(conversation_id: int, user_id: int, conn: Db | None = None) -> bool:

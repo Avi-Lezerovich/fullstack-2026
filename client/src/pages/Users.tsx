@@ -13,7 +13,7 @@ import { Link as RouterLink } from "react-router-dom";
 
 import * as api from "../api";
 import { EmptyState, ErrorNote, Loading } from "../components/common/StateViews";
-import { useAsync } from "../hooks/useAsync";
+import { usePagedList } from "../hooks/usePagedList";
 import { initials } from "../utils/format";
 
 /** The server caps a page at fifty, so this is as large as one request gets. */
@@ -22,7 +22,6 @@ const PAGE_SIZE = 50;
 const Users = () => {
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
-  const [limit, setLimit] = useState(PAGE_SIZE);
 
   // Typing should not fire a request per keystroke.
   useEffect(() => {
@@ -30,35 +29,21 @@ const Users = () => {
     return () => clearTimeout(timer);
   }, [search]);
 
-  // A new search starts from the top; keeping the grown page size would ask
-  // for five hundred strangers the moment somebody types a letter.
-  useEffect(() => {
-    setLimit(PAGE_SIZE);
-  }, [debounced]);
-
-  /**
-   * Pages are accumulated by asking for more rows from the start rather than
-   * by walking `offset`. The list is ordered by name, so a page boundary is
-   * stable, and this keeps the rendered list a single consistent snapshot.
-   */
-  const load = useCallback(
-    async () => {
-      const pages = Math.ceil(limit / PAGE_SIZE);
-      const responses = await Promise.all(
-        Array.from({ length: pages }, (_, index) =>
-          api.fetchUsers({ search: debounced, limit: PAGE_SIZE, offset: index * PAGE_SIZE }),
-        ),
-      );
-      return {
-        users: responses.flatMap((response) => response.users),
-        total: responses[responses.length - 1].total,
-      };
+  const loadPage = useCallback(
+    async (offset: number, limit: number) => {
+      const page = await api.fetchUsers({ search: debounced, limit, offset });
+      return { items: page.users, total: page.total };
     },
-    [debounced, limit],
+    [debounced],
   );
-  const { data, error, loading } = useAsync(load, [debounced, limit]);
-  const users = data?.users ?? [];
-  const hasMore = data ? users.length < data.total : false;
+
+  const {
+    items: users,
+    error,
+    loading,
+    hasMore,
+    loadMore,
+  } = usePagedList(loadPage, [debounced], PAGE_SIZE);
 
   return (
     <Box>
@@ -112,7 +97,7 @@ const Users = () => {
 
       {hasMore && (
         <Box sx={{ textAlign: "center", mt: 2 }}>
-          <Button onClick={() => setLimit((n) => n + PAGE_SIZE)} disabled={loading}>
+          <Button onClick={loadMore} disabled={loading} data-testid="users-load-more">
             {loading ? "טוען…" : "טען עוד"}
           </Button>
         </Box>

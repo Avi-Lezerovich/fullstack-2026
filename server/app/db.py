@@ -96,10 +96,6 @@ class Db:
         except Exception:  # pragma: no cover - closing a dead socket
             pass
 
-    @property
-    def raw(self) -> pymysql.connections.Connection:
-        return self._raw
-
 
 def connect(**overrides: Any) -> Db:
     """Open one connection. Callers are responsible for closing it.

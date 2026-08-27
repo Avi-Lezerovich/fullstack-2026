@@ -24,7 +24,6 @@ interface AuthState {
   register: (name: string, email: string, password: string) => Promise<CurrentUser>;
   signOut: () => Promise<void>;
   setUser: (user: CurrentUser | null) => void;
-  refresh: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -71,8 +70,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, loading, signIn, register, signOut, setUser, refresh }),
-    [user, loading, signIn, register, signOut, refresh],
+    () => ({ user, loading, signIn, register, signOut, setUser }),
+    [user, loading, signIn, register, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

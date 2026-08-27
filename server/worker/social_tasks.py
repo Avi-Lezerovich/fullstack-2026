@@ -13,6 +13,7 @@ fairness across the whole cast with no in-memory bookkeeping at all.
 from __future__ import annotations
 
 import logging
+import random
 
 from app import brain
 from app.brain import decide
@@ -126,14 +127,22 @@ def _next_bot(db, cooldown_minutes: int):
     )
 
 
-def _recent_case(db, exclude_author_id: int):
-    """Something to react to - never the bot's own filing."""
-    return db.query_one(
+def _recent_case(db, exclude_author_id: int, rng: random.Random):
+    """Something to react to, drawn from the recent window - never the bot's
+    own filing.
+
+    The window is read in full and then sampled. Reading it through
+    `query_one` instead made the LIMIT decorative: the newest case took every
+    like and every comment the bots ever produced, and nothing else on the
+    feed was ever touched.
+    """
+    rows = db.query_all(
         "SELECT id, title, defendant_text FROM cases "
         "WHERE moderation_status IN ('published', 'flagged') AND author_id <> %s "
         "ORDER BY created_at DESC LIMIT 20",
         (exclude_author_id,),
     )
+    return rng.choice(rows) if rows else None
 
 
 def one_bot_social_action(tick: int | None = None) -> int:
@@ -162,7 +171,7 @@ def one_bot_social_action(tick: int | None = None) -> int:
             agent_user_id=bot["user_id"], tick=tick, salt=settings.jury_seed_salt
         )
 
-        performed = _perform(db, bot, action)
+        performed = _perform(db, bot, action, tick)
 
         # Stamped whatever happened, so a bot with nothing to like does not
         # monopolise the queue by staying least-recently-active forever.
@@ -180,11 +189,14 @@ def one_bot_social_action(tick: int | None = None) -> int:
         db.close()
 
 
-def _perform(db, bot, action: str) -> bool:
+def _perform(db, bot, action: str, tick: int) -> bool:
     if action == "file_case":
-        return _file_case(db, bot)
+        return _file_case(db, bot, tick)
 
-    case = _recent_case(db, bot["user_id"])
+    # Seeded by the same (bot, tick) pair that chose the action, so the whole
+    # decision is reproducible from the database alone.
+    rng = random.Random(f"{bot['user_id']}:{tick}")
+    case = _recent_case(db, bot["user_id"], rng)
     if case is None:
         return False
 
@@ -210,15 +222,19 @@ def _perform(db, bot, action: str) -> bool:
     return result == "ok"
 
 
-def _file_case(db, bot) -> bool:
+def _file_case(db, bot, tick: int) -> bool:
     """A bot files its own lawsuit.
 
     The defendant always comes from a fixed list of THINGS. A bot must never be
     able to sue a registered user: that would be harassment with a court date
     attached, and the target would have no way to opt out.
     """
+    # Seeded by (bot, tick). The previous version used `id(db)` - a memory
+    # address, which CPython reuses, so it was neither reliably varied nor
+    # reproducible, and it quietly broke the determinism the offline generator
+    # is built around.
     filing = brain.invent_lawsuit(
-        bot["personality_prompt"], seed_extra=str(bot["user_id"]) + str(id(db))
+        bot["personality_prompt"], seed_extra=f"{bot['user_id']}:{tick}"
     )
     result, _case_id = cases_service.create_case(
         bot["user_id"],

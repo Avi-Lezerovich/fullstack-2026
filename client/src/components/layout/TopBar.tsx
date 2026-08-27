@@ -30,8 +30,16 @@ const NAV_LINKS = [
   { to: "/about", label: "אודות" },
 ];
 
-const isActive = (pathname: string, to: string): boolean =>
-  to === "/" ? pathname === "/" : pathname.startsWith(to);
+/**
+ * Whether a nav target is the page currently being viewed.
+ *
+ * Exact, not a prefix. Every target in the bar is a leaf route, and
+ * `startsWith("/users")` marked the people directory as current on
+ * `/users/12` — a profile, which is a different page and reachable from
+ * several others. On a detail page nothing in the bar is current, which is
+ * the honest answer.
+ */
+const isActive = (pathname: string, to: string): boolean => pathname === to;
 
 /** Parchment-on-purple, so the AppBar's own text reads against the purple. */
 const INK = "primary.contrastText";
