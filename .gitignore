@@ -56,3 +56,7 @@ client/cypress/downloads/
 
 .postman
 postman
+
+# Production deploy state. Written on the server by prod/deploy.sh - one line per
+# deploy, and the record --rollback reads. Per-host runtime data, not source.
+prod/.deploy-history

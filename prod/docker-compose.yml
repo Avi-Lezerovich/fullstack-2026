@@ -1,0 +1,226 @@
+# =============================================================================
+#  LolSuit - production stack: ONE EC2 instance + Amazon RDS
+# =============================================================================
+#      cd prod/ && ./deploy.sh v1.0.1        <- the normal way
+#
+#  or by hand, from anywhere in the repo:
+#
+#      docker compose -f prod/docker-compose.yml pull
+#      docker compose -f prod/docker-compose.yml up -d
+#
+#  Topology this file assumes:
+#
+#      internet ──80──> [ EC2 ]  web (nginx)  ──/api──> server (gunicorn)
+#                                                   └─> worker (scheduler)
+#                                    │
+#                                    └──3306──> [ Amazon RDS: MySQL 8 ]
+#
+#  There is NO database container. The data tier is RDS, which is the whole
+#  reason to use it: backups, point-in-time recovery and failover are somebody
+#  else's problem. DB_HOST is therefore required and has no default - the one
+#  setting that, if wrong, fails in a way that looks like everything else.
+#
+#  Four differences from the development stack at the repo root:
+#
+#    1. NO `build:` anywhere. This EC2 box has no source tree and no business
+#       compiling anything. Images come from Docker Hub, built and pushed by
+#       prod/release.sh from a machine that has the repo.
+#    2. Every secret is `${VAR:?message}` - no default. A missing DB_PASSWORD
+#       must abort the deploy, not silently boot production with `lolsuit-dev`.
+#       That single character (`?` instead of `-`) is the most important
+#       difference in the file.
+#    3. Pinned to ${TAG}, which deploy.sh writes into prod/.env. `latest` is a
+#       convenience for humans, not a thing to deploy - it makes "which version
+#       is running?" unanswerable and rollback impossible.
+#    4. Log rotation on every service. Unbounded json-file logs are the single
+#       most common way a small EC2 instance fills its root volume and takes
+#       the site down with it.
+#
+#  Copy .env.example (this folder's, not the repo root's) to prod/.env on the
+#  instance. Compose reads .env from the PROJECT directory - the directory
+#  holding this file, not your shell's cwd - so `prod/.env` is picked up even
+#  when you run the command from the repo root.
+#
+#  The RDS schema is NOT applied by this file. Run ./init-rds.sh once, before
+#  the first deploy. See prod/README.md, "Bootstrapping the RDS schema".
+# =============================================================================
+
+# YAML anchors, not copy-paste. Three services need the same database block and
+# the same log policy, and three chances to update two of them is two too many.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-db-env: &db-env
+  # The RDS endpoint, e.g. lolsuit.abc123.eu-central-1.rds.amazonaws.com
+  # No default on purpose: a typo'd or missing endpoint should stop the deploy
+  # here, not surface later as a connection timeout that looks like a bug.
+  DB_HOST: ${DB_HOST:?DB_HOST is required - the RDS endpoint, no port, no scheme}
+  DB_PORT: ${DB_PORT:-3306}
+  DB_NAME: ${DB_NAME:?DB_NAME is required}
+  DB_USER: ${DB_USER:?DB_USER is required}
+  DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required - refusing to start production with a default}
+
+x-brain-env: &brain-env
+  LLM_PROVIDER: ${LLM_PROVIDER:-}
+  LLM_MODEL: ${LLM_MODEL:-}
+  LLM_API_KEY: ${LLM_API_KEY:-}
+  # With LLM_PROVIDER=bedrock the SDK reads credentials from the instance role.
+  # Region is the one thing it cannot infer, so it is the one thing to set.
+  AWS_REGION: ${AWS_REGION:-}
+  BRAIN_FORCE_OFFLINE: ${BRAIN_FORCE_OFFLINE:-1}
+
+services:
+  # ---------------------------------------------------------------------------
+  # One-shot, runs to completion, exits 0. Idempotent (keyed on email), so it is
+  # safe on every deploy and is what guarantees the 19 court bots exist before
+  # the API serves its first request.
+  #
+  # With RDS there is no `db` container to gate on, so this job is now the FIRST
+  # thing that touches the database - which makes it the de-facto connectivity
+  # check for the whole deploy. If the security group is wrong, you find out
+  # here, before `server` starts returning 500s to real users.
+  #
+  # It needs NO retry wrapper here, and adding one is a mistake worth naming:
+  # app.seed already calls wait_for_db(attempts=30, delay=2.0), and PyMySQL's
+  # own connect timeout is 10s, so it will patiently wait roughly SIX MINUTES
+  # for an unreachable database before giving up. Wrapping that in a shell retry
+  # loop multiplies the two - an hour of a deploy appearing to hang.
+  #
+  # Six minutes is the right behaviour for RDS, which can be mid-failover or
+  # mid-reboot. It does mean `up -d` can block that long when the endpoint or
+  # the security group is wrong, and the container logs the reason on every
+  # attempt - so read the logs rather than assuming it is stuck.
+  seed:
+    image: ${DOCKERHUB_USERNAME:?DOCKERHUB_USERNAME is required}/lolsuit-server:${TAG:?TAG is required - deploy a version, never latest}
+    pull_policy: always
+    command: ["python", "-m", "app.seed"]
+    restart: "no"
+    # The image's HEALTHCHECK probes /api/health, which this process does not
+    # serve. Left enabled it would sit "unhealthy" forever and
+    # service_completed_successfully would be judged against a false signal.
+    healthcheck:
+      disable: true
+    environment: *db-env
+    logging: *logging
+
+  # ---------------------------------------------------------------------------
+  server:
+    image: ${DOCKERHUB_USERNAME:?DOCKERHUB_USERNAME is required}/lolsuit-server:${TAG:?TAG is required}
+    pull_policy: always
+    restart: always
+    environment:
+      <<: [*db-env, *brain-env]
+      PORT: 5002
+      # Behind TLS this is what marks the session cookie Secure. Defaulting it
+      # to 1 here is the point of a separate prod file: forgetting it in dev
+      # costs you a login, forgetting it in production ships session cookies in
+      # clear text. Set it to 0 ONLY if you are deliberately serving plain HTTP
+      # from the EC2 public DNS with no certificate.
+      FLASK_SESSION_SECURE: ${FLASK_SESSION_SECURE:-1}
+      # Only consulted when something bypasses nginx. Through `web` every
+      # request is same-origin and CORS never applies.
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN:?CLIENT_ORIGIN is required - your public URL}
+      PHASE_MINUTES: ${PHASE_MINUTES:-1440}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+      GUNICORN_THREADS: ${GUNICORN_THREADS:-16}
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads:/app/uploads
+    # Not published to the host. nginx is the only thing that talks to the API,
+    # over the compose network. Publishing 5002 would expose an origin that
+    # answers without the headers and caching rules nginx adds - and on EC2 it
+    # would be reachable from the internet the moment someone widens the
+    # security group.
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          memory: ${SERVER_MEMORY_LIMIT:-512m}
+
+  # ---------------------------------------------------------------------------
+  # The trial engine: a long-running loop, not a request handler. Separate
+  # container because gunicorn has no way to run it and a background thread
+  # inside a web worker would tick once per worker process.
+  #
+  # Safe to scale - the loop takes a MySQL advisory lock and claims each unit of
+  # work with FOR UPDATE SKIP LOCKED. On a single EC2 instance one is plenty.
+  worker:
+    image: ${DOCKERHUB_USERNAME:?DOCKERHUB_USERNAME is required}/lolsuit-server:${TAG:?TAG is required}
+    pull_policy: always
+    command: ["python", "run_worker.py"]
+    restart: always
+    environment:
+      <<: [*db-env, *brain-env]
+      PHASE_MINUTES: ${PHASE_MINUTES:-1440}
+      TICK_SECONDS: ${TICK_SECONDS:-15}
+    # It serves no HTTP, so the image's probe cannot apply. "Healthy" for a
+    # scheduler means still ticking - and it already records every tick in
+    # worker_state, so the check is a query rather than a new channel.
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys
+          from app.clock import now_utc
+          from app.db import connect
+          db = connect()
+          row = db.query_one("SELECT last_tick_at FROM worker_state WHERE name = 'scheduler'")
+          db.close()
+          last = row and row["last_tick_at"]
+          sys.exit(0 if last and (now_utc() - last).total_seconds() < 120 else 1)
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          memory: ${WORKER_MEMORY_LIMIT:-512m}
+
+  # ---------------------------------------------------------------------------
+  # The only service with a published port, and the only thing the EC2 security
+  # group needs to allow inbound.
+  web:
+    image: ${DOCKERHUB_USERNAME:?DOCKERHUB_USERNAME is required}/lolsuit-web:${TAG:?TAG is required}
+    pull_policy: always
+    restart: always
+    environment:
+      API_UPSTREAM: ${API_UPSTREAM:-server:5002}
+    ports:
+      # 80 on the host, 8080 in the container - the container is unprivileged
+      # and cannot bind a low port, but the host side has no such limit.
+      #
+      # Terminating TLS is out of scope for this file and belongs in front of
+      # it: set WEB_PUBLISH_BIND=127.0.0.1 and WEB_PUBLISH_PORT=8080, then point
+      # Caddy at it. See prod/README.md, "Putting HTTPS in front".
+      - "${WEB_PUBLISH_BIND:-0.0.0.0}:${WEB_PUBLISH_PORT:-80}:8080"
+    depends_on:
+      server:
+        # Not merely "started": nginx resolves the upstream's DNS name once at
+        # startup and exits if `server` is not there yet.
+        condition: service_healthy
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          memory: ${WEB_MEMORY_LIMIT:-128m}
+
+volumes:
+  # Uploaded avatars and evidence photos. THE ONLY STATE NOT IN RDS.
+  #
+  # This is a named volume on the instance's EBS root device, which means it is
+  # NOT covered by your RDS backups and does NOT survive replacing the instance.
+  # Back it up separately, or move uploads to S3. See prod/README.md, "Backups".
+  uploads:
