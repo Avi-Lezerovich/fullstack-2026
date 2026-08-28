@@ -61,6 +61,32 @@ RUN mkdir -p /app/uploads && chown lolsuit:lolsuit /app/uploads
 
 USER lolsuit
 
+# --- provenance --------------------------------------------------------------
+# Deliberately the LAST thing before the runtime declarations. These two values
+# change on every single release, and an ARG invalidates every layer beneath it
+# - declared at the top of the file, a version bump would re-run pip install.
+# Down here it rebuilds a few bytes of metadata and nothing else.
+#
+# `docker image inspect <img> --format '{{json .Config.Labels}}'` on the server
+# then answers "which commit is actually running", which is the question you
+# always have during an incident and can never answer from a tag alone.
+ARG VERSION=dev
+ARG GIT_SHA=unknown
+ARG BUILD_DATE=unknown
+
+LABEL org.opencontainers.image.title="lolsuit-server" \
+      org.opencontainers.image.description="LolSuit Flask API, trial worker and seed job" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.source="https://github.com/Avi-Lezerovich/fullstack-2026" \
+      org.opencontainers.image.licenses="MIT"
+
+# Readable from inside the container too - /api/health can report it, and it
+# survives `docker exec ... env` when you have a shell but not the daemon.
+ENV APP_VERSION=${VERSION} \
+    APP_GIT_SHA=${GIT_SHA}
+
 EXPOSE 5002
 
 # /api/health reports 503 (not 500) while MySQL is unreachable, which is exactly

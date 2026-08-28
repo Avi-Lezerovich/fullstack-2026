@@ -48,6 +48,25 @@ RUN chmod +x /docker-entrypoint-lolsuit.sh \
 
 USER nginx
 
+# --- provenance --------------------------------------------------------------
+# Last, on purpose: these change every release, and an ARG invalidates every
+# layer below it. Declared at the top of the file a version bump would re-run
+# `npm ci` and the whole Vite build; declared here it rebuilds only metadata.
+ARG VERSION=dev
+ARG GIT_SHA=unknown
+ARG BUILD_DATE=unknown
+
+LABEL org.opencontainers.image.title="lolsuit-web" \
+      org.opencontainers.image.description="LolSuit static bundle served by nginx, /api reverse-proxied" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.source="https://github.com/Avi-Lezerovich/fullstack-2026" \
+      org.opencontainers.image.licenses="MIT"
+
+ENV APP_VERSION=${VERSION} \
+    APP_GIT_SHA=${GIT_SHA}
+
 # 8080, not 80: ports below 1024 need CAP_NET_BIND_SERVICE, and the whole point
 # of dropping to `nginx` is not to need capabilities.
 EXPOSE 8080

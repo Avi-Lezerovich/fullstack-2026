@@ -173,8 +173,32 @@ cd client && npm test
 
 ## Deployment
 
-Building production images, pushing them to Amazon ECR and running them on EC2
-against RDS: **[DEPLOYMENT.md](DEPLOYMENT.md)** *(added on the `aws-deploy` branch)*.
+Production runs on **one EC2 instance** (nginx + API + trial worker) against **Amazon
+RDS** for MySQL. Everything production-specific lives in **[`prod/`](prod/)**. Full
+guide: **[prod/README.md](prod/README.md)**.
+
+Once, on the instance — RDS has no `docker-entrypoint-initdb.d`, so nothing else applies
+the schema:
+
+```bash
+cd /opt/lolsuit/prod && ./init-rds.sh
+```
+
+Then, per release. On your machine:
+
+```bash
+./prod/release.sh v1.0.1
+```
+
+On the instance:
+
+```bash
+cd /opt/lolsuit/prod && ./deploy.sh v1.0.1
+```
+
+The instance only ever pulls pre-built images from Docker Hub — it never builds. Note
+that `release.sh` cross-builds for `linux/amd64`: an image built natively on an Apple
+Silicon Mac will not run on EC2.
 
 ---
 
