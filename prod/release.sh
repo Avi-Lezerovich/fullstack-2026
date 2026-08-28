@@ -132,19 +132,91 @@ docker buildx version >/dev/null 2>&1 || die "docker buildx is unavailable.
 
 [ "$BUILD_SERVER" = 1 ] || [ "$BUILD_WEB" = 1 ] || die "--server-only and --web-only are mutually exclusive"
 
-# Resolve the Docker Hub account: flag, then env, then the credential store.
-if [ -z "$DOCKERHUB_USER" ]; then
-  DOCKERHUB_USER="$(docker info --format '{{.Username}}' 2>/dev/null || true)"
-fi
-[ -n "$DOCKERHUB_USER" ] || die "no Docker Hub username.
-    Pass --user <name>, export DOCKERHUB_USERNAME, or run \`docker login\`."
+# Resolve the Docker Hub account: --user, then $DOCKERHUB_USERNAME, then
+# whatever `docker login` stored.
+#
+# Note it does NOT use `docker info --format '{{.Username}}'`. That field is
+# empty on Docker 29 and on any host using a credential helper, so relying on
+# it rejects people who are, in fact, perfectly well logged in. The credential
+# store is the actual source of truth, and it has two shapes:
+#
+#   credsStore set   - config.json's auths entry is an empty object and the
+#                      username lives in `docker-credential-<store> list`.
+#                      Docker Desktop ("desktop"), osxkeychain, pass, wincred.
+#   no credsStore    - the username is the first half of base64(user:token) in
+#                      auths["https://index.docker.io/v1/"].auth
+DOCKER_CONFIG_JSON="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
 
-# Verify a push will actually be authorised BEFORE spending ten minutes on a
-# cross-arch build. `docker info` reporting a username means a valid token is
-# in the credential store.
-if [ "$DRY_RUN" = 0 ]; then
-  docker info --format '{{.Username}}' 2>/dev/null | grep -q . \
-    || die "not logged in to Docker Hub. Run:  docker login"
+resolve_dockerhub_user() {
+  [ -f "$DOCKER_CONFIG_JSON" ] || return 0
+  python3 - "$DOCKER_CONFIG_JSON" <<'PYEOF' 2>/dev/null || true
+import base64, json, subprocess, sys
+
+INDEX = "https://index.docker.io/v1/"
+try:
+    cfg = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(0)
+
+# 1. Credential helper, if one is configured.
+store = cfg.get("credsStore")
+if store:
+    try:
+        out = subprocess.run(["docker-credential-" + store, "list"],
+                             capture_output=True, text=True, timeout=10)
+        for key, user in (json.loads(out.stdout) or {}).items():
+            # Skip the token pseudo-entries Docker Desktop also stores.
+            if "index.docker.io/v1/" in key and not key.endswith(("access-token", "refresh-token")):
+                if user and user != "<token>":
+                    print(user)
+                    sys.exit(0)
+    except Exception:
+        pass
+
+# 2. An inline auth blob: base64("username:token").
+for key, entry in (cfg.get("auths") or {}).items():
+    if INDEX in key or "docker.io" in key:
+        if entry.get("username"):
+            print(entry["username"]); sys.exit(0)
+        blob = entry.get("auth")
+        if blob:
+            try:
+                user = base64.b64decode(blob).decode("utf-8", "replace").split(":", 1)[0]
+                if user and user != "<token>":
+                    print(user); sys.exit(0)
+            except Exception:
+                pass
+PYEOF
+}
+
+RESOLVED_FROM_STORE=0
+if [ -z "$DOCKERHUB_USER" ]; then
+  DOCKERHUB_USER="$(resolve_dockerhub_user | head -n1 | tr -d '[:space:]')"
+  [ -n "$DOCKERHUB_USER" ] && RESOLVED_FROM_STORE=1
+fi
+
+[ -n "$DOCKERHUB_USER" ] || die "could not determine your Docker Hub username.
+
+    Tried, in order: --user, \$DOCKERHUB_USERNAME, and the credential store in
+    $DOCKER_CONFIG_JSON.
+
+    If you ARE logged in, this just means the username is stored somewhere the
+    script could not read. Pass it explicitly:
+
+      ./prod/release.sh $VERSION --user YOUR_DOCKERHUB_USERNAME
+
+    or set it once and forget it:
+
+      echo 'export DOCKERHUB_USERNAME=YOUR_DOCKERHUB_USERNAME' >> ~/.zshrc
+
+    Otherwise: docker login"
+
+# No pre-flight auth probe. There is no cheap, reliable way to test push rights
+# for a specific repository without attempting it, and the old check (`docker
+# info` reporting a username) produced false negatives that blocked real
+# releases. If the token is missing or expired, buildx --push says so clearly.
+if [ "$DRY_RUN" = 0 ] && [ "$RESOLVED_FROM_STORE" = 0 ] && [ ! -f "$DOCKER_CONFIG_JSON" ]; then
+  warn "no Docker config at $DOCKER_CONFIG_JSON - if the push fails, run: docker login"
 fi
 
 SERVER_IMAGE="${DOCKERHUB_USER}/${APP_NAME}-server"
