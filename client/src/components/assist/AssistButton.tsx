@@ -13,7 +13,7 @@ interface Props {
   acceptLabel?: string;
   size?: "small" | "medium";
   disabled?: boolean;
-  /** Offer the nineteen court personalities as authors. */
+  /** Offer the court personalities as authors. */
   inCharacter?: boolean;
   /** Seeds an in-character draft so it is about this case, not any case. */
   hint?: string;

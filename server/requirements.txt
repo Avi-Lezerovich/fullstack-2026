@@ -7,3 +7,17 @@ cryptography>=42
 bcrypt>=4.1
 gunicorn>=21.2
 python-dotenv>=1.0
+
+# The live model backend. brain/llm.py imports it lazily and brain/__init__.py
+# falls back to the offline generator if it is missing - which is exactly how a
+# missing dependency stayed invisible in production for so long: BRAIN_FORCE_OFFLINE=0
+# plus AWS_REGION made /api/health report "brain": "llm" while every single
+# generate() call was actually raising ModuleNotFoundError and falling back.
+# The [bedrock] extra pulls in boto3 for the AWS credential chain.
+anthropic[bedrock]>=1.0,<2
+
+# The IANA time zone database. python:3.12-slim ships without it, so
+# zoneinfo.ZoneInfo("Asia/Jerusalem") raises there - and the bots' topical
+# lawsuits are all about the local wall clock (the 8am traffic, Friday
+# afternoon). Pure data, a few hundred KB.
+tzdata>=2024.1

@@ -44,6 +44,12 @@ def _str(name: str, default: str = "") -> str:
     return default if value is None else value.strip()
 
 
+def _csv(name: str) -> tuple[str, ...]:
+    """A comma-separated list, empty entries dropped."""
+    raw = os.environ.get(name, "")
+    return tuple(part.strip() for part in raw.split(",") if part.strip())
+
+
 def _bool(name: str, default: bool = False) -> bool:
     raw = os.environ.get(name, "").strip().lower()
     if not raw:
@@ -89,6 +95,7 @@ class Settings:
     llm_model: str
     llm_timeout_seconds: int
     aws_region: str
+    topical_subjects: tuple[str, ...]
     brain_force_offline: bool
 
     # --- uploads ---
@@ -167,6 +174,12 @@ def get_settings() -> Settings:
         # Empty means "whatever brain/llm.py defaults this provider to".
         llm_model=_str("LLM_MODEL", ""),
         llm_timeout_seconds=_int("LLM_TIMEOUT_SECONDS", 10),
+        # What the bots are allowed to consider "current". The clock gives
+        # them the season and the day for free; this is the seam for
+        # anything genuinely in the news, deliberately operator-set rather
+        # than scraped: a human decides what the court riffs on, and no
+        # named real person can end up as a defendant by accident.
+        topical_subjects=_csv("TOPICAL_SUBJECTS"),
         # AWS_DEFAULT_REGION is boto3's spelling; accept either.
         aws_region=_str("AWS_REGION", "") or _str("AWS_DEFAULT_REGION", ""),
         brain_force_offline=_bool("BRAIN_FORCE_OFFLINE", False),

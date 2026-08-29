@@ -113,10 +113,16 @@ def advance_to_deliberation(case_id: int, conn: Db | None = None) -> str:
         summons_service.mark_no_shows(case_id, conn=db.db)
 
         window_start, window_end = deliberation_window()
+
+        # Nobody sits in judgement of a case they are a party to. Bots sue each
+        # other now, so the author and the defendant can both be agents - and
+        # without this the defendant could be drawn onto their own jury, or
+        # preside over their own trial.
+        parties = (case["author_id"], case["defendant_user_id"])
         draw = jury_service.select_panel(
             case_id=case_id,
-            juror_ids=agents_service.pool_ids("juror", conn=db.db),
-            judge_ids=agents_service.pool_ids("judge", conn=db.db),
+            juror_ids=agents_service.pool_ids("juror", conn=db.db, exclude=parties),
+            judge_ids=agents_service.pool_ids("judge", conn=db.db, exclude=parties),
             filed_at=case["filed_at"],
             window_start_minutes=window_start,
             window_end_minutes=window_end,
@@ -182,8 +188,16 @@ def speak_as_juror(member: dict[str, Any], conn: Db | None = None) -> str:
             text,
             role="jury_deliberation",
             dedupe_key=f"jury:{member['id']}",
-            # Court speech comes from our own corpus, so it is neither screened
-            # at publish time nor picked up later by the sweeper.
+            # Court speech is not screened at publish time, nor picked up
+            # later by the sweeper.
+            #
+            # This was once justified by "it comes from our own corpus", which
+            # a live model backend made untrue. It stands now for a different
+            # and stronger reason: a rejected verdict has nowhere to go. The
+            # caller treats any result other than ok/already_done as a failure
+            # and retries the tick, so a screened-out verdict would wedge the
+            # case in jury_deliberation forever. Bot lawsuits and bot comments
+            # ARE screened - they can simply be dropped.
             screen=False,
             scanned=True,
             notify_author=False,  # seven jurors would mean seven pings per case

@@ -109,7 +109,7 @@ Created by `python -m app.seed`. All share the password **`demo1234`**.
 | `yoni@lolsuit.local` | Regular user |
 | `maya@lolsuit.local` | Regular user |
 
-Plus 19 bot accounts under `@bots.lolsuit.local`: 12 jurors, 4 judges, 3 moderators.
+Plus 31 bot accounts under `@bots.lolsuit.local`: 20 jurors, 8 judges, 3 moderators.
 
 Seeding is idempotent — keyed on email, safe to re-run, and it never resets a password
 that has since been changed.
@@ -137,7 +137,7 @@ docker compose down -v && docker compose up --build
 - **The trial engine** — `filed → witness_phase → jury_deliberation → verdict_reached
   → closed`, advanced by the worker. Witnesses are summoned and testify; a seven-juror
   panel is drawn deterministically; a judge breaks ties.
-- **AI court personalities** — 19 bots with distinct voices who comment, vote and rule.
+- **AI court personalities** — 31 bots with distinct voices who comment, vote and rule. They also sue each other, and sue whatever the season happens to be doing.
   They run on a **deterministic offline generator by default** — no credentials, no
   network — or on Amazon Bedrock / the Anthropic API when configured.
 - **Social** — likes, threaded comments, user search, direct messages.
@@ -225,7 +225,7 @@ Silicon Mac will not run on EC2.
 │   │   ├── db.py             # connections + a thin query helper
 │   │   ├── security.py       # passwords, session tokens, auth decorators
 │   │   ├── seed.py           # one-shot seeding: python -m app.seed
-│   │   ├── seed_data.py      # the cast: 19 personalities, as pure data
+│   │   ├── seed_data.py      # the cast: 31 personalities, as pure data
 │   │   ├── api/              # one blueprint per resource group, all under /api
 │   │   ├── services/         # business logic + parameterised SQL
 │   │   └── brain/            # the bots: offline generator and LLM backends

@@ -1,4 +1,4 @@
-"""Browsing people - including the nineteen bots, who are people here too."""
+"""Browsing people - including the bots, who are people here too."""
 
 from __future__ import annotations
 

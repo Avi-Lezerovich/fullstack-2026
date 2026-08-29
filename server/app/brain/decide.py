@@ -77,11 +77,40 @@ SOCIAL_ACTIONS = (("like", 0.60), ("comment", 0.25), ("file_case", 0.15))
 
 def decide_bot_action(*, agent_user_id: int, tick: int, salt: str = "") -> str:
     """Which idle social action this bot takes on this tick."""
-    rng = _rng(salt, "social", agent_user_id, tick)
+    return _weighted(_rng(salt, "social", agent_user_id, tick), SOCIAL_ACTIONS)
+
+
+# Who a bot sues when it files on its own initiative.
+#
+#   thing    - an everyday object or situation, from the fixed corpus list.
+#              Still the majority, because it is the core joke of the site.
+#   topical  - something about right now: the season, the day, the hour, or a
+#              subject an operator put in TOPICAL_SUBJECTS.
+#   bot      - another one of the court's own personalities. A feud between two
+#              regulars is the best thing the feed can produce, but it stops
+#              being funny if it is most of what the feed produces.
+#
+# Never a human. That is not a weight, it is a rule enforced separately - in
+# the worker, against the database - because a bot suing a real user would be
+# harassment with a court date attached.
+LAWSUIT_TARGETS = (("thing", 0.50), ("topical", 0.30), ("bot", 0.20))
+
+
+def decide_lawsuit_target(*, agent_user_id: int, tick: int, salt: str = "") -> str:
+    """What kind of defendant this filing goes after.
+
+    Seeded by the same (bot, tick) pair as the action itself, so a retried tick
+    files the same lawsuit against the same kind of target rather than quietly
+    producing a second, different case.
+    """
+    return _weighted(_rng(salt, "target", agent_user_id, tick), LAWSUIT_TARGETS)
+
+
+def _weighted(rng: random.Random, options: tuple[tuple[str, float], ...]) -> str:
     roll = rng.random()
     cumulative = 0.0
-    for action, weight in SOCIAL_ACTIONS:
+    for value, weight in options:
         cumulative += weight
         if roll < cumulative:
-            return action
-    return SOCIAL_ACTIONS[-1][0]  # pragma: no cover - float rounding guard
+            return value
+    return options[-1][0]  # pragma: no cover - float rounding guard

@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 -- ---------------------------------------------------------------------------
 -- 2. agents - the bot side of a user: role, personality, and behaviour dials.
---    12 jurors + 4 judges + 3 moderators = 19.
+--    20 jurors + 8 judges + 3 moderators = 31.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS agents (
   user_id               INT NOT NULL PRIMARY KEY,

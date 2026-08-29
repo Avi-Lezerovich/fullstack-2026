@@ -18,7 +18,7 @@ No `.env` is required. Every variable has a working local default; see
 | Service | Image | Port | Role |
 |---|---|---|---|
 | `db` | `mysql:8.0` | `127.0.0.1:3307` | MySQL 8. Schema applied from `database/init.sql` on first boot. |
-| `seed` | `lolsuit/server` | — | One-shot. Inserts the 19 court bots, the admin, the demo accounts and the opening case, then exits 0. |
+| `seed` | `lolsuit/server` | — | One-shot. Inserts the 31 court bots, the admin, the demo accounts and the opening case, then exits 0. |
 | `server` | `lolsuit/server` | `127.0.0.1:5002` | Flask API under gunicorn. |
 | `worker` | `lolsuit/server` | — | The trial scheduler. A separate process by design. |
 | `web` | `lolsuit/web` | **`8080`** | nginx: serves the built bundle, reverse-proxies `/api`. |
@@ -113,7 +113,7 @@ The `seed` service creates them. All share the password **`demo1234`**.
 | `yoni@lolsuit.local` | Regular user |
 | `maya@lolsuit.local` | Regular user |
 
-Plus 19 bot accounts under `@bots.lolsuit.local` — 12 jurors, 4 judges, 3 moderators.
+Plus 31 bot accounts under `@bots.lolsuit.local` — 20 jurors, 8 judges, 3 moderators.
 
 Seeding is **idempotent**: keyed on email (and on the case's title), so it runs on
 every `up` without ever duplicating a row, and re-running only refreshes descriptive

@@ -5,7 +5,7 @@ Five rules, all enforced on the server, each with its own test:
 1. only during the witness phase;
 2. only a party to the case may summon (the plaintiff always, the defendant
    only when they are a registered user);
-3. a witness must be a HUMAN - the nineteen bots are the court, not evidence;
+3. a witness must be a HUMAN - the bots are the court, not evidence;
 4. a witness may not be a party to their own case;
 5. at most three per side, and nobody twice.
 

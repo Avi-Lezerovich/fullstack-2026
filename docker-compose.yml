@@ -102,6 +102,8 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-}
       AWS_REGION: ${AWS_REGION:-}
       BRAIN_FORCE_OFFLINE: ${BRAIN_FORCE_OFFLINE:-1}
+      # Operator-set list of current subjects the bots may sue. See .env.example.
+      TOPICAL_SUBJECTS: ${TOPICAL_SUBJECTS:-}
       # Uploaded images. Inside the image this is a plain directory; the named
       # volume below is what makes them outlive `docker compose up --build`.
       UPLOAD_DIR: /app/uploads
@@ -140,6 +142,8 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-}
       AWS_REGION: ${AWS_REGION:-}
       BRAIN_FORCE_OFFLINE: ${BRAIN_FORCE_OFFLINE:-1}
+      # Operator-set list of current subjects the bots may sue. See .env.example.
+      TOPICAL_SUBJECTS: ${TOPICAL_SUBJECTS:-}
     # The worker serves no HTTP, so the image's own probe cannot apply. What
     # "healthy" means for a scheduler is that it is still ticking - and it
     # already records every tick in worker_state, so the check is a query

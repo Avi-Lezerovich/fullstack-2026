@@ -1,11 +1,11 @@
 """What the bots do when they are not sitting on a jury.
 
 The requirement is that the agents act continuously, not only when somebody is
-sued - otherwise the feed is dead between trials and the nineteen personalities
+sued - otherwise the feed is dead between trials and the court personalities
 are just machinery.
 
 **All pacing state lives in the database** (`agents.last_social_action_at`), so
-a worker restart neither floods the feed with nineteen simultaneous actions nor
+a worker restart neither floods the feed with a burst of simultaneous actions nor
 stalls it. Selection is least-recently-active first, which gives round-robin
 fairness across the whole cast with no in-memory bookkeeping at all.
 """
@@ -16,7 +16,8 @@ import logging
 import random
 
 from app import brain
-from app.brain import decide
+from app.brain import decide, occasion
+from app.clock import now_utc
 from app.config import get_settings
 from app.db import connect
 from app.services import (
@@ -33,7 +34,7 @@ log = logging.getLogger(__name__)
 # --- answering direct messages ----------------------------------------------
 #
 # Every bot has a profile, and a profile has a "send a message" button. Before
-# this, writing to one was a dead end: nineteen personalities who would argue a
+# this, writing to one was a dead end: personalities who would argue a
 # case in public and ignore you in private.
 
 
@@ -207,9 +208,10 @@ def _perform(db, bot, action: str, tick: int) -> bool:
             {"case_title": case["title"], "defendant": case["defendant_text"]},
             max_chars=240,
         )
+        # Screened, for the same reason as a bot's filing: a live model wrote
+        # this, so "it came from our own corpus" no longer holds.
         result, _ = comments_service.create_comment(
-            case["id"], bot["user_id"], text, role="user",
-            screen=False, scanned=True, conn=db,
+            case["id"], bot["user_id"], text, role="user", conn=db,
         )
         return result == "ok"
 
@@ -222,27 +224,127 @@ def _perform(db, bot, action: str, tick: int) -> bool:
     return result == "ok"
 
 
-def _file_case(db, bot, tick: int) -> bool:
-    """A bot files its own lawsuit.
+def _names_a_registered_human(db, defendant: str) -> bool:
+    """Whether this defendant is the name of a HUMAN with an account.
 
-    The defendant always comes from a fixed list of THINGS. A bot must never be
-    able to sue a registered user: that would be harassment with a court date
-    attached, and the target would have no way to opt out.
+    A bot must never be able to sue a real person: that would be harassment
+    with a court date attached, and the target would have no way to opt out.
+
+    Bots are deliberately outside this rule (`is_bot = 0`). They are house
+    characters that nobody has to live with, and a feud between two regulars is
+    the best thing the feed produces - see `_pick_defendant_bot`.
+
+    The offline generator enforces the human rule by construction, drawing only
+    from a fixed list of THINGS. The model has no such guarantee, so when it
+    writes the filing the rule is enforced here, where there is a database to
+    check against.
     """
+    return bool(
+        db.query_one(
+            "SELECT 1 FROM users WHERE is_bot = 0 AND TRIM(name) = TRIM(%s) LIMIT 1",
+            (defendant,),
+        )
+    )
+
+
+def _pick_defendant_bot(db, plaintiff_id: int, rng: random.Random):
+    """Another active bot to sue - never the plaintiff itself.
+
+    `create_case` rejects a case whose defendant_user_id equals its author_id,
+    so excluding self here is what turns "a bot filed a lawsuit" into an actual
+    row rather than a silently dropped "invalid".
+    """
+    rows = db.query_all(
+        "SELECT a.user_id, a.personality_name, a.personality_prompt, u.bio "
+        "FROM agents a JOIN users u ON u.id = a.user_id "
+        "WHERE a.is_active = 1 AND u.status = 'active' AND a.user_id <> %s",
+        (plaintiff_id,),
+    )
+    return rng.choice(rows) if rows else None
+
+
+def _lawsuit_target(db, bot, tick: int, rng: random.Random) -> dict:
+    """Who this filing goes after: a thing, something topical, or a colleague.
+
+    Returns the dict the brain understands. Falls back to "thing" whenever the
+    richer kind cannot be built - an empty court has nobody to feud with.
+    """
+    settings = get_settings()
+    kind = decide.decide_lawsuit_target(
+        agent_user_id=bot["user_id"], tick=tick, salt=settings.jury_seed_salt
+    )
+
+    if kind == "bot":
+        other = _pick_defendant_bot(db, bot["user_id"], rng)
+        if other is not None:
+            return {
+                "kind": "bot",
+                "name": other["personality_name"],
+                "bio": other["bio"],
+                "personality": other["personality_prompt"],
+                "user_id": other["user_id"],
+            }
+
+    if kind == "topical":
+        # Local wall clock, not UTC: every subject here is about lived
+        # local time (the 8am traffic, Friday afternoon), and three hours
+        # of drift would file the evening's grievances at lunchtime.
+        now = occasion.local_now(now_utc())
+        extra = settings.topical_subjects
+        subjects = occasion.current_subjects(now, extra)
+        if subjects:
+            return {
+                "kind": "topical",
+                "subjects": subjects,
+                "now": occasion.describe(now, extra),
+            }
+
+    return {"kind": "thing"}
+
+
+def _file_case(db, bot, tick: int) -> bool:
+    """A bot files its own lawsuit."""
     # Seeded by (bot, tick). The previous version used `id(db)` - a memory
     # address, which CPython reuses, so it was neither reliably varied nor
     # reproducible, and it quietly broke the determinism the offline generator
     # is built around.
-    filing = brain.invent_lawsuit(
-        bot["personality_prompt"], seed_extra=f"{bot['user_id']}:{tick}"
-    )
+    seed_extra = f"{bot['user_id']}:{tick}"
+    target = _lawsuit_target(db, bot, tick, random.Random(seed_extra))
+
+    filing = brain.invent_lawsuit(bot["personality_prompt"], seed_extra, target)
+
+    if _names_a_registered_human(db, filing["defendant_text"]):
+        log.warning(
+            "%s tried to sue a registered user (%r); filing dropped",
+            bot["personality_name"],
+            filing["defendant_text"],
+        )
+        return False
+
+    # Linked only when the court itself is the defendant, so the case page can
+    # show the accused personality instead of just their name in a text field.
+    #
+    # And only when the two actually agree. The model is told to use the given
+    # name verbatim, but "told to" is not "guaranteed to" - and a row whose
+    # defendant_user_id points at one personality while its defendant_text
+    # names another is worse than an unlinked case: the page would render the
+    # wrong bot as the accused.
+    defendant_user_id = None
+    if target["kind"] == "bot" and filing["defendant_text"].strip() == target["name"].strip():
+        defendant_user_id = target["user_id"]
+
     result, _case_id = cases_service.create_case(
         bot["user_id"],
         filing["title"],
         filing["body"],
         filing["defendant_text"],
+        defendant_user_id=defendant_user_id,
         charges=filing["charges"],
-        screen=False,  # generated from our own corpus
+        # Screened like anything else. This used to be skipped as "generated
+        # from our own corpus", which stopped being true the moment a live
+        # model started writing these - and bot-vs-bot filings are exactly
+        # where an unscreened generator would do the most damage. Corpus-
+        # written filings pass the lexicon trivially, so this costs nothing.
         conn=db,
     )
     return result == "ok"

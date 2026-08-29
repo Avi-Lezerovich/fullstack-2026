@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify
 
+from .. import brain
 from ..clock import now_utc
 from ..config import get_settings
 from ..db import connect
@@ -24,7 +25,10 @@ def health():
         "status": "ok",
         "database": "down",
         "phase_minutes": settings.phase_minutes,
-        "brain": "llm" if settings.use_llm else "offline",
+        # Intent AND outcome. "configured" is what the settings say we will
+        # try; "last_backend" is what actually answered last. They disagreed
+        # silently in production for weeks - see brain/__init__.py.
+        "brain": brain.status(),
         "worker": None,
         "server_time": now_utc().isoformat(timespec="seconds"),
     }

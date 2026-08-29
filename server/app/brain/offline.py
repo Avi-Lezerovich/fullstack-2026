@@ -154,21 +154,58 @@ def generate(
     return trim(_fill(template, values), max_chars)
 
 
-def invent_lawsuit(personality_prompt: str, seed_extra: str = "") -> dict[str, Any]:
+def invent_lawsuit(
+    personality_prompt: str,
+    seed_extra: str = "",
+    target: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """A whole filing for a bot acting on its own initiative.
 
-    Defendants come from a fixed list of things, never from the user table:
-    a bot must not be able to sue a real person.
+    Three kinds of defendant, matching the live model's three briefs:
+
+      thing    - drawn from the fixed corpus list. Never from the user table:
+                 a bot must not be able to sue a real person.
+      topical  - something about right now, supplied by the caller from the
+                 clock (and from TOPICAL_SUBJECTS, if an operator set any).
+      bot      - another one of the court's own personalities, by name.
+
+    The bot and topical kinds need no new phrase banks at all: the defendant is
+    just a different string flowing into the same {defendant} slot, which is
+    the whole reason that slot exists.
     """
-    rng = random.Random(seed_for(personality_prompt, "bot_lawsuit_meta", {"s": seed_extra}))
-    defendant = rng.choice(corpus.LAWSUIT_DEFENDANTS)
+    target = target or {"kind": "thing"}
+    kind = str(target.get("kind") or "thing")
+
+    # The target is part of the seed, so a filing against a colleague and a
+    # filing against a thing are different filings even on the same tick.
+    rng = random.Random(
+        seed_for(
+            personality_prompt,
+            "bot_lawsuit_meta",
+            {"s": seed_extra, "k": kind, "n": target.get("name") or ""},
+        )
+    )
+
+    if kind == "bot" and target.get("name"):
+        defendant = str(target["name"])
+    elif kind == "topical" and target.get("subjects"):
+        defendant = str(rng.choice(list(target["subjects"])))
+    else:
+        defendant = rng.choice(corpus.LAWSUIT_DEFENDANTS)
+
     charges = rng.sample(corpus.LAWSUIT_CHARGES, k=rng.randint(1, 3))
     title = rng.choice(corpus.LAWSUIT_TITLES).format(defendant=defendant)
 
+    # `case_title` is deliberately NOT passed down. It feeds the {title_quote}
+    # slot, and since the title is itself built from the defendant, the body
+    # came out quoting its own headline back at the reader - "מוגשת בזאת תביעה
+    # נגד ההודעה שנשלחה בטעות. הביטוי התביעה נגד ההודעה שנשלחה בטעות כשלעצמו
+    # מעיד על חומרת המקרה." Without it the {title_quote} phrases fall back to
+    # the generic "כתב התביעה", which reads like a filing instead of an echo.
     body = generate(
         personality_prompt,
         "bot_lawsuit",
-        {"defendant": defendant, "charges": charges, "case_title": title},
+        {"defendant": defendant, "charges": charges},
         max_chars=600,
     )
     return {"title": title, "defendant_text": defendant, "charges": charges, "body": body}
