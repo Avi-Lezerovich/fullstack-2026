@@ -153,7 +153,7 @@ export interface JuryPanel {
   members: JuryMember[];
 }
 
-/** One of the nineteen permanent court personalities, as /about shows them. */
+/** One of the permanent court personalities, as /about shows them. */
 export interface CourtAgent {
   id: number;
   name: string;
@@ -178,7 +178,7 @@ export const MODERATOR_KIND_LABELS: Record<string, string> = {
   sweeper: "הסורק",
 };
 
-/** The eight voices the offline generator can write in (server/app/seed_data.py). */
+/** The twelve voices the offline generator can write in (server/app/seed_data.py). */
 export const TONE_LABELS: Record<string, string> = {
   pedantic: "דקדקן",
   sentimental: "רגשן",
@@ -188,6 +188,10 @@ export const TONE_LABELS: Record<string, string> = {
   bureaucratic: "בירוקרטי",
   folksy: "עממי",
   theatrical: "תיאטרלי",
+  streetwise: "רחוב",
+  mystic: "קוסמי",
+  corporate: "תאגידי",
+  conspiracy: "חשדן",
 };
 
 export type SummonsStatus = "pending" | "testified" | "no_show";

@@ -11,11 +11,24 @@ can see.
 `generate()` never raises and never returns an empty string. That is a
 deliberate contract: a juror is in the middle of a database transaction when
 this is called, and a failed API request must not roll back a trial.
+
+**But failing open silently is how a dead backend hides.** `use_llm` is a
+local, cheap check - for Bedrock it asks only "is AWS_REGION set?" - so it
+reports the *intent* to call a model, never the outcome. With the `anthropic`
+package missing from the image, every call raised ModuleNotFoundError, landed
+in the `except` below, and produced perfectly plausible offline text while
+/api/health cheerfully reported `"brain": "llm"`.
+
+So the last outcome is recorded in `LAST_CALL` and reported by /api/health
+alongside the intent. That costs one module-level assignment per call and is
+the difference between "the model is answering" and "the model has never once
+answered".
 """
 
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Any, Literal
 
 from ..config import get_settings
@@ -48,6 +61,72 @@ TASKS: tuple[str, ...] = (
 )
 
 
+class _LastCall:
+    """What the most recent generate() actually did, for /api/health.
+
+    Deliberately in-memory and per-process: this answers "is the backend
+    working *right now, here*", which is a property of this container, not a
+    fact worth a database round trip on every health poll. gunicorn runs
+    several workers, so a poll may land on one that has not generated anything
+    yet - hence the explicit "unknown" starting state rather than a lie in
+    either direction.
+
+    The lock keeps a torn read impossible under gthread workers; the whole
+    critical section is three assignments.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self.backend: str = "unknown"
+        self.error: str | None = None
+        self.llm_calls: int = 0
+        self.llm_failures: int = 0
+
+    def record_llm_ok(self) -> None:
+        with self._lock:
+            self.backend = "llm"
+            self.error = None
+            self.llm_calls += 1
+
+    def record_llm_failure(self, exc: BaseException) -> None:
+        with self._lock:
+            self.backend = "offline"
+            # The class name matters more than the message here:
+            # ModuleNotFoundError, AccessDeniedException and ValidationException
+            # are three completely different fixes.
+            self.error = f"{type(exc).__name__}: {exc}"[:300]
+            self.llm_calls += 1
+            self.llm_failures += 1
+
+    def record_offline(self) -> None:
+        with self._lock:
+            self.backend = "offline"
+            self.error = None
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            return {
+                "last_backend": self.backend,
+                "last_error": self.error,
+                "llm_calls": self.llm_calls,
+                "llm_failures": self.llm_failures,
+            }
+
+
+LAST_CALL = _LastCall()
+
+
+def status() -> dict[str, Any]:
+    """What /api/health reports about the brain.
+
+    `configured` is the intent (what settings say we will try), `last_backend`
+    is the outcome (what actually answered). When those two disagree, the
+    backend is broken and `last_error` says how.
+    """
+    settings = get_settings()
+    return {"configured": "llm" if settings.use_llm else "offline", **LAST_CALL.snapshot()}
+
+
 def generate(
     personality_prompt: str,
     task: str,
@@ -68,24 +147,56 @@ def generate(
             from . import llm
 
             text = llm.generate(personality_prompt, task, context, max_chars=max_chars)
+            LAST_CALL.record_llm_ok()
             return offline.trim(text, max_chars)
-        except Exception:
+        except Exception as exc:
             # Unknown provider, missing package, bad key, rate limit, timeout,
             # empty completion, network down - all the same from here: use the
-            # offline brain.
+            # offline brain. Recorded so it is not also *invisible* from here.
+            LAST_CALL.record_llm_failure(exc)
             log.warning("LLM backend failed; using the offline generator", exc_info=True)
+    else:
+        LAST_CALL.record_offline()
 
     return offline.generate(personality_prompt, task, context, max_chars=max_chars)
 
 
-def invent_lawsuit(personality_prompt: str, seed_extra: str = "") -> dict[str, Any]:
+def invent_lawsuit(
+    personality_prompt: str,
+    seed_extra: str = "",
+    target: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """A complete filing for a bot acting on its own initiative.
 
-    Always offline: the structure (title, defendant, charges) has to be
-    well-formed enough to insert, and free-form model output is not worth
-    parsing for that.
+    The live model writes these when it can. That is a change of mind from the
+    original design, which kept filings offline because "free-form model output
+    is not worth parsing": with a JSON schema on the response it is no longer
+    free-form, and the offline path's twelve fixed defendants were the single
+    most visible source of repetition in the feed - the same "התביעה נגד
+    הקפה שהתקרר" filed by three different bots in one afternoon.
+
+    `target` says who is being sued - a thing, something topical, or another
+    one of the court's personalities. It never says "a human": that rule is
+    enforced in the worker, against the database, because only there is there
+    anything to check a name against.
+
+    Every field is validated before it can reach an INSERT, and anything
+    malformed falls back to the offline filing.
     """
-    return offline.invent_lawsuit(personality_prompt, seed_extra)
+    settings = get_settings()
+
+    if settings.use_llm:
+        try:
+            from . import llm
+
+            filing = llm.invent_lawsuit(personality_prompt, seed_extra, target)
+            LAST_CALL.record_llm_ok()
+            return filing
+        except Exception as exc:
+            LAST_CALL.record_llm_failure(exc)
+            log.warning("LLM filing failed; using the offline generator", exc_info=True)
+
+    return offline.invent_lawsuit(personality_prompt, seed_extra, target)
 
 
-__all__ = ["generate", "invent_lawsuit", "Task", "TASKS"]
+__all__ = ["generate", "invent_lawsuit", "status", "LAST_CALL", "Task", "TASKS"]

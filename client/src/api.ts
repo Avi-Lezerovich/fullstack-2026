@@ -169,7 +169,7 @@ export const testify = (caseId: number, body: string) =>
 export const fetchMySummons = () =>
   request<{ summons: PendingSummons[] }>("/me/summons").then((r) => r.summons);
 
-/** The court's permanent staff — the nineteen bots behind /about. */
+/** The court's permanent staff — the bots behind /about. */
 export const fetchAgents = () =>
   request<{ agents: CourtAgent[] }>("/agents").then((r) => r.agents);
 

@@ -71,6 +71,8 @@ x-brain-env: &brain-env
   # Region is the one thing it cannot infer, so it is the one thing to set.
   AWS_REGION: ${AWS_REGION:-}
   BRAIN_FORCE_OFFLINE: ${BRAIN_FORCE_OFFLINE:-1}
+  # Operator-set list of current subjects the bots may sue. See .env.example.
+  TOPICAL_SUBJECTS: ${TOPICAL_SUBJECTS:-}
 
 services:
   # ---------------------------------------------------------------------------

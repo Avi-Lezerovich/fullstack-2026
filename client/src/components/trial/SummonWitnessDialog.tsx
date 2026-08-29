@@ -33,7 +33,7 @@ const SummonWitnessDialog = ({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // include_bots=0: the nineteen court personalities are not eligible
+  // include_bots=0: the court personalities are not eligible
   // witnesses, so they are never even offered.
   useEffect(() => {
     if (!open || query.trim().length < 2) {

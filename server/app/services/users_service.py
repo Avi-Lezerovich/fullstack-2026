@@ -1,7 +1,7 @@
 """Users - humans, admins and bots alike.
 
 A bot is an ordinary row here plus a row in `agents`. That is what gives the
-nineteen court personalities real profiles: they can be searched for, visited,
+court personalities real profiles: they can be searched for, visited,
 liked and messaged exactly like anyone else.
 """
 

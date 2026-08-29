@@ -1,4 +1,4 @@
-"""Looking up the nineteen.
+"""Looking up the court cast.
 
 Pools are returned as plain id lists so jury selection can stay a pure function
 with no database access at all.
@@ -6,19 +6,36 @@ with no database access at all.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 from ..db import Db, owned
 
 
-def pool_ids(role: str, conn: Db | None = None) -> list[int]:
-    """Active agent ids for a role, sorted.
+def pool_ids(
+    role: str,
+    conn: Db | None = None,
+    exclude: Iterable[int] | None = None,
+) -> list[int]:
+    """Active agent ids for a role, sorted, minus anyone disqualified.
 
     Sorted deliberately: `select_panel` samples from this list, and sorting
     makes the draw depend only on *which* agents exist, never on the order
     MySQL happened to return them in. Without it, an unrelated row update
     could silently change who gets seated on a case.
+
+    `exclude` is how a case keeps its own parties off its own bench. This
+    became load-bearing when bots started suing each other: before that a bot
+    was never a party to a case, so "the defendant is also juror #4" could not
+    arise. Now it can, and a defendant voting on their own guilt is not a joke
+    the site is making on purpose.
+
+    Excluding at most two agents cannot starve the draw - the pools are far
+    larger than PANEL_SIZE - and `select_panel` returns None (leaving the case
+    to retry next tick) if that ever stops being true.
     """
+    blocked = {int(x) for x in (exclude or ()) if x is not None}
+
     with owned(conn) as db:
         rows = db.query_all(
             "SELECT a.user_id FROM agents a JOIN users u ON u.id = a.user_id "
@@ -26,7 +43,7 @@ def pool_ids(role: str, conn: Db | None = None) -> list[int]:
             "ORDER BY a.user_id ASC",
             (role,),
         )
-    return [int(row["user_id"]) for row in rows]
+    return [int(row["user_id"]) for row in rows if int(row["user_id"]) not in blocked]
 
 
 def get_agent(user_id: int, conn: Db | None = None) -> dict[str, Any] | None:

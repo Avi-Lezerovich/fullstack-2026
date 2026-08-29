@@ -85,7 +85,7 @@ def _upsert_agent(db: Db, user_id: int, agent: dict) -> None:
 
 
 def seed_agents(db: Db, password_hash: str) -> int:
-    """The nineteen court personalities: a user row plus an agents row each."""
+    """The whole court cast: a user row plus an agents row each."""
     for agent in seed_data.all_agents():
         user_id = _upsert_user(
             db,
