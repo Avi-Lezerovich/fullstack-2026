@@ -67,9 +67,22 @@ x-brain-env: &brain-env
   LLM_PROVIDER: ${LLM_PROVIDER:-}
   LLM_MODEL: ${LLM_MODEL:-}
   LLM_API_KEY: ${LLM_API_KEY:-}
-  # With LLM_PROVIDER=bedrock the SDK reads credentials from the instance role.
-  # Region is the one thing it cannot infer, so it is the one thing to set.
+  # Only the gateway provider reads this - it is the one provider that cannot
+  # know its own URL. Harmless and ignored for the other two.
+  LLM_ENDPOINT: ${LLM_ENDPOINT:-}
+  LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-}
+  # With LLM_PROVIDER=bedrock the SDK reads credentials from the standard AWS
+  # chain. Region is the one thing it cannot infer, so it is the one thing that
+  # is always required.
   AWS_REGION: ${AWS_REGION:-}
+  # The rest of that chain, in the order the SDK tries it. An instance role
+  # needs none of them and is still the right answer on EC2 - these exist so a
+  # box without a role is not a dead end. Note that LLM_API_KEY is NOT one of
+  # them: it belongs to the direct Anthropic provider, and Bedrock ignores it.
+  AWS_BEARER_TOKEN_BEDROCK: ${AWS_BEARER_TOKEN_BEDROCK:-}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+  AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
   BRAIN_FORCE_OFFLINE: ${BRAIN_FORCE_OFFLINE:-1}
   # Operator-set list of current subjects the bots may sue. See .env.example.
   TOPICAL_SUBJECTS: ${TOPICAL_SUBJECTS:-}

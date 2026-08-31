@@ -92,6 +92,7 @@ class Settings:
     # --- the bots' brain ---
     llm_provider: str
     llm_api_key: str
+    llm_endpoint: str
     llm_model: str
     llm_timeout_seconds: int
     aws_region: str
@@ -168,9 +169,14 @@ def get_settings() -> Settings:
         sse_max_seconds=_float("SSE_MAX_SECONDS", 300.0),
         sse_max_streams=_int("SSE_MAX_STREAMS", 50),
         llm_provider=_str("LLM_PROVIDER", "bedrock"),
-        # Only the direct Anthropic provider uses this. Bedrock reads the
-        # standard AWS credential chain instead.
+        # The direct Anthropic provider and the gateway both use this; they
+        # just send it differently. Bedrock reads the standard AWS credential
+        # chain instead and ignores this entirely - a key set here while
+        # LLM_PROVIDER=bedrock is not a credential, it is a decoy.
         llm_api_key=_str("LLM_API_KEY", ""),
+        # The gateway provider's one endpoint, and the only thing it cannot
+        # guess. Unused by the other providers, which know their own URLs.
+        llm_endpoint=_str("LLM_ENDPOINT", ""),
         # Empty means "whatever brain/llm.py defaults this provider to".
         llm_model=_str("LLM_MODEL", ""),
         llm_timeout_seconds=_int("LLM_TIMEOUT_SECONDS", 10),

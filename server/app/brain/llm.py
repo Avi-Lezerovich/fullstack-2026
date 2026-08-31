@@ -40,6 +40,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import urllib.request
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -349,6 +350,102 @@ def _complete_anthropic(
     return _text_of(message)
 
 
+# The keys a gateway might name its completion, best first. The endpoint this
+# was built against returns `text`; the others cost nothing to accept and save
+# the next person a debugging session if theirs differs.
+_GATEWAY_TEXT_KEYS = ("text", "completion", "response", "output")
+
+
+def _strip_fence(text: str) -> str:
+    """Drop a ```json ... ``` wrapper if the model added one.
+
+    Asking for JSON in a prompt gets JSON, but a model that has been told to
+    return JSON its whole life will sometimes dress it in a markdown fence.
+    The Bedrock and direct providers never need this - they get a real schema
+    enforced by the API - so it lives here, with the provider that has to ask
+    nicely instead.
+    """
+    if not text.startswith("```"):
+        return text
+    body = text.split("\n", 1)[-1] if "\n" in text else ""
+    return body.rsplit("```", 1)[0].strip()
+
+
+def _complete_gateway(
+    system: str,
+    prompt: str,
+    *,
+    model: str,
+    max_tokens: int,
+    output_format: dict[str, Any] | None = None,
+) -> str:
+    """Claude behind an HTTP endpoint that holds the real credentials for us.
+
+    This is the provider for a deployment that has no AWS identity of its own.
+    An API Gateway key opens exactly one POST route, and whatever sits behind
+    it - a Lambda, in the case this was written for - is what actually talks to
+    Bedrock. Nothing here needs an SDK, an AWS region, or a credential chain,
+    which is the entire appeal: it works from any box, including one with no
+    instance role.
+
+    `model` and `max_tokens` are accepted to satisfy the provider signature and
+    then ignored, because the far side chooses both. That is a real limitation,
+    not an oversight - see the two below, which are the same shape.
+
+    Two things the endpoint does not implement, worked around here:
+
+    * **No system turn.** It reads one `prompt` field and silently drops the
+      rest. Passing the system prompt as its own key returns a cheerful 200
+      with the character quietly missing - the model answers as a generic
+      assistant - so the two are folded into one string instead.
+    * **No structured output.** There is nowhere to put `output_config.format`,
+      so a schema is demoted to an instruction in the prompt and the fence is
+      stripped off the answer. `invent_lawsuit` still validates what comes
+      back, and still raises into the offline fallback when it is wrong.
+    * **A hard output cap, and no way to raise it.** The far side stops at its
+      own limit and ignores `max_tokens`, which in Hebrew - roughly a token per
+      character - lands around 450 characters, a third of what the same cap
+      buys in English. Short tasks never notice. A filing written at full
+      length comes back cut mid-string and fails `json.loads`, so the schema
+      instruction below also asks for a length that fits.
+    """
+    settings = get_settings()
+    if not settings.llm_endpoint:
+        raise ValueError("LLM_ENDPOINT is required by the gateway provider")
+
+    text_prompt = f"{system}\n\n{prompt}"
+    if output_format is not None:
+        schema = json.dumps(output_format.get("schema", {}), ensure_ascii=False)
+        text_prompt += (
+            "\n\n## הפורמט\n"
+            "החזר אך ורק אובייקט JSON תקין, בלי טקסט לפני או אחרי ובלי גדר markdown, "
+            f"לפי הסכימה הזאת:\n{schema}\n\n"
+            "חשוב: כל התשובה יחד חייבת להיות קצרה מ-350 תווים. גוף "
+            "התביעה: שני משפטים קצרים לכל היותר. תשובה ארוכה מזה "
+            "תיקטע באמצע ותיפסל."
+        )
+
+    request = urllib.request.Request(
+        settings.llm_endpoint,
+        data=json.dumps({"prompt": text_prompt}).encode("utf-8"),
+        method="POST",
+        headers={"Content-Type": "application/json", "x-api-key": settings.llm_api_key},
+    )
+    with urllib.request.urlopen(request, timeout=settings.llm_timeout_seconds) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+
+    text = ""
+    if isinstance(payload, dict):
+        for key in _GATEWAY_TEXT_KEYS:
+            value = payload.get(key)
+            if isinstance(value, str):
+                text = value
+                break
+
+    text = text.strip()
+    return _strip_fence(text) if output_format is not None else text
+
+
 def _output_config(output_format: dict[str, Any] | None) -> dict[str, Any]:
     """`effort` always, `format` only when a task needs parseable output."""
     config: dict[str, Any] = {"effort": _EFFORT}
@@ -382,6 +479,15 @@ PROVIDERS: dict[str, Provider] = {
         complete=_complete_anthropic,
         is_configured=lambda settings: bool(settings.llm_api_key),
         default_model="claude-opus-5",
+    ),
+    "gateway": Provider(
+        complete=_complete_gateway,
+        # Both halves matter: the key alone cannot say where to send itself.
+        is_configured=lambda settings: bool(
+            settings.llm_api_key and settings.llm_endpoint
+        ),
+        # The endpoint picks the model, so there is no default to name here.
+        default_model="",
     ),
 }
 
