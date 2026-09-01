@@ -88,9 +88,11 @@ STYLE_RULES = """## איך כותבים כאן
 הכללים בלשון מקור בכוונה - הם נכונים לכל דמות, בכל מגדר.
 
 - **להיות ספציפי לתיק הזה.** לתפוס פרט אחד קטן ומוזר מהתביעה ולהיאחז בו. לא לסכם את התיק - כולם קראו אותו.
-- **לא לפתוח פעמיים באותה צורה.** אם משפט הפתיחה יכול היה להתאים לכל תיק אחר באתר - למחוק אותו ולהתחיל אחרת.
+- **המבחן:** אם מה שכתבת יכול היה להיאמר על כל תיק אחר באתר, זה לא טקסט - זה מילוי מקום. למחוק ולהתחיל מפרט אמיתי.
 - **להפתיע.** דימוי קונקרטי, מספר מדויק להחריד, תקדים משפטי שהומצא ברגע זה ומצוטט בביטחון מלא, פרט אישי זעיר מהחיים שמחוץ לאולם.
 - **קול, לא ניסוח.** לא "לכתוב בסגנון" - להיות הדמות. אם יש לה מילת מפתח משלה, קללה מנומסת, או תחביב שהיא גוררת לכל דיון - להשתמש בו.
+- **לדבר אל אנשים, לא על אנשים.** יש כאן שמות. להשתמש בהם.
+- **מותר להיות לא נחמד.** דמות שמסכימה עם כולם ומסייגת כל משפט היא דמות שאין לה דעה. יש כאן דעות.
 - אורך: קצר. אבל לא תמיד באותו אורך.
 
 ## אסור
@@ -99,6 +101,9 @@ STYLE_RULES = """## איך כותבים כאן
 - מרכאות סביב התשובה, או הקדמה מסוג "הנה מה שאני אומר".
 - להסביר את הבדיחה, לקרוץ, או לציין שהמצב אבסורדי. המצב אבסורדי. יש להתייחס אליו בכובד ראש.
 - קלישאות משפטיות גנריות שלא אומרות כלום על התיק הזה דווקא.
+- **פתיחות שחוקות.** לא "ובכן", לא "אם כן", לא "ראשית כול", לא "יש לציין כי", לא "בואו נודה באמת", לא "כמושבע/ת, אני". להתחיל מהעניין עצמו.
+- **סיומות שמסכמות.** לא "בסופו של דבר", לא "ובסך הכול", לא "אז מה למדנו". המשפט האחרון הוא עוד משפט, לא מוסר השכל.
+- להעתיק ניסוח מהשורות לדוגמה שבדף הדמות. הן מראות איך אתה נשמע, לא מה אתה אומר.
 
 יש להחזיר אך ורק את הטקסט עצמו, כאילו נאמר באולם."""
 
@@ -111,14 +116,21 @@ TASK_BRIEFS: dict[str, str] = {
         "תגיד את הדבר האחד שאתה חושב על התיק - נימוק, תהייה, התפרצות, או הערה "
         "צדדית שמסגירה בדיוק איזה מין אדם אתה. אתה לא מכריע, אתה מדבר.\n\n"
         "**קראת את התיק, והוא לפניך.** תיאחז בפרט אמיתי מתוכו - משהו שכתוב "
-        "שם ולא במקום אחר. אם כבר דיברו לפניך, אתה שמעת אותם: אפשר להסכים, "
-        "להתנגד, או להמשיך משפט של מישהו - רק לא לחזור עליו ולא לדבר כאילו "
-        "אתה הראשון שפותח את הפה."
+        "שם ולא במקום אחר.\n\n"
+        "**ואתה שמעת את מי שדיבר לפניך.** הם רשומים למטה בשמם. אפשר להסכים "
+        "עם אחד מהם, להתנגד לו, להמשיך משפט שלו, או להעיר שהוא פספס את "
+        "העיקר - רק לא לחזור על מה שכבר נאמר, ולא לדבר כאילו אתה הראשון "
+        "שפותח את הפה. חדר שבו שבעה אנשים מדברים ואף אחד לא עונה לאף אחד "
+        "הוא לא דיון."
     ),
     "verdict": (
         "אתה השופט, וזה רגע ההכרעה. ההצבעה כבר נספרה ואתה יודע את התוצאה - "
         "עכשיו תנסח אותה. אפשר בנזיפה, אפשר באנחה, אפשר במשפט אחד יבש שנוחת "
-        "כמו פטיש. תגיד את ההכרעה במפורש, ותעשה את זה בדרך שלך."
+        "כמו פטיש. תגיד את ההכרעה במפורש, ותעשה את זה בדרך שלך.\n\n"
+        "**האולם מלא ואתה יודע את זה.** אתה יכול להעיר למושבע שאמר משהו "
+        "מטופש, לציין שהתובע כמעט שכנע אותך, או להודות שהתלבטת - ואז "
+        "להכריע בכל זאת. פסק דין שאפשר היה להעתיק לתיק אחר הוא פסק דין "
+        "שלא נכתב כאן."
     ),
     "sentence": (
         "אתה השופט וגזרת דין חובה. תמציא עונש. הוא חייב להיות **ספציפי, "
@@ -181,29 +193,72 @@ TASK_BRIEFS: dict[str, str] = {
 
 # --- the angle: what keeps two calls from sounding like one -------------------
 #
-# One move plus one length, drawn per call from the deterministic seed. This is
-# the whole variety mechanism now that temperature is gone from the API.
+# Sampling parameters are gone from the API, so variety cannot be bought with a
+# dial. It has to be *instructed*, per call, from the deterministic seed.
+#
+# THREE draws, not one, and the reason is arithmetic. A single list of moves
+# gives as many distinct instructions as it has entries, and a juror sitting on
+# its twentieth case has been told the same thing twice. Two orthogonal lists
+# multiply: a move ("invent a precedent") crossed with a hook ("fasten onto a
+# number nobody explained") is a different instruction from the same move
+# crossed with "fasten onto a word the plaintiff chose oddly", and the space is
+# the product rather than the sum. With the length dial on top, the current
+# lists give a few thousand distinct angles instead of nineteen.
+#
+# They stay orthogonal on purpose. A move is a SHAPE - how the sentence is
+# built. A hook is a SUBJECT - what in the case it is built around. Mixing the
+# two back into one list is how this collapsed to nineteen in the first place.
 
 MOVES: tuple[str, ...] = (
-    "פתח בפרט קטן ומוזר מהתיק והיצמד אליו עד הסוף.",
+    # --- shapes that start somewhere unexpected ---
+    "התחל מהמסקנה, ורק אחר כך הסבר איך הגעת אליה.",
+    "התחל במילה אחת, נקודה, ואז המשך.",
+    "התחל באנחה מנוסחת, לא בסימן קריאה.",
+    "התחל בהתנצלות קטנה על מה שאתה עומד לומר, ואז אמור את זה בכל זאת.",
+    "התחל באמצע מחשבה, כאילו כבר דיברת חצי דקה לפני שהקשיבו לך.",
+    "פתח בשאלה שאתה עונה עליה בעצמך במשפט הבא.",
+    "פתח בהודאה במשהו קטן ומביך משלך, ואז עבור לתיק.",
+    # --- shapes that do something to the room ---
+    "פנה ישירות אל הנתבע, בגוף שני.",
+    "פנה למישהו ספציפי שדיבר לפניך, בשמו, וענה לו.",
+    "הסכם עם הצד השני, ואז הפוך את ההסכמה נגדו.",
+    "תקן מונח שמישהו השתמש בו לא נכון, והמשך משם.",
+    "אמור את ההפך ממה שמצפים ממך, ותנמק ברצינות גמורה.",
+    "הודה שאתה מתלבט, ואז הכרע בכל זאת.",
+    "דבר כאילו כולם כבר מסכימים איתך, ואף אחד לא אמר את זה.",
+    "התייחס לדבר אחד שנאמר כאן כאילו הוא הדבר היחיד שנאמר כאן.",
+    # --- shapes that bring something in from outside ---
     "המצא תקדים משפטי שלא קיים, וצטט אותו בביטחון גמור.",
     "ספר בחצי משפט על משהו שקרה לך פעם, ואז חזור לתיק.",
-    "פנה ישירות אל הנתבע, בגוף שני.",
-    "התחל מהמסקנה, ורק אחר כך הסבר איך הגעת אליה.",
-    "שאל שאלה אחת שאיש לא טרח לשאול כאן.",
     "השווה את המקרה למשהו מתחום אחר לגמרי - ספורט, בישול, גיאולוגיה.",
-    "נקוב במספר מדויק להחריד, ואל תסביר מאיפה הוא.",
-    "הסכם עם הצד השני, ואז הפוך את ההסכמה נגדו.",
-    "התחל בהתנצלות קטנה על מה שאתה עומד לומר, ואז אמור את זה בכל זאת.",
     "התייחס למשהו שקרה בתיק אחר לגמרי, כאילו כולם זוכרים אותו.",
     "תאר את הרגע עצמו כאילו היית שם וראית.",
-    "התחל במילה אחת, נקודה, ואז המשך.",
-    "תקן מונח שמישהו השתמש בו לא נכון, וממשיך משם.",
-    "הודה שאתה מתלבט, ואז הכרע בכל זאת.",
     "צטט את כתב התביעה מילה במילה, ואז תגיד מה חשבת כשקראת.",
-    "התחל באנחה מנוסחת, לא בסימן קריאה.",
     "הצע פתרון מעשי לגמרי ובלתי אפשרי לגמרי.",
-    "אמור את ההפך ממה שמצפים ממך, ותנמק ברצינות.",
+    "תאר מה יקרה אם כל אחד יתנהג ככה, ותיקח את זה רחוק מדי.",
+    "המצא מונח מקצועי לתופעה שבתיק, והשתמש בו כאילו הוא מוכר.",
+    "הזכר במה שהיה נהוג פעם, בלי לפרט מתי בדיוק.",
+    "תרגם את הטענה למספרים, ותגלה שהיא יוצאת גרועה יותר.",
+)
+
+# WHAT to fasten onto. Orthogonal to the shape above - this says where in the
+# case to look, and the style rules already insist it be one small thing rather
+# than a summary. Several of these are aimed at the specific way generated text
+# goes bland: it reaches for the theme of the case instead of for a detail, and
+# the theme of every case here is the same joke.
+HOOKS: tuple[str, ...] = (
+    "היאחז במספר אחד מהתיק, ותתייחס אליו כאילו הוא מדויק להחריד.",
+    "היאחז במילה אחת שהתובע בחר, ותהה למה דווקא בה.",
+    "היאחז בשעה או בתאריך שמופיעים שם, ותעשה מהם עניין.",
+    "היאחז בחפץ אחד שמוזכר בתיק, ודבר עליו כאילו הוא הצד השלישי.",
+    "היאחז דווקא במה שחסר בתיק - במה שאיש לא טרח לספר.",
+    "היאחז בפרט הכי שולי שיש שם, וטען שהוא העיקר.",
+    "היאחז בסתירה קטנה בין שני דברים שנאמרו.",
+    "היאחז בשם של הנתבע עצמו, ובמה שהוא מסגיר.",
+    "היאחז בסעיף אישום אחד, ותתעלם מכל השאר לחלוטין.",
+    "היאחז בעדות אחת שנשמעה, ותבנה עליה הכול.",
+    "היאחז במה שהתובע דורש, לא במה שקרה לו.",
+    "היאחז בעובדה שהתיק הזה בכלל הגיע לאולם.",
 )
 
 LENGTHS: tuple[str, ...] = (
@@ -212,6 +267,8 @@ LENGTHS: tuple[str, ...] = (
     "שני משפטים.",
     "שני משפטים: אחד ארוך, אחד קצר שנוחת.",
     "שלושה משפטים קצרים.",
+    "משפט אחד קטוע, ואז אחד שלם.",
+    "ארבע מילים. זהו.",
 )
 
 # Long-form tasks write paragraphs; a "one short sentence" dial would fight the
@@ -220,17 +277,22 @@ _LONG_FORM = {"draft_lawsuit", "bot_lawsuit"}
 
 
 def pick_angle(personality_prompt: str, task: str, context: dict[str, Any]) -> str:
-    """One rhetorical move (and a length, where length is a real choice).
+    """A shape, a thing to fasten onto, and a length.
 
     Seeded from `offline.seed_for`, so this is reproducible exactly like the
     offline generator: the same juror on the same case always draws the same
     angle, and two jurors on one case draw different ones.
+
+    Long-form tasks get no length - a "four words, that is all" dial would
+    fight a brief that asks for three paragraphs rather than colour it - but
+    they do get a hook, because a filing that fastens onto one specific thing
+    is the difference between a lawsuit and an essay about a lawsuit.
     """
     rng = random.Random(offline.seed_for(personality_prompt, task, context))
-    move = rng.choice(MOVES)
-    if task in _LONG_FORM:
-        return move
-    return f"{move}\n{rng.choice(LENGTHS)}"
+    lines = [rng.choice(MOVES), rng.choice(HOOKS)]
+    if task not in _LONG_FORM:
+        lines.append(rng.choice(LENGTHS))
+    return "\n".join(lines)
 
 
 # --- prompt assembly ----------------------------------------------------------

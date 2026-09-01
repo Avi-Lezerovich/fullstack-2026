@@ -21,7 +21,7 @@ BIO_MAX_LENGTH = 500
 # and a log of likes and comments pushes the actual profile off the screen.
 # The whole history is still in `agent_events`; this is what a visitor is
 # shown, not what is kept.
-RECORD_LIMIT = 
+RECORD_LIMIT = 5
 
 
 @bp.get("/users")

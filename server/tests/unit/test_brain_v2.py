@@ -347,3 +347,65 @@ def test_forget_clears_every_table_that_names_the_person():
     tables = " ".join(sql for sql, _ in db.statements)
     for table in ("agent_memories", "bot_memories", "agent_events"):
         assert table in tables
+
+
+# --- the angle, which is the only variety mechanism left ---------------------
+#
+# Sampling parameters are gone from the API, so nothing about the request can
+# make two calls differ. The instruction has to, and these pin the two ways it
+# quietly stops doing that: the space collapsing, and the draw drifting.
+
+
+def test_the_angle_space_is_bigger_than_the_cast_will_exhaust():
+    """A juror sees a lot of cases.
+
+    With one list of moves, the space is its length - and a personality on its
+    twentieth case has been handed the same instruction twice, which reads to
+    a follower of that character as a tic rather than as variety. Two
+    orthogonal lists multiply instead of adding.
+    """
+    space = len(llm.MOVES) * len(llm.HOOKS) * len(llm.LENGTHS)
+    assert space > 1000, space
+
+
+def test_a_move_and_a_hook_stay_different_kinds_of_instruction():
+    """A shape is not a subject.
+
+    They multiply only while they are orthogonal. The moment a hook starts
+    describing how to build the sentence, the two lists are one list again and
+    the space is back to a sum - which is how the first version collapsed.
+    """
+    for hook in llm.HOOKS:
+        assert hook.startswith("היאחז"), hook
+    assert not any(move.startswith("היאחז") for move in llm.MOVES)
+
+
+def test_the_same_juror_on_the_same_case_draws_the_same_angle():
+    """Reproducibility here is not about the trial - it is about debugging.
+
+    Nothing stored depends on the angle. But an angle that changes between two
+    identical calls makes every other difference impossible to attribute, and
+    the eval in `evals/` compares runs.
+    """
+    context = {"case_title": "כרית", "defendant": "המדפסת"}
+    first = llm.pick_angle(PERSONALITY, "jury_deliberation", context)
+    assert first == llm.pick_angle(PERSONALITY, "jury_deliberation", context)
+    assert first != llm.pick_angle(OTHER, "jury_deliberation", context)
+
+
+def test_a_filing_gets_no_length_dial():
+    """"Four words, that is all" would fight a brief asking for paragraphs."""
+    angle = llm.pick_angle(PERSONALITY, "bot_lawsuit", {"x": 1})
+    assert len(angle.splitlines()) == 2
+    assert not any(length in angle for length in llm.LENGTHS)
+
+
+def test_the_house_style_bans_the_openings_that_actually_recur():
+    """Generated Hebrew reaches for the same half-dozen openings.
+
+    Naming them is worth more than another instruction to "be surprising",
+    because "ובכן" is a thing a model does and "be surprising" is not a thing
+    it can check itself against.
+    """
+    for opener in ("ובכן", "אם כן", "ראשית כול", "יש לציין כי"):
+        assert opener in llm.STYLE_RULES, opener
