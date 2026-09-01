@@ -1,0 +1,20 @@
+# Line endings.
+#
+# Without this file, a checkout on Windows with core.autocrlf=true rewrites
+# every shell script to CRLF. That is harmless for scripts run on the host and
+# fatal for one that is COPYd into an image: the shebang becomes "#!/bin/sh\r",
+# the kernel looks for an interpreter literally named "/bin/sh\r", and the
+# container dies at startup with
+#
+#     exec /docker-entrypoint-lolsuit.sh: no such file or directory
+#
+# which names the script rather than the interpreter and so reads like a
+# missing file. client/docker-entrypoint.sh is the one that runs in a
+# container, but every .sh here ends up on Linux sooner or later.
+* text=auto
+
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+.env.example text eol=lf
