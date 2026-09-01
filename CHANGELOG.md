@@ -5,6 +5,41 @@ major number moves when an upgrade needs a step other than pulling the image.
 
 ---
 
+## 2.0.2
+
+**The Gemini provider survives contact with the free tier.**
+
+### Fixed
+
+- **Thinking gets its own token budget.** Gemini 3.x charges thinking tokens
+  against `maxOutputTokens`, so a filing was asking for a schema inside the
+  same budget the reasoning was eating — and returned JSON cut mid-string,
+  reported as `Unterminated string starting at char 148`. The effort dial
+  `effort_for()` already computes is now passed through as `thinkingLevel`
+  (under `thinkingConfig`; the flat spelling is rejected), and the thinking
+  allowance is added *on top of* the text budget. Sized for the tail rather
+  than the average: measured filings spent 1140, 1305, 2785, 4104, 4912 and
+  5335 tokens thinking, and a 3072 allowance still lost the greedy ones.
+- **Transient failures are retried.** Measured against the live API, nine
+  calls in ten failed one evening, every one a 503 — the free tier is shared,
+  so at peak an overload response is the normal answer. 408, 429 and 5xx now
+  get three attempts with jittered exponential backoff. 400, 401 and 403 do
+  not: those are faults in the request, and retrying them triples the cost of
+  a failure that was never going to succeed.
+- **`MAX_TOKENS` on a structured call names itself**, reporting the budget and
+  the thinking spend instead of letting a half-written object reach
+  `json.loads` and blaming the model. Truncated prose still passes through —
+  without a schema, a cut answer is a shorter answer, not a failed one.
+
+### Note on models
+
+`gemini-3.7-flash` returned 429 and 503 on every attempt and is not usable on
+the free tier today; `gemini-2.5-flash` and `-lite` return 404 despite being
+listed. `gemini-3-flash-preview` is what answers, and is a preview model —
+Google may change or withdraw it.
+
+---
+
 ## 2.0.1
 
 **Bots can file again — on a backend that enforces a schema.**
