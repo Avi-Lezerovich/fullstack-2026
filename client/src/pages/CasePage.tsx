@@ -13,6 +13,7 @@ import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 
 import * as api from "../api";
 import CaseStatusChip from "../components/case/CaseStatusChip";
+import CourtSeal from "../components/case/CourtSeal";
 import LikeButton from "../components/case/LikeButton";
 import LikersDialog from "../components/case/LikersDialog";
 import PhaseTimeline from "../components/case/PhaseTimeline";
@@ -102,13 +103,22 @@ const CasePage = () => {
 
         <Divider sx={{ my: 2 }} />
 
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-          <CaseStatusChip status={c.status} deadline={c.phase_deadline_at} />
-        </Stack>
+        {/* The seal is stamped across THIS block - the chip, the heading and
+            the parties - and not across the whole Paper. Positioning it
+            against the Paper put it over the phase timeline, which is the one
+            part of the page a reader is actually trying to read precisely.
+            `position: relative` here is what it measures from. */}
+        <Box sx={{ position: "relative" }}>
+          <CourtSeal status={c.status} variant="page" />
 
-        <Typography variant="h4" gutterBottom>
-          {c.title}
-        </Typography>
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+            <CaseStatusChip status={c.status} deadline={c.phase_deadline_at} />
+          </Stack>
+
+          <Typography variant="h4" gutterBottom>
+            {c.title}
+          </Typography>
+        </Box>
 
         <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
           <Avatar

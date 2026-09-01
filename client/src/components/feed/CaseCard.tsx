@@ -12,6 +12,7 @@ import FavoriteIcon from "@mui/icons-material/Favorite";
 import { Link as RouterLink } from "react-router-dom";
 
 import CaseStatusChip from "../case/CaseStatusChip";
+import CourtSeal from "../case/CourtSeal";
 import { DOC_FONT } from "../../theme";
 import type { Case } from "../../types";
 import { initials, relativeTime } from "../../utils/format";
@@ -23,7 +24,11 @@ const CaseCard = ({ case: c }: { case: Case }) => {
     c.body.length > PREVIEW_LENGTH ? `${c.body.slice(0, PREVIEW_LENGTH).trimEnd()}…` : c.body;
 
   return (
-    <Card data-testid="case-card" sx={{ mb: 2 }}>
+    // `position: relative` and `overflow: hidden` are for the seal: it is
+    // stamped across the card rather than laid out beside anything, and the
+    // rotation would otherwise poke past the rounded corner. See CourtSeal.tsx.
+    <Card data-testid="case-card" sx={{ mb: 2, position: "relative", overflow: "hidden" }}>
+      <CourtSeal status={c.status} />
       <CardActionArea component={RouterLink} to={`/cases/${c.id}`}>
         <CardContent>
           <Stack direction="row" spacing={1.5} alignItems="flex-start">
