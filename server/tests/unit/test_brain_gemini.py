@@ -315,3 +315,118 @@ def test_a_juror_votes_with_the_model_rather_than_the_dial(captured):
     # guilt_bias 0.99 would have convicted; the model's answer is what counts.
     assert spoken["vote"] == "not_guilty"
     assert spoken["line"] == "ומה זה מוכיח."
+
+
+# --- riding out Google being busy --------------------------------------------
+#
+# 503 is not an exotic failure here. The free tier is shared with everyone else
+# on the free tier, and a measured run one evening returned 9 failures in 10,
+# every one of them a 503. Google's own SDKs retry these by default; this
+# provider talks to urllib, so it has to do it itself or inherit none of it.
+
+
+@pytest.fixture
+def no_sleep(monkeypatch):
+    """Backoff without the waiting - the delays are not what is under test."""
+    slept: list[float] = []
+    monkeypatch.setattr(llm.time, "sleep", slept.append)
+    return slept
+
+
+def _http_error(code):
+    return llm.urllib.error.HTTPError("https://x", code, "boom", {}, None)
+
+
+def _urlopen_raising(errors, reply):
+    """Fails with each error in turn, then answers."""
+    queue = list(errors)
+
+    def fake(request, timeout=None):
+        if queue:
+            raise queue.pop(0)
+        return _FakeResponse(json.dumps(reply).encode("utf-8"))
+
+    return fake
+
+
+def test_a_503_is_retried_and_can_succeed(monkeypatch, no_sleep):
+    monkeypatch.setattr(
+        llm.urllib.request,
+        "urlopen",
+        _urlopen_raising([_http_error(503), _http_error(503)], _reply("שלום")),
+    )
+    assert _complete({}, None).text == "שלום"
+    assert len(no_sleep) == 2  # slept before each retry, not before the first try
+
+
+def test_a_read_timeout_is_retried(monkeypatch, no_sleep):
+    monkeypatch.setattr(
+        llm.urllib.request,
+        "urlopen",
+        _urlopen_raising([TimeoutError("read timed out")], _reply("שלום")),
+    )
+    assert _complete({}, None).text == "שלום"
+
+
+def test_a_bad_request_is_not_retried(monkeypatch, no_sleep):
+    """400 means the body is wrong. Asking again just asks wrongly again.
+
+    This is the half that matters for cost and for latency: a schema Google
+    rejects would otherwise be sent three times per call, on every call.
+    """
+    monkeypatch.setattr(
+        llm.urllib.request,
+        "urlopen",
+        _urlopen_raising([_http_error(400)], _reply("שלום")),
+    )
+    with pytest.raises(llm.urllib.error.HTTPError):
+        _complete({}, None)
+    assert no_sleep == []
+
+
+def test_an_unauthorised_key_is_not_retried(monkeypatch, no_sleep):
+    monkeypatch.setattr(
+        llm.urllib.request,
+        "urlopen",
+        _urlopen_raising([_http_error(403)], _reply("שלום")),
+    )
+    with pytest.raises(llm.urllib.error.HTTPError):
+        _complete({}, None)
+    assert no_sleep == []
+
+
+def test_it_gives_up_and_reports_the_last_failure(monkeypatch, no_sleep):
+    """The caller has a working fallback; waiting out an outage helps nobody."""
+    errors = [_http_error(503) for _ in range(llm._GEMINI_ATTEMPTS)]
+    monkeypatch.setattr(
+        llm.urllib.request, "urlopen", _urlopen_raising(errors, _reply("שלום"))
+    )
+    with pytest.raises(llm.urllib.error.HTTPError) as caught:
+        _complete({}, None)
+    assert caught.value.code == 503
+    assert len(no_sleep) == llm._GEMINI_ATTEMPTS - 1
+
+
+def test_the_backoff_is_jittered(monkeypatch, no_sleep):
+    """One key, many bots, one fixed worker tick.
+
+    A fixed backoff would re-align every retry into the same thundering herd
+    the retry exists to survive, so two runs must not sleep identically.
+    """
+    runs = []
+    for _ in range(6):
+        # A fresh queue per run: one shared queue drains on the first run and
+        # every later run would succeed immediately.
+        monkeypatch.setattr(
+            llm.urllib.request,
+            "urlopen",
+            _urlopen_raising(
+                [_http_error(503) for _ in range(llm._GEMINI_ATTEMPTS)], _reply("x")
+            ),
+        )
+        no_sleep.clear()
+        with pytest.raises(llm.urllib.error.HTTPError):
+            _complete({}, None)
+        runs.append(tuple(no_sleep))
+    assert len(set(runs)) > 1
+    assert all(d <= llm._GEMINI_BACKOFF_CAP_SECONDS * 1.5 for run in runs for d in run)

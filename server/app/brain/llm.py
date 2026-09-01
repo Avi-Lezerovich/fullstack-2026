@@ -63,6 +63,8 @@ from __future__ import annotations
 import json
 import logging
 import random
+import time
+import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -755,6 +757,48 @@ _GEMINI_HOST = "https://generativelanguage.googleapis.com/v1beta"
 # fail without this.
 _GEMINI_SCHEMA_DROP = frozenset({"additionalProperties", "$schema", "definitions", "$defs"})
 
+# Transient on Google's side, and worth a second ask. 503 is the one that
+# matters: the free tier is shared with everyone else on the free tier, so at
+# peak it is the normal answer rather than the exceptional one - a measured
+# 9 failures in 10 during one evening, all of them 503. Google's own SDKs retry
+# these by default with exponential backoff; this provider is written against
+# urllib, so it has to say so itself. Everything else - 400, 401, 403 - is a
+# fault in the request that a retry would only repeat.
+_GEMINI_RETRY_STATUS = frozenset({408, 429, 500, 502, 503, 504})
+
+# Three tries, not ten. Every call here sits on a worker tick or a user's
+# request, and the caller already has a working answer to fall back on, so the
+# right shape is "ride out a blip" rather than "wait out an outage". With the
+# jitter below the added delay tops out near six seconds.
+_GEMINI_ATTEMPTS = 3
+_GEMINI_BACKOFF_CAP_SECONDS = 4.0
+
+
+def _gemini_post(request: urllib.request.Request, timeout: float) -> dict[str, Any]:
+    """POST with backoff on the failures that are Google being busy.
+
+    The jitter is not decoration. Every bot on this site shares one API key and
+    the worker fires them on a fixed tick, so a fixed backoff would line the
+    retries up into exactly the thundering herd the retry is meant to survive.
+    """
+    last: Exception | None = None
+    for attempt in range(_GEMINI_ATTEMPTS):
+        if attempt:
+            delay = min(_GEMINI_BACKOFF_CAP_SECONDS, 2.0**attempt)
+            time.sleep(delay * (0.5 + random.random()))
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            if exc.code not in _GEMINI_RETRY_STATUS:
+                raise
+            last = exc
+        except (TimeoutError, urllib.error.URLError) as exc:
+            last = exc
+    assert last is not None
+    raise last
+
+
 # Anthropic says "assistant", Gemini says "model". The only role that differs.
 _GEMINI_ROLES = {"assistant": "model", "user": "user", "model": "model"}
 
@@ -840,8 +884,7 @@ def _complete_gemini(
             "x-goog-api-key": settings.llm_api_key,
         },
     )
-    with urllib.request.urlopen(request, timeout=settings.llm_timeout_seconds) as response:
-        payload = json.loads(response.read().decode("utf-8"))
+    payload = _gemini_post(request, settings.llm_timeout_seconds)
 
     # A blocked prompt comes back 200 with no candidates at all. Saying so
     # beats "empty completion from gemini", which would send the caller looking
