@@ -193,9 +193,32 @@ def test_no_schema_means_no_json_mime_type(captured):
     assert "responseSchema" not in captured["body"]["generationConfig"]
 
 
-def test_the_token_budget_is_passed_through(captured):
-    _complete(captured, _reply("שלום"), max_tokens=4096)
-    assert captured["body"]["generationConfig"]["maxOutputTokens"] == 4096
+def test_the_token_budget_carries_headroom_for_thinking(captured):
+    """Thinking is charged against the same counter as the answer.
+
+    A budget sized for the text alone is one the model can spend entirely on
+    reasoning before writing a character - measured twice on a real filing,
+    which came back as JSON cut mid-string with finish=MAX_TOKENS.
+    """
+    _complete(captured, _reply("שלום"), max_tokens=4096, effort="medium")
+    assert captured["body"]["generationConfig"]["maxOutputTokens"] == (
+        4096 + llm._GEMINI_THINKING_HEADROOM["medium"]
+    )
+
+
+def test_cheap_thinking_gets_little_headroom(captured):
+    """A comment does not reason for two thousand tokens, and paying for the
+    possibility on every call in the feed would be the expensive mistake."""
+    _complete(captured, _reply("שלום"), max_tokens=2048, effort="low")
+    budget = captured["body"]["generationConfig"]["maxOutputTokens"]
+    assert budget == 2048 + llm._GEMINI_THINKING_HEADROOM["low"]
+    assert budget < 2048 + llm._GEMINI_THINKING_HEADROOM["medium"]
+
+
+def test_every_thinking_level_has_headroom_defined():
+    """A level without an entry is a KeyError on a live call, not a test."""
+    for level in llm._GEMINI_THINKING_LEVELS:
+        assert level in llm._GEMINI_THINKING_HEADROOM
 
 
 # --- the failures that would otherwise be mistaken for something else ---------
@@ -222,13 +245,28 @@ def test_an_unexpected_finish_reason_is_an_error(captured):
         _complete(captured, _reply("", finish="RECITATION"))
 
 
-def test_truncated_json_is_allowed_through_to_the_parser(captured):
-    """MAX_TOKENS is not a provider failure, and pretending otherwise hides it.
+def test_running_out_of_budget_mid_schema_says_so(captured):
+    """The alternative is "Unterminated string starting at char 148".
 
-    The caller parses the text and raises its own error, which names the real
-    problem - a filing that did not fit - rather than blaming the transport.
+    That message reads as a model that cannot follow a schema, and sends the
+    next person to the prompt when the fault is the token budget - which is
+    exactly the wrong turn this cost once already. Thinking is charged against
+    the same counter, so the error names it and the level that spent it.
     """
-    assert _complete(captured, _reply('{"title": "אב', finish="MAX_TOKENS")).text
+    captured["reply"] = _reply('{"title": "אב', finish="MAX_TOKENS")
+    captured["reply"]["usageMetadata"] = {"thoughtsTokenCount": 4912}
+    with pytest.raises(ValueError, match="ran out of output budget") as caught:
+        _complete(captured, captured["reply"], output_format=llm.LAWSUIT_SCHEMA)
+    assert "4912" in str(caught.value)
+
+
+def test_truncated_prose_is_still_allowed_through(captured):
+    """Without a schema a cut answer is a shorter answer, not a failed one.
+
+    Only structured output is all-or-nothing; a comment that stopped early is
+    still a comment, and throwing it away would trade real text for silence.
+    """
+    assert _complete(captured, _reply("שלום לכולם", finish="MAX_TOKENS")).text
 
 
 def test_an_empty_answer_names_the_finish_reason(captured):
@@ -315,3 +353,167 @@ def test_a_juror_votes_with_the_model_rather_than_the_dial(captured):
     # guilt_bias 0.99 would have convicted; the model's answer is what counts.
     assert spoken["vote"] == "not_guilty"
     assert spoken["line"] == "ומה זה מוכיח."
+
+
+# --- riding out Google being busy --------------------------------------------
+#
+# 503 is not an exotic failure here. The free tier is shared with everyone else
+# on the free tier, and a measured run one evening returned 9 failures in 10,
+# every one of them a 503. Google's own SDKs retry these by default; this
+# provider talks to urllib, so it has to do it itself or inherit none of it.
+
+
+@pytest.fixture
+def no_sleep(monkeypatch):
+    """Backoff without the waiting - the delays are not what is under test."""
+    slept: list[float] = []
+    monkeypatch.setattr(llm.time, "sleep", slept.append)
+    return slept
+
+
+def _http_error(code):
+    return llm.urllib.error.HTTPError("https://x", code, "boom", {}, None)
+
+
+def _urlopen_raising(errors, reply):
+    """Fails with each error in turn, then answers."""
+    queue = list(errors)
+
+    def fake(request, timeout=None):
+        if queue:
+            raise queue.pop(0)
+        return _FakeResponse(json.dumps(reply).encode("utf-8"))
+
+    return fake
+
+
+def test_a_503_is_retried_and_can_succeed(monkeypatch, no_sleep):
+    monkeypatch.setattr(
+        llm.urllib.request,
+        "urlopen",
+        _urlopen_raising([_http_error(503), _http_error(503)], _reply("שלום")),
+    )
+    assert _complete({}, None).text == "שלום"
+    assert len(no_sleep) == 2  # slept before each retry, not before the first try
+
+
+def test_a_read_timeout_is_retried(monkeypatch, no_sleep):
+    monkeypatch.setattr(
+        llm.urllib.request,
+        "urlopen",
+        _urlopen_raising([TimeoutError("read timed out")], _reply("שלום")),
+    )
+    assert _complete({}, None).text == "שלום"
+
+
+def test_a_bad_request_is_not_retried(monkeypatch, no_sleep):
+    """400 means the body is wrong. Asking again just asks wrongly again.
+
+    This is the half that matters for cost and for latency: a schema Google
+    rejects would otherwise be sent three times per call, on every call.
+    """
+    monkeypatch.setattr(
+        llm.urllib.request,
+        "urlopen",
+        _urlopen_raising([_http_error(400)], _reply("שלום")),
+    )
+    with pytest.raises(llm.urllib.error.HTTPError):
+        _complete({}, None)
+    assert no_sleep == []
+
+
+def test_an_unauthorised_key_is_not_retried(monkeypatch, no_sleep):
+    monkeypatch.setattr(
+        llm.urllib.request,
+        "urlopen",
+        _urlopen_raising([_http_error(403)], _reply("שלום")),
+    )
+    with pytest.raises(llm.urllib.error.HTTPError):
+        _complete({}, None)
+    assert no_sleep == []
+
+
+def test_it_gives_up_and_reports_the_last_failure(monkeypatch, no_sleep):
+    """The caller has a working fallback; waiting out an outage helps nobody."""
+    errors = [_http_error(503) for _ in range(llm._GEMINI_ATTEMPTS)]
+    monkeypatch.setattr(
+        llm.urllib.request, "urlopen", _urlopen_raising(errors, _reply("שלום"))
+    )
+    with pytest.raises(llm.urllib.error.HTTPError) as caught:
+        _complete({}, None)
+    assert caught.value.code == 503
+    assert len(no_sleep) == llm._GEMINI_ATTEMPTS - 1
+
+
+def test_the_backoff_is_jittered(monkeypatch, no_sleep):
+    """One key, many bots, one fixed worker tick.
+
+    A fixed backoff would re-align every retry into the same thundering herd
+    the retry exists to survive, so two runs must not sleep identically.
+    """
+    runs = []
+    for _ in range(6):
+        # A fresh queue per run: one shared queue drains on the first run and
+        # every later run would succeed immediately.
+        monkeypatch.setattr(
+            llm.urllib.request,
+            "urlopen",
+            _urlopen_raising(
+                [_http_error(503) for _ in range(llm._GEMINI_ATTEMPTS)], _reply("x")
+            ),
+        )
+        no_sleep.clear()
+        with pytest.raises(llm.urllib.error.HTTPError):
+            _complete({}, None)
+        runs.append(tuple(no_sleep))
+    assert len(set(runs)) > 1
+    assert all(d <= llm._GEMINI_BACKOFF_CAP_SECONDS * 1.5 for run in runs for d in run)
+
+
+# --- the thinking dial --------------------------------------------------------
+#
+# Gemini 3.x charges thinking against maxOutputTokens, so this is not a latency
+# tweak. A filing asks for a schema inside the same budget the thinking is
+# eating, and a model left on its own default returns JSON cut mid-string.
+
+
+def test_the_effort_dial_becomes_the_thinking_level(captured):
+    """`effort_for()` already returns Gemini's own vocabulary.
+
+    "low" for court chatter, "medium" for the tasks worth thinking about - the
+    dial was being handed to this function and thrown away.
+    """
+    _complete(captured, _reply("שלום"), effort="medium")
+    assert captured["body"]["generationConfig"]["thinkingConfig"] == {
+        "thinkingLevel": "medium"
+    }
+
+
+def test_the_thinking_level_is_nested_where_google_wants_it(captured):
+    """`generationConfig.thinkingLevel` is rejected with "Unknown name".
+
+    Measured against the live API, in both spellings of the flat form. It
+    belongs under `thinkingConfig`, and a regression here is a 400 per call.
+    """
+    _complete(captured, _reply("שלום"), effort="low")
+    config = captured["body"]["generationConfig"]
+    assert "thinkingLevel" not in config
+    assert config["thinkingConfig"]["thinkingLevel"] == "low"
+
+
+def test_an_unknown_effort_falls_back_rather_than_being_sent(captured):
+    """A value Google does not know is a 400, and 400 is deliberately not
+    retried. If the two vocabularies ever drift, the cost should be duller
+    thinking rather than a dead provider.
+    """
+    _complete(captured, _reply("שלום"), effort="exhaustive")
+    assert captured["body"]["generationConfig"]["thinkingConfig"] == {
+        "thinkingLevel": llm._GEMINI_DEFAULT_THINKING
+    }
+
+
+def test_every_effort_the_task_table_can_produce_is_valid():
+    """The two vocabularies agree today; this is what notices if they stop."""
+    efforts = {*llm._EFFORT_BY_TASK.values(), llm._DEFAULT_EFFORT}
+    for effort in efforts:
+        assert effort in llm._GEMINI_THINKING_LEVELS, effort
