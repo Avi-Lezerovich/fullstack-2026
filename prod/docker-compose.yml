@@ -68,7 +68,7 @@ x-brain-env: &brain-env
   LLM_MODEL: ${LLM_MODEL:-}
   LLM_API_KEY: ${LLM_API_KEY:-}
   # Only the gateway provider reads this - it is the one provider that cannot
-  # know its own URL. Harmless and ignored for the other two.
+  # know its own URL. Harmless and ignored for the other three.
   LLM_ENDPOINT: ${LLM_ENDPOINT:-}
   LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-}
   # With LLM_PROVIDER=bedrock the SDK reads credentials from the standard AWS

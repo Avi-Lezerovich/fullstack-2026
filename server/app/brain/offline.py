@@ -137,6 +137,31 @@ def trim(text: str, max_chars: int) -> str:
     return text or "אין לי מה להוסיף."
 
 
+# A safety valve, not a style control - the difference matters. Length here is
+# the model's business: STYLE_RULES asks for "short, but not always the same
+# length" and `pick_angle` hands every call one of LENGTHS, which ranges from
+# "four words, that is all" to "one long winding sentence". A hard cut on top
+# of that does not shorten anything the character wanted to say; it lops the
+# end off whatever it did say, mid-word, and glues on an ellipsis.
+#
+# What remains is protection against pathology - a model that loops, or ignores
+# the brief entirely - at a ceiling far above anything any angle asks for. The
+# database needs none of it: `comments.body` and `cases.body` are TEXT, and
+# every VARCHAR that holds generated text (a filing's title and defendant, an
+# episode summary) does its own slicing at the point of insert.
+SAFETY_CEILING_CHARS = 2000
+
+
+def tidy(text: str) -> str:
+    """Clean up a model's answer without imposing a length on it.
+
+    The whitespace normalisation is kept - the model is writing a line to be
+    spoken in a courtroom, not a document, and STYLE_RULES already forbids the
+    headings and bullets that a newline would be serving.
+    """
+    return trim(text, SAFETY_CEILING_CHARS)
+
+
 def generate(
     personality_prompt: str,
     task: str,

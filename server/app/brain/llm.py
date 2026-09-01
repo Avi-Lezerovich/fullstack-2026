@@ -493,9 +493,14 @@ def _max_tokens_for(max_chars: int) -> int:
     blocks come back empty, `generate` raises "empty completion", and the reply
     is written by the offline stenographer instead. Nothing logs an error; the
     site just quietly goes clerical. The floor is what fixes it. Output is
-    billed on what
-    is actually generated and `trim()` still enforces the real length, so the
-    headroom costs nothing when it is not used.
+    billed on what is actually generated, so the headroom costs nothing when it
+    is not used.
+
+    Note what this is NOT, since the name invites the confusion: `max_chars`
+    is a token budget, not a length the answer is cut to. Nothing trims a
+    model's answer to it any more - see `offline.tidy`. It exists so the model
+    is never cut off mid-sentence by a ceiling it could not see, which makes
+    erring generously the whole point.
     """
     return max(2048, max_chars * 2)
 
@@ -739,6 +744,133 @@ def _complete_gateway(
     return Completion(text=_strip_fence(text) if output_format is not None else text)
 
 
+# --- Google Gemini ------------------------------------------------------------
+
+_GEMINI_HOST = "https://generativelanguage.googleapis.com/v1beta"
+
+# Gemini's `responseSchema` is an OpenAPI subset, not full JSON Schema. It
+# rejects the keywords below outright with a 400, so they are dropped on the
+# way in rather than being discovered in production: `additionalProperties` is
+# the one that matters, because LAWSUIT_SCHEMA sets it and every filing would
+# fail without this.
+_GEMINI_SCHEMA_DROP = frozenset({"additionalProperties", "$schema", "definitions", "$defs"})
+
+# Anthropic says "assistant", Gemini says "model". The only role that differs.
+_GEMINI_ROLES = {"assistant": "model", "user": "user", "model": "model"}
+
+
+def _gemini_schema(node: Any) -> Any:
+    """A JSON Schema, minus the keywords Gemini's validator refuses."""
+    if isinstance(node, dict):
+        return {
+            key: _gemini_schema(value)
+            for key, value in node.items()
+            if key not in _GEMINI_SCHEMA_DROP
+        }
+    if isinstance(node, list):
+        return [_gemini_schema(item) for item in node]
+    return node
+
+
+def _complete_gemini(
+    system: list[dict[str, Any]],
+    messages: list[dict[str, str]],
+    *,
+    model: str,
+    max_tokens: int,
+    effort: str,
+    output_format: dict[str, Any] | None = None,
+    stream: bool = False,
+) -> Completion:
+    """Google's Gemini over plain HTTP - no SDK, and a real schema.
+
+    This is the provider for a box with no AWS identity that still needs
+    structured output, which is exactly the gap the gateway leaves. Gemini
+    enforces `responseSchema` server-side the way Bedrock does, so filings,
+    juror votes and memory rewrites are all routed here - see `capabilities()`.
+
+    Written against `urllib` on purpose. The one thing this needs that the
+    gateway does not is a schema, and that is a field in a JSON body rather
+    than an SDK feature, so a dependency would buy nothing and would have to be
+    installed in an image that currently ships without it.
+
+    Three deliberate differences from the SDK providers:
+
+    * **The key travels in a header, not the query string.** Google documents
+      `?key=`, which puts a live credential into every proxy log and crash
+      report between here and them. `x-goog-api-key` is equally supported and
+      is the only responsible choice.
+    * **No prompt caching.** Gemini's implicit cache needs no breakpoints, so
+      the ordered blocks are simply concatenated. Nothing is lost that this
+      provider could have expressed; the usage counters come back zero, which
+      is honest rather than a silent zero.
+    * **`stream` is accepted and ignored.** It exists on the SDK path so a slow
+      filing does not trip the HTTP timeout. Flash models answer a filing in a
+      couple of seconds against a 60s timeout, so the streaming endpoint would
+      add SSE parsing to buy nothing. If a slower Gemini model is ever
+      configured here, this is the first thing to revisit.
+    """
+    settings = get_settings()
+    if not settings.llm_api_key:
+        raise ValueError("LLM_API_KEY is required by the gemini provider")
+
+    body: dict[str, Any] = {
+        "systemInstruction": {"parts": [{"text": _flatten_system(system)}]},
+        "contents": [
+            {
+                "role": _GEMINI_ROLES.get(message["role"], "user"),
+                "parts": [{"text": message["content"]}],
+            }
+            for message in messages
+        ],
+        "generationConfig": {"maxOutputTokens": max_tokens},
+    }
+    if output_format is not None:
+        body["generationConfig"]["responseMimeType"] = "application/json"
+        body["generationConfig"]["responseSchema"] = _gemini_schema(
+            output_format.get("schema", {})
+        )
+
+    request = urllib.request.Request(
+        f"{_GEMINI_HOST}/models/{model}:generateContent",
+        data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "x-goog-api-key": settings.llm_api_key,
+        },
+    )
+    with urllib.request.urlopen(request, timeout=settings.llm_timeout_seconds) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+
+    # A blocked prompt comes back 200 with no candidates at all. Saying so
+    # beats "empty completion from gemini", which would send the caller looking
+    # for a network fault that is not there.
+    blocked = (payload.get("promptFeedback") or {}).get("blockReason")
+    if blocked:
+        raise ValueError(f"gemini blocked the prompt ({blocked})")
+
+    candidates = payload.get("candidates") or []
+    if not candidates:
+        raise ValueError("no candidates from gemini")
+
+    candidate = candidates[0]
+    # MAX_TOKENS on a schema call means truncated JSON, which json.loads would
+    # reject a moment later with a parse error that names the wrong culprit.
+    finish = candidate.get("finishReason", "")
+    if finish and finish not in ("STOP", "MAX_TOKENS"):
+        raise ValueError(f"gemini stopped early ({finish})")
+
+    text = "".join(
+        part.get("text", "")
+        for part in ((candidate.get("content") or {}).get("parts") or [])
+    ).strip()
+    if not text:
+        raise ValueError(f"empty completion from gemini ({finish or 'no reason given'})")
+
+    return Completion(text=text)
+
+
 def _output_config(effort: str, output_format: dict[str, Any] | None) -> dict[str, Any]:
     """`effort` always, `format` only when a task needs parseable output."""
     config: dict[str, Any] = {"effort": effort}
@@ -811,6 +943,16 @@ PROVIDERS: dict[str, Provider] = {
         complete=_complete_anthropic,
         is_configured=lambda settings: bool(settings.llm_api_key),
         default_model="claude-opus-5",
+        capabilities=SDK_CAPABILITIES,
+    ),
+    "gemini": Provider(
+        complete=_complete_gemini,
+        # One key, one host - Google needs no region and no endpoint of its own.
+        is_configured=lambda settings: bool(settings.llm_api_key),
+        # Flash is the point of this provider: a real schema on a free tier
+        # that allows roughly 1,500 requests a day, which is several times what
+        # this site actually spends.
+        default_model="gemini-3.7-flash",
         capabilities=SDK_CAPABILITIES,
     ),
     "gateway": Provider(
