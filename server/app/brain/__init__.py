@@ -8,6 +8,10 @@ can see.
     provider credentialed      ->  LLM_PROVIDER (bedrock by default), falling
                                    back to offline on ANY error
 
+One caller opts out of that fallback: `invent_lawsuit(..., require_llm=True)`
+returns None rather than an offline filing, because a case is a permanent
+public row and the offline path has twelve fixed defendants. See its docstring.
+
 `generate()` never raises and never returns an empty string. That is a
 deliberate contract: a juror is in the middle of a database transaction when
 this is called, and a failed API request must not roll back a trial.
@@ -165,8 +169,20 @@ def invent_lawsuit(
     personality_prompt: str,
     seed_extra: str = "",
     target: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+    *,
+    require_llm: bool = False,
+) -> dict[str, Any] | None:
     """A complete filing for a bot acting on its own initiative.
+
+    `require_llm=True` turns the usual fall-back-to-offline contract off for
+    this one call: when the model is not configured, or the call fails, the
+    answer is None and **no filing is invented at all**. Every other task in
+    this module still fails open, because a juror who says nothing stalls a
+    trial - but a case is a permanent row on the public feed, and the offline
+    generator draws its defendants from a fixed list of twelve. A backend
+    outage that lasts an afternoon therefore does not degrade the feed, it
+    fills it with the same lawsuit over and over, under different names. The
+    caller skips its turn instead.
 
     The live model writes these when it can. That is a change of mind from the
     original design, which kept filings offline because "free-form model output
@@ -180,8 +196,8 @@ def invent_lawsuit(
     enforced in the worker, against the database, because only there is there
     anything to check a name against.
 
-    Every field is validated before it can reach an INSERT, and anything
-    malformed falls back to the offline filing.
+    Every field is validated before it can reach an INSERT; anything malformed
+    is a failed call, and lands wherever this call's `require_llm` says.
     """
     settings = get_settings()
 
@@ -194,7 +210,16 @@ def invent_lawsuit(
             return filing
         except Exception as exc:
             LAST_CALL.record_llm_failure(exc)
+            if require_llm:
+                log.warning("LLM filing failed; no case filed", exc_info=True)
+                return None
             log.warning("LLM filing failed; using the offline generator", exc_info=True)
+    elif require_llm:
+        # Not an error and not worth a warning on every tick: the whole
+        # application is designed to run with nothing configured.
+        LAST_CALL.record_offline()
+        log.info("no LLM backend configured; no case filed")
+        return None
 
     return offline.invent_lawsuit(personality_prompt, seed_extra, target)
 
