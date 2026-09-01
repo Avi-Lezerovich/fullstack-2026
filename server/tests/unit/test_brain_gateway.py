@@ -51,15 +51,48 @@ def _configured(monkeypatch):
     monkeypatch.setenv("BRAIN_FORCE_OFFLINE", "0")
 
 
-def _complete(captured, reply, messages=None, **kwargs):
+def _complete(captured, reply, messages=None, system=None, **kwargs):
     captured["reply"] = reply
     return llm._complete_gateway(
-        "SYSTEM-MARKER",
+        system or [{"type": "text", "text": "SYSTEM-MARKER"}],
         messages or [{"role": "user", "content": "PROMPT-MARKER"}],
         model="",
         max_tokens=512,
+        effort="low",
         **kwargs,
-    )
+    ).text
+
+
+# --- what this provider can and cannot do -----------------------------------
+#
+# These limits were always real; what is new is that they are DECLARED. The
+# gateway used to be handed a JSON schema it had no way to enforce, and the
+# answer came back looking like every other answer - so a suggestion that
+# happened to parse was indistinguishable from a guarantee.
+
+
+def test_the_limits_are_declared_rather_than_discovered():
+    """Only the one that routing branches on is a field.
+
+    The endpoint also has no system turn and no cache breakpoints. Both are
+    documented in `_complete_gateway` and neither is a flag, because neither
+    changes what anything DOES - folding turns into a transcript and ignoring a
+    breakpoint both produce a correct answer, just a worse or dearer one. An
+    enforced schema is the one limit where the honest response is to not ask.
+    """
+    assert llm.capabilities().structured_output is False
+
+
+def test_the_cache_blocks_collapse_instead_of_being_dropped():
+    """No breakpoints to place here - but every block still has to arrive.
+
+    Silently sending only the first block would cost the character sheet, and
+    the symptom (a generic assistant answering in Hebrew) looks like a prompt
+    problem rather than a provider one.
+    """
+    folded = llm._flatten_system(llm.build_system("CHARACTER-MARKER"))
+    assert "CHARACTER-MARKER" in folded
+    assert llm.SYSTEM_PREAMBLE.split("\n")[0] in folded
 
 
 # --- the credential check ---------------------------------------------------

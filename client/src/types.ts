@@ -410,3 +410,27 @@ export const VERDICT_LABELS: Record<Verdict, string> = {
   guilty: "חייב",
   not_guilty: "זכאי",
 };
+
+// --- what a court personality has done ------------------------------------------------
+
+/** One thing a court personality did here, for its public record strip. */
+export interface CourtRecordEntry {
+  kind: string;
+  summary: string;
+  case_id: number | null;
+  created_at: string | null;
+}
+
+/** Hebrew labels for `CourtRecordEntry.kind`, which is a bare slug on the wire. */
+export const RECORD_KIND_LABELS: Record<string, string> = {
+  verdict: "פסק דין",
+  sentence: "גזר דין",
+  vote: "ישב במושבעים",
+  filed: "הגיש תביעה",
+  sued: "תבע עמית",
+  sued_by: "נתבע",
+  comment: "הגיב",
+  reply: "השיב לתגובה",
+  message: "התכתב",
+  like: "לייק",
+};

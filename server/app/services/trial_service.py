@@ -36,6 +36,7 @@ from . import (
     agents_service,
     comments_service,
     jury_service,
+    memory_service,
     notifications_service,
     summons_service,
 )
@@ -58,11 +59,21 @@ def due_cases(status: str, limit: int = 20, conn: Db | None = None) -> list[dict
         )
 
 
-def _case_context(case: dict[str, Any], db) -> dict[str, Any]:
+def _case_context(
+    case: dict[str, Any], db, agent_user_id: int | None = None
+) -> dict[str, Any]:
     """The flat, JSON-serialisable dict the brain is given.
 
     Flat because the offline generator hashes it for its seed, and a nested
     structure would make that hash depend on formatting rather than content.
+
+    `agent_user_id` adds the speaker's own history to it. Without it a juror
+    arrives at every trial having never been to one: it cannot know that it
+    convicted this plaintiff last month, that it has sat on four cases about
+    the same defendant, or that it argued the opposite position on Tuesday.
+    Twenty jurors with no past are twenty interchangeable jurors, whatever
+    their character sheets say - which is the failure this whole layer exists
+    to fix. Omitted for anything not spoken by a specific personality.
     """
     charges = [
         row["charge"]
@@ -84,10 +95,12 @@ def _case_context(case: dict[str, Any], db) -> dict[str, Any]:
     # deliberation is a conversation, and this is the only thing that made it
     # readable as one.
     #
-    # It moves with the trial, so a juror's *text* is no longer byte-identical
-    # across a retry. The juror's VOTE still is - decide_vote reads only the
-    # charges and the testimony counts - and the vote is the part the engine
-    # stores, tallies and turns into a verdict.
+    # It moves with the trial, so a juror's text is not byte-identical across
+    # a replay. Neither is its vote any more - `brain.deliberate` lets the
+    # model decide, and the model is reading this. What the engine relies on is
+    # not reproducibility but atomicity: the vote and the comment commit
+    # together, so a retry finds the work done rather than redoing it
+    # differently. See speak_as_juror.
     said_so_far = [
         f"{row['personality_name'] or row['name']}: {row['body'][:200]}"
         for row in db.query_all(
@@ -104,7 +117,7 @@ def _case_context(case: dict[str, Any], db) -> dict[str, Any]:
     )
     counts = summons_service.counts_by_side(case["id"], conn=db.db)
 
-    return {
+    context = {
         "case_id": case["id"],
         "case_title": case["title"],
         "case_body": (case["body"] or "")[:600],
@@ -117,6 +130,18 @@ def _case_context(case: dict[str, Any], db) -> dict[str, Any]:
         "testimony_for": counts[summons_service.DEFENSE],
         "testimony_against": counts[summons_service.PLAINTIFF],
     }
+
+    if agent_user_id is not None:
+        record = memory_service.recall_for_agent(
+            agent_user_id,
+            case_id=int(case["id"]),
+            subject_user_id=int(case["author_id"]),
+            conn=db.db,
+        )
+        if record:
+            context["your_record"] = record
+
+    return context
 
 
 # --- witness phase -> jury deliberation -------------------------------------
@@ -187,6 +212,23 @@ def speak_as_juror(member: dict[str, Any], conn: Db | None = None) -> str:
     makes a second vote impossible. Neither relies on the other, so a crash
     between the two recovers cleanly: the retry finds the existing comment and
     finishes the vote.
+
+    **The vote now comes out of the same act as the speech.** It used to be a
+    seeded dice roll made beside the text and never shown to it, so a juror
+    could deliver a devastating case for acquittal and be counted as
+    convicting - the argument in the room and the number in the tally were two
+    unrelated events that happened to concern the same trial.
+    `brain.deliberate` returns both from one structured call, with `vote` a
+    schema-enforced enum. That is not "parsing a decision out of prose", which
+    `decide.py` was right to refuse; the enum is exactly as parseable as the
+    dice roll was, and it is the same turn that wrote the argument.
+
+    What it costs is reproducibility: a juror's vote is no longer derivable
+    from (case, juror) alone. The idempotency above never depended on that.
+    Vote and comment commit in one transaction, so a retry either finds the
+    work already done - the dedupe key and the `spoke_at` guard both hold - or
+    redoes all of it, having published nothing in between. `decide.decide_vote`
+    still decides when no model can, and stays reproducible there.
     """
     settings = get_settings()
     with owned(conn) as db:
@@ -195,18 +237,17 @@ def speak_as_juror(member: dict[str, Any], conn: Db | None = None) -> str:
         if case is None or agent is None:
             return "not_found"
 
-        context = _case_context(case, db)
+        context = _case_context(case, db, agent_user_id=member["juror_user_id"])
 
-        # The vote is decided, not parsed out of the text. Both are seeded from
-        # the same inputs, so a retry reaches the same conclusion.
-        vote = decide.decide_vote(
+        spoken = brain.deliberate(
+            agent["personality_prompt"],
+            context,
             guilt_bias=float(agent["guilt_bias"]),
             case_id=case["id"],
             juror_user_id=member["juror_user_id"],
             salt=settings.jury_seed_salt,
-            context=context,
         )
-        text = brain.generate(agent["personality_prompt"], "jury_deliberation", context)
+        vote, text = spoken["vote"], spoken["line"]
 
         result, comment_id = comments_service.create_comment(
             case["id"],
@@ -233,6 +274,27 @@ def speak_as_juror(member: dict[str, Any], conn: Db | None = None) -> str:
             return result
 
         recorded = jury_service.record_speech(member["id"], vote, comment_id, conn=db.db)
+
+        # The juror's own memory of having sat here. Keyed on the panel member
+        # rather than on (case, juror) so it inherits the engine's existing
+        # idempotency exactly: one seat, one episode, however many times the
+        # tick is retried.
+        #
+        # Only on a real "ok" - `already_done` means another worker got here
+        # first and has already written its own copy, and `vote` in that branch
+        # is this worker's discarded opinion, not the one on the record.
+        if recorded == "ok":
+            memory_service.record_event(
+                member["juror_user_id"],
+                "vote",
+                f"ישבת כמושבע ב\"{case['title']}\" נגד {case['defendant_text']}, "
+                f"והצבעת {'להרשיע' if vote == decide.GUILTY else 'לזכות'}.",
+                case_id=case["id"],
+                subject_user_id=case["author_id"],
+                dedupe_key=f"vote:{member['id']}",
+                conn=db.db,
+            )
+
         db.commit_if_owned()
         return recorded
 
@@ -241,7 +303,23 @@ def speak_as_juror(member: dict[str, Any], conn: Db | None = None) -> str:
 
 
 def advance_to_verdict(case_id: int, conn: Db | None = None) -> str:
-    """Tally the jury and let the judge rule."""
+    """Tally the jury and let the judge rule.
+
+    **A finished trial does not replay to the same text any more, and the
+    status guard is what makes that safe.** The judge is now given its own
+    episode log, which grows as it rules - so rewinding `cases.status` by hand
+    and calling this again produces a *different* sentence, while
+    `comments.dedupe_key` keeps the originally published verdict comment in
+    place. The row and the comment would then disagree about the sentence.
+
+    A retry cannot reach that state: the `WHERE status = 'jury_deliberation'`
+    guard below matches nothing the second time, and the whole thing commits or
+    rolls back as one transaction, so there is no half-finished verdict to
+    resume from. It is worth writing down because the previous design WAS
+    replayable - the offline generator is a pure function of its context, and
+    the context used to hold nothing that changed - and somebody rewinding a
+    case to debug it will otherwise be very surprised by what comes out.
+    """
     with owned(conn) as db:
         case = db.query_one("SELECT * FROM cases WHERE id = %s FOR UPDATE", (case_id,))
         if case is None:
@@ -265,7 +343,7 @@ def advance_to_verdict(case_id: int, conn: Db | None = None) -> str:
 
         verdict, tiebreak_used = jury_service.tally(guilty, not_guilty, judge_lean)
 
-        context = _case_context(case, db)
+        context = _case_context(case, db, agent_user_id=panel["judge_user_id"])
         context.update(
             {"verdict": verdict, "tally_guilty": guilty, "tally_not_guilty": not_guilty}
         )
@@ -302,6 +380,22 @@ def advance_to_verdict(case_id: int, conn: Db | None = None) -> str:
         )
         if moved.rowcount != 1:
             return "already_done"
+
+        # After the guarded UPDATE, not before: this is the judge remembering
+        # a verdict that has actually been entered. Writing it above would let
+        # a worker that lost the race remember handing down a ruling that
+        # another worker delivered.
+        memory_service.record_event(
+            panel["judge_user_id"],
+            "verdict",
+            f"פסקת ב\"{case['title']}\" נגד {case['defendant_text']}: "
+            f"{'הרשעה' if verdict == decide.GUILTY else 'זיכוי'}, {guilty} מול {not_guilty}."
+            + (f" גזרת: {sentence_text[:120]}" if sentence_text else ""),
+            case_id=case_id,
+            subject_user_id=case["author_id"],
+            dedupe_key=f"verdict:{case_id}",
+            conn=db.db,
+        )
 
         _notify_verdict(db, case, verdict, sentence_text, comment_id)
         db.commit_if_owned()

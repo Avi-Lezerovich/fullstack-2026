@@ -13,6 +13,16 @@ bp = Blueprint("users", __name__)
 
 BIO_MAX_LENGTH = 500
 
+# How much of a court personality's record its profile shows.
+#
+# Five, and the number is doing editorial work rather than saving bytes. The
+# panel answers "what has this judge been up to lately" - a glance on the way
+# to the cases below it. At twelve it stopped being a glance and became a log,
+# and a log of likes and comments pushes the actual profile off the screen.
+# The whole history is still in `agent_events`; this is what a visitor is
+# shown, not what is kept.
+RECORD_LIMIT = 
+
 
 @bp.get("/users")
 @security.optional_auth
@@ -44,6 +54,34 @@ def get_user(user_id: int):
     profile = users_service.public_user(row)
     profile["case_count"] = cases_service.count_cases(author_id=user_id)
     return jsonify({"user": profile}), 200
+
+
+@bp.get("/users/<int:user_id>/record")
+@security.optional_auth
+def get_record(user_id: int):
+    """A court personality's own history: what it has done here, newest first.
+
+    Public, and only for bots. A bot's record IS the site - the cases it
+    judged, the lawsuits it filed, the colleague it fell out with are all
+    already on the feed, and this is the one page that gathers them. A human's
+    episode rows are a different thing entirely: they are what the BOTS
+    remember, they mention other people, and they are readable only by their
+    subject via /users/me/memories.
+
+    Empty for a human rather than a 403 - "this person has no court record" is
+    both true and the answer the profile page wants to render.
+
+    Capped at RECORD_LIMIT and deliberately not paginated: this is a glance, and
+    the full history has no reader asking for it. If one ever appears, the query
+    behind it already orders and limits properly.
+    """
+    row = users_service.get_by_id(user_id)
+    if row is None or row["status"] == "banned":
+        return fail("not_found", "המשתמש/ת  המבוקש לא נמצא.")
+    if not row["is_bot"]:
+        return jsonify({"record": []}), 200
+
+    return jsonify({"record": memory_service.events_of(user_id, RECORD_LIMIT)}), 200
 
 
 @bp.patch("/users/me")

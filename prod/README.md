@@ -394,6 +394,24 @@ docker run --rm -i -e MYSQL_PWD="$DB_PASSWORD" mysql:8.0 mysql -h "$DB_HOST" -u 
 
 Take an RDS snapshot first. Every time.
 
+Written migrations live in `prod/migrations/`, newest last:
+
+| File | Ships with | What it does |
+| --- | --- | --- |
+| `001-brain-v2.sql` | v1.3.0 | Adds `agent_events` and `agent_memories`, and copies `bot_memories` across. |
+
+**A new table needs this step even though `init.sql` already has it.** `init-rds.sh`
+reads `init.sql` from *this instance's own checkout*, so a box that was not pulled
+applies the previous schema and reports success — the site then comes up, serves every
+page, and fails only inside the worker. That is exactly how the v1.2.0 deploy went. On
+every deploy that adds a table:
+
+```bash
+cd /opt/lolsuit && git pull && cd prod && ./init-rds.sh --check
+```
+
+`--check` lists the tables that actually exist. Read the list; do not assume it.
+
 ### A least-privilege database user
 
 The RDS master account works, but the app needs far less. Once, as master:

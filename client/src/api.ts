@@ -16,6 +16,7 @@ import type {
   Comment,
   Conversation,
   CourtAgent,
+  CourtRecordEntry,
   FlaggedItem,
   MeResponse,
   Message,
@@ -364,3 +365,12 @@ export interface HealthResponse {
 }
 
 export const fetchHealth = () => request<HealthResponse>("/health");
+
+// --- what a court personality has done --------------------------------------
+//
+// The other side of this - what the bots remember about a PERSON - has server
+// endpoints (`/users/me/memories`, GET and DELETE) and deliberately no client
+// call: nothing in the UI shows somebody their own file. See CourtRecord.tsx.
+
+export const fetchCourtRecord = (userId: number) =>
+  request<{ record: CourtRecordEntry[] }>(`/users/${userId}/record`).then((r) => r.record);

@@ -141,10 +141,20 @@ def _periodic_tasks(number: int) -> list[tuple[str, int, Callable[[], int]]]:
             lambda: social_tasks.one_bot_social_action(number),
         )
     )
-    # Answering a direct message is reactive, not initiative, so it is not
-    # paced by `last_social_action_at` the way the feed activity is - a bot
-    # that has just liked something should still answer you.
+    # Answering is reactive, not initiative, so neither of these is paced by
+    # `last_social_action_at` the way the feed activity is - a bot that has
+    # just liked something should still answer you.
     tasks.append(("bot_replies", settings.social_every_ticks, social_tasks.reply_to_messages))
+    # The public half of the same idea: somebody replied to a bot's comment on
+    # a case. Before this, that reply went nowhere - the bots argued in public
+    # and were mute the moment anybody argued back.
+    tasks.append(
+        (
+            "comment_replies",
+            settings.social_every_ticks,
+            social_tasks.reply_to_comment_replies,
+        )
+    )
     # Rare on purpose: nothing here is time-critical, and a DELETE across the
     # authentication tables has no business running every few seconds.
     tasks.append(
