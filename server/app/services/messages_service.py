@@ -178,6 +178,28 @@ def list_conversations(user_id: int, conn: Db | None = None) -> list[dict[str, A
     ]
 
 
+def recent_messages(
+    conversation_id: int, *, limit: int = 20, conn: Db | None = None
+) -> list[dict[str, Any]]:
+    """The last `limit` messages, oldest first. No participant check.
+
+    `thread()` is the reader for a *person* and answers None for anybody who is
+    not in the conversation. This one is for the bot that is already in it, and
+    it is deliberately a different function rather than a flag: the window is
+    taken from the END of the thread (the last N messages, then re-ordered),
+    where thread() takes the first N from the start. Handing the bot the
+    opening of a long correspondence and calling it "recent" is exactly the
+    bug this is here to avoid.
+    """
+    with owned(conn) as db:
+        rows = db.query_all(
+            "SELECT id, sender_id, body, created_at FROM messages "
+            "WHERE conversation_id = %s ORDER BY id DESC LIMIT %s",
+            (conversation_id, int(limit)),
+        )
+    return list(reversed(rows))
+
+
 def is_participant(conversation_id: int, user_id: int, conn: Db | None = None) -> bool:
     with owned(conn) as db:
         return (

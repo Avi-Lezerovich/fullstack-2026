@@ -51,10 +51,14 @@ def _configured(monkeypatch):
     monkeypatch.setenv("BRAIN_FORCE_OFFLINE", "0")
 
 
-def _complete(captured, reply, **kwargs):
+def _complete(captured, reply, messages=None, **kwargs):
     captured["reply"] = reply
     return llm._complete_gateway(
-        "SYSTEM-MARKER", "PROMPT-MARKER", model="", max_tokens=512, **kwargs
+        "SYSTEM-MARKER",
+        messages or [{"role": "user", "content": "PROMPT-MARKER"}],
+        model="",
+        max_tokens=512,
+        **kwargs,
     )
 
 
@@ -128,3 +132,36 @@ def test_fence_is_stripped_when_a_schema_was_requested(captured):
 def test_fence_is_left_alone_when_no_schema_was_requested(captured):
     """Only the JSON path has a fence to remove; prose keeps its backticks."""
     assert _complete(captured, {"text": FENCED}) == FENCED
+
+
+# --- the transcript ---------------------------------------------------------
+#
+# Every other provider is handed real conversation turns. This one has a single
+# `prompt` field, so the turns have to be rendered into it - and if that
+# rendering silently dropped the earlier ones, the bot would look exactly as
+# amnesiac as it did before the conversation existed.
+
+
+def test_a_single_turn_is_sent_verbatim(captured):
+    """The non-conversational tasks must be byte-identical to before turns."""
+    _complete(captured, {"text": "ok"})
+    assert captured["prompt"] == "SYSTEM-MARKER\n\nPROMPT-MARKER"
+
+
+def test_every_turn_reaches_the_endpoint(captured):
+    _complete(
+        captured,
+        {"text": "ok"},
+        messages=[
+            {"role": "user", "content": "FIRST-HUMAN"},
+            {"role": "assistant", "content": "MY-OWN-ANSWER"},
+            {"role": "user", "content": "LATEST-HUMAN"},
+        ],
+    )
+    prompt = captured["prompt"]
+    for marker in ("FIRST-HUMAN", "MY-OWN-ANSWER", "LATEST-HUMAN"):
+        assert marker in prompt
+    # In order, and attributed - a transcript whose sides are indistinguishable
+    # is worse than no transcript.
+    assert prompt.index("FIRST-HUMAN") < prompt.index("LATEST-HUMAN")
+    assert "אתה: MY-OWN-ANSWER" in prompt

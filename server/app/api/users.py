@@ -6,7 +6,7 @@ from flask import Blueprint, g, jsonify, request
 
 from .. import security
 from ..errors import fail
-from ..services import cases_service, users_service
+from ..services import cases_service, memory_service, users_service
 from ..validation import body_of, clean, name_problem, positive_int
 
 bp = Blueprint("users", __name__)
@@ -59,3 +59,30 @@ def update_me():
 
     users_service.update_profile(g.user_id, name=name, bio=bio, avatar_url=avatar_url)
     return jsonify({"user": users_service.private_user(users_service.get_by_id(g.user_id))}), 200
+
+
+# --- what the court remembers about you -------------------------------------
+#
+# The bots keep a short written memory of each person they correspond with, so
+# a conversation picks up where it left off instead of restarting every time.
+# Anything a site stores about somebody, that person gets to read and to
+# delete - these two endpoints are that, and they are deliberately scoped to
+# `me`: one user's memory is never another user's business.
+
+
+@bp.get("/users/me/memories")
+@security.require_auth
+def my_memories():
+    return jsonify({"memories": memory_service.memories_of(g.user_id)}), 200
+
+
+@bp.delete("/users/me/memories")
+@security.require_auth
+def forget_me():
+    """Make every bot forget you.
+
+    Not a deletion of the conversation - the messages are still there, and both
+    sides can still read them. This clears only the written summaries, so the
+    bots stop bringing up what you told them last month.
+    """
+    return jsonify({"forgotten": memory_service.forget(g.user_id)}), 200
