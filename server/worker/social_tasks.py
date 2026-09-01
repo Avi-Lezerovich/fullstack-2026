@@ -347,7 +347,18 @@ def _file_case(db, bot, tick: int) -> bool:
     seed_extra = f"{bot['user_id']}:{tick}"
     target = _lawsuit_target(db, bot, tick, random.Random(seed_extra))
 
-    filing = brain.invent_lawsuit(bot["personality_prompt"], seed_extra, target)
+    # No model, no filing. Everything else a bot does degrades gracefully to the
+    # offline generator, but a case is permanent and public, and the offline
+    # filing draws from twelve fixed defendants - so an outage would not make
+    # the feed a little duller, it would fill it with the same lawsuit. The bot
+    # still gets stamped as having taken its turn by the caller, so a dead
+    # backend costs the court nothing except the cases it would have invented.
+    filing = brain.invent_lawsuit(
+        bot["personality_prompt"], seed_extra, target, require_llm=True
+    )
+    if filing is None:
+        log.info("%s skipped filing: no live model to write it", bot["personality_name"])
+        return False
 
     if _names_a_registered_human(db, filing["defendant_text"]):
         log.warning(
