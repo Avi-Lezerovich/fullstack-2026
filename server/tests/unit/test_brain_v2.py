@@ -20,7 +20,7 @@ from types import SimpleNamespace
 import pytest
 
 from app import brain
-from app.brain import llm
+from app.brain import llm, offline
 from app.services import memory_service
 
 PERSONALITY = "שופט קפדן שסופר פסיקים."
@@ -409,3 +409,50 @@ def test_the_house_style_bans_the_openings_that_actually_recur():
     """
     for opener in ("ובכן", "אם כן", "ראשית כול", "יש לציין כי"):
         assert opener in llm.STYLE_RULES, opener
+
+
+# --- how long an answer runs is the character's business ----------------------
+#
+# `max_chars` used to be two things wearing one name: a token budget for the
+# request, and a hard cut applied to whatever came back. The cut is gone. The
+# feed's variety comes from `pick_angle` handing each call one of LENGTHS -
+# anything from "four words, that is all" to "one long winding sentence" - and
+# a mechanical cut does not shorten what a character wanted to say, it lops the
+# end off what it did say and glues on an ellipsis.
+
+
+def test_a_live_answer_is_not_cut_to_the_callers_budget(capable):
+    """The caller's 240 is a token budget now, not a pair of scissors."""
+    long_answer = "מילה " * 200  # ~1000 characters, far past the old cut
+    capable(_FakeProvider(long_answer.strip()))
+
+    spoken = brain.generate(PERSONALITY, "bot_comment", CASE, max_chars=240)
+
+    assert len(spoken) > 240
+    assert not spoken.endswith("…")
+
+
+def test_a_runaway_answer_is_still_stopped(capable):
+    """The ceiling is a safety valve, not a style control.
+
+    A model that loops should not be able to write a novel into a feed row, but
+    the limit sits far above anything any angle in LENGTHS asks for, so it
+    never fires on a healthy call.
+    """
+    capable(_FakeProvider("א" * 9000))
+
+    spoken = brain.generate(PERSONALITY, "bot_comment", CASE, max_chars=240)
+
+    assert len(spoken) <= offline.SAFETY_CEILING_CHARS + 1  # +1 for the ellipsis
+
+
+def test_a_juror_line_is_not_cut_either(capable):
+    """Deliberation went through the same cut, with the same cost."""
+    line = "וזאת בדיוק הנקודה. " * 40
+    capable(_FakeProvider(json.dumps({"vote": "guilty", "line": line.strip()})))
+
+    spoken = brain.deliberate(
+        PERSONALITY, CASE, guilt_bias=0.5, case_id=1, juror_user_id=2
+    )
+
+    assert len(spoken["line"]) > offline.DEFAULT_MAX_CHARS

@@ -337,3 +337,39 @@ def test_the_pools_stay_large_enough_after_disqualification():
     judges = sum(1 for a in ALL_AGENTS if a["role"] == "judge")
     assert jurors - 2 >= 7
     assert judges - 2 >= 1
+
+
+# --- tidy: cleaning up an answer without imposing a length on it -------------
+
+
+def test_tidy_does_not_impose_a_length():
+    """The whole point of the function: length is the model's decision."""
+    long_answer = "מילה " * 200
+    assert len(offline.tidy(long_answer)) > offline.DEFAULT_MAX_CHARS
+
+
+def test_tidy_still_stops_a_runaway():
+    tidied = offline.tidy("א" * 9000)
+    assert len(tidied) <= offline.SAFETY_CEILING_CHARS + 1
+    assert tidied.endswith("…")
+
+
+def test_tidy_normalises_whitespace():
+    """A line to be spoken in a courtroom, not a document with paragraphs."""
+    assert offline.tidy("שורה\n\n   אחרת") == "שורה אחרת"
+
+
+def test_tidy_never_returns_empty():
+    assert offline.tidy("")
+    assert offline.tidy("   \n  ")
+
+
+def test_the_offline_generator_still_honours_its_own_length():
+    """`trim` is unchanged - the templates still need it.
+
+    Only live answers stopped being cut. An offline line is assembled from
+    fixed templates whose length the caller genuinely does control, so the two
+    functions are not redundant: they encode different intentions.
+    """
+    line = offline.generate("דמות", "bot_comment", {"title": "תיק"}, max_chars=80)
+    assert len(line) <= 81

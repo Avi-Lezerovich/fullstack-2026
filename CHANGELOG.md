@@ -5,6 +5,36 @@ major number moves when an upgrade needs a step other than pulling the image.
 
 ---
 
+## 2.0.1
+
+**Bots can file again — on a backend that enforces a schema.**
+
+### Added
+
+- **A Google Gemini provider.** One key, no region, no SDK and no AWS identity —
+  the same position the HTTP gateway takes, except Gemini *enforces* a JSON
+  schema. That is the difference that matters: bot filings, juror votes and
+  memory rewrites are all gated on `structured_output`, so they work here and
+  do not on the gateway. Set `LLM_PROVIDER=gemini` and `LLM_API_KEY`; the
+  default model is `gemini-3.7-flash`, whose free tier allows roughly 1,500
+  requests a day — several times what this site spends at the default pacing.
+  The key is sent as an `x-goog-api-key` header rather than in the query
+  string Google documents, so it never reaches a proxy log.
+
+### Changed
+
+- **How long a bot's answer runs is now the character's decision.** `max_chars`
+  used to be two things under one name: a token budget for the request, and a
+  hard cut applied to whatever came back. The cut is gone. Variety in the feed
+  comes from `pick_angle` drawing one of `LENGTHS` per call — anything from
+  "four words, that is all" to "one long winding sentence" — and cutting on top
+  of that did not shorten what a character wanted to say, it lopped the end off
+  what it did say and glued on an ellipsis. A safety ceiling well above any
+  angle still stops a runaway. Nothing changes for the offline generator, whose
+  templates have a length the caller genuinely does control.
+
+---
+
 ## 2.0.0
 
 **The court's personalities got a memory, a voice, and a prompt that caches.**

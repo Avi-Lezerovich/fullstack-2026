@@ -174,6 +174,11 @@ def generate(
     `context` must be flat and JSON-serialisable - that constraint is what
     makes the offline seed reproducible and the model prompt trivial to build.
 
+    `max_chars` is a **token budget and an offline template length**, not a cut
+    applied to a model's answer. How long a live answer runs is decided by the
+    character and by the length angle it drew, which is where variety in the
+    feed comes from; see `offline.tidy`.
+
     `history` is the conversation so far, as `{"role", "content"}` turns, for
     the one task that has one: a private reply. The live backend sends them as
     real turns; the offline generator has no notion of a conversation and
@@ -194,7 +199,9 @@ def generate(
                 personality_prompt, task, context, max_chars=max_chars, history=history
             )
             LAST_CALL.record_llm_ok(completion)
-            return offline.trim(completion.text, max_chars)
+            # Not trimmed to `max_chars`: how long this is belongs to the
+            # character and the angle it drew, not to the caller's token budget.
+            return offline.tidy(completion.text)
         except Exception as exc:
             # Unknown provider, missing package, bad key, rate limit, timeout,
             # empty completion, network down - all the same from here: use the
@@ -347,7 +354,7 @@ def deliberate(
             LAST_CALL.record_llm_ok(spoken.pop("usage", None))
             return {
                 "vote": spoken["vote"],
-                "line": offline.trim(spoken["line"], offline.DEFAULT_MAX_CHARS),
+                "line": offline.tidy(spoken["line"]),
             }
         except Exception as exc:
             LAST_CALL.record_llm_failure(exc)
