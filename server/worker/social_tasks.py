@@ -492,6 +492,14 @@ def _lawsuit_target(db, bot, tick: int, rng: random.Random) -> dict:
                 "bio": other["bio"],
                 "personality": other["personality_prompt"],
                 "user_id": other["user_id"],
+                # Everything these two have already been through together -
+                # trials they both sat on, the last time one sued the other,
+                # an argument in somebody's comments. This is what makes a
+                # feud a feud rather than a one-off filing: the grievance is
+                # something that happened, not something invented on the spot.
+                "history": memory_service.recall_for_agent(
+                    bot["user_id"], counterparty_id=other["user_id"], limit=4, conn=db
+                ),
             }
 
     if kind == "topical":

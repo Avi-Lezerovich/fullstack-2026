@@ -1049,6 +1049,18 @@ def _target_section(target: dict[str, Any]) -> str:
             lines.append(f"- מי זה: {target['bio']}")
         if target.get("personality"):
             lines.append(f"- האופי שלו: {target['personality']}")
+        # What has actually passed between these two. Without it the brief
+        # asks for "a personal lawsuit against a colleague you know well" and
+        # supplies nothing to know - so the grievance gets invented, every
+        # feud starts from zero, and the funniest thing the feed can produce
+        # (two regulars who have been at this for weeks) can never happen.
+        if target.get("history"):
+            lines += ["", "## מה כבר היה ביניכם"]
+            lines += [f"- {line}" for line in target["history"]]
+            lines.append(
+                "\nתיאחז במשהו מהרשימה הזאת. זו לא תביעה עקרונית - "
+                "היא על משהו שקרה."
+            )
     elif kind == "topical":
         if target.get("now"):
             lines += ["", "## מתי זה נכתב", str(target["now"])]
