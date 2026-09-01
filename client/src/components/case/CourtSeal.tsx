@@ -66,25 +66,43 @@ const CourtSeal = ({ status, variant = "card" }: Props) => {
       data-variant={variant}
       sx={{
         position: "absolute",
-        // A LOGICAL property, not `left` or `right`, and that is the point:
-        // this app renders RTL, and the physical ones are not reliable here -
-        // measured, `right: -6` landed on the visual right inside a card and on
-        // the visual left elsewhere, because whether stylis-plugin-rtl mirrors
-        // a given declaration is not a thing to guess at per call site.
-        // `inset-inline-end` is the end of the reading direction by definition:
-        // the visual left on a Hebrew page, which is the side with the space,
-        // and still correct if any of this is ever rendered LTR.
-        insetInlineEnd: page ? { xs: -8, sm: 8 } : -6,
-        top: page ? { xs: -12, sm: -18 } : -10,
-        // Big enough to read as a seal. The mark carries text on two arcs, and
-        // much below this it turns into grey noise - at which point it reads as
-        // a stray icon and the "this case is finished" signal is gone.
-        width: page ? { xs: 132, sm: 190 } : { xs: 72, sm: 96 },
-        height: "auto",
+        // --- placement ------------------------------------------------------
+        //
+        // The two variants are placed by different mechanisms on purpose.
+        //
+        // `card` is centred across the whole card, the way a stamp lands on a
+        // document that has already been filled in. `inset: 0` plus
+        // `margin: auto` is what centres it, and it is chosen over the usual
+        // `top/left: 50%` + `translate(-50%, -50%)` for a specific reason: this
+        // app renders RTL through stylis-plugin-rtl, which mirrors physical
+        // offsets, and a mirrored `left: 50%` against an unmirrored translate
+        // puts the stamp anywhere but the middle. Zero on all four sides is
+        // symmetric, so there is nothing left to mirror.
+        //
+        // `page` is tucked into the corner beside the heading, where the space
+        // actually is. `inset-inline-end` is the end of the reading direction
+        // by definition - the visual left on a Hebrew page - and stays correct
+        // if any of this is ever rendered LTR, which `right` would not.
+        ...(page
+          ? { insetInlineEnd: { xs: -8, sm: 8 }, top: { xs: -12, sm: -18 } }
+          : { inset: 0, margin: "auto" }),
+
+        // --- size -----------------------------------------------------------
+        //
+        // The card seal is nearly as tall as the card. That is the whole
+        // gesture: a small mark in a corner reads as a badge, and there is
+        // already a badge. Something pressed across the entire card reads as
+        // the court having closed the file.
+        width: page ? { xs: 132, sm: 190 } : { xs: 168, sm: 228 },
+        height: page ? "auto" : { xs: 168, sm: 228 },
+
         // A stamp is never quite straight; a perfectly upright one reads as a
         // logo. Enough to be felt, not enough to look like a rendering bug.
         transform: "rotate(-8deg)",
-        opacity: page ? 0.42 : 0.38,
+        // The card seal lies directly across the title and the body text, so it
+        // is fainter than the page one, which mostly sits in empty space. Ink
+        // that hides the filing is worse than no seal.
+        opacity: page ? 0.42 : 0.14,
         mixBlendMode: "multiply",
         // It lies across a heading and two links. Never eat their clicks.
         pointerEvents: "none",
