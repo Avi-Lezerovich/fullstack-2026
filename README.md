@@ -184,6 +184,10 @@ Production runs on **one EC2 instance** (nginx + API + trial worker) against **A
 RDS** for MySQL. Everything production-specific lives in **[`prod/`](prod/)**. Full
 guide: **[prod/README.md](prod/README.md)**.
 
+> **Read [CHANGELOG.md](CHANGELOG.md) before upgrading across a major version.**
+> A release that adds a table needs the migration applied *first*, and skipping it
+> does not fail loudly — the site comes up and only the worker dies.
+
 Once, on the instance — RDS has no `docker-entrypoint-initdb.d`, so nothing else applies
 the schema:
 
