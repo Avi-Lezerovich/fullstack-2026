@@ -773,6 +773,61 @@ _GEMINI_RETRY_STATUS = frozenset({408, 429, 500, 502, 503, 504})
 _GEMINI_ATTEMPTS = 3
 _GEMINI_BACKOFF_CAP_SECONDS = 4.0
 
+# Gemini 3.x thinks before it answers, and - exactly as the Messages API does -
+# it charges those thinking tokens against `maxOutputTokens`. Left at the
+# model's own default the bill is steep and mostly invisible. Measured against
+# gemini-3-flash-preview with one short Hebrew sentence:
+#
+#     default (high)                 15.7s    429 thinking tokens
+#     thinkingConfig.thinkingLevel    8.4s    477
+#     thinkingConfig.thinkingBudget   1.0s      0
+#
+# Latency is the smaller half. The larger half is that a filing asks for a
+# schema inside the SAME token budget the thinking is eating, so a model left
+# on `high` spends the budget reasoning and returns JSON cut mid-string - which
+# arrives here as a JSONDecodeError and reads as a model that cannot follow a
+# schema rather than one that was never given room to finish.
+#
+# `effort_for()` already returns exactly Gemini's vocabulary - "low" for court
+# chatter, "medium" for the tasks worth thinking about - so the dial this
+# module was already being handed simply had to be passed on. Note the nesting:
+# `generationConfig.thinkingLevel` is rejected with "Unknown name", it belongs
+# under `thinkingConfig`.
+#
+# This is a Gemini 3.x field. A 2.x model configured here would reject it, and
+# would do so as a 400, which is deliberately not retried - it fails fast and
+# lands in LAST_CALL rather than being quietly swallowed three times over.
+_GEMINI_THINKING_LEVELS = frozenset({"minimal", "low", "medium", "high"})
+_GEMINI_DEFAULT_THINKING = "low"
+
+# Headroom ON TOP of the text budget, not a cap on thinking. Setting the level
+# alone is not enough, and the measurements say why - a filing with a 2048
+# budget, twice in five attempts:
+#
+#     no thinkingConfig   think=1963  finish=MAX_TOKENS  JSON cut at char 148
+#     thinkingLevel=med   think=1962  finish=MAX_TOKENS  JSON cut at char 161
+#     thinkingLevel=med   think= 883  finish=STOP        505 characters, fine
+#     thinkingLevel=low   think=   0  finish=STOP        721 characters, fine
+#
+# Thinking is variable and it is charged against the same counter as the
+# answer, so a budget sized for the text alone is one the model can spend
+# entirely on reasoning before writing a single character. "medium" is what
+# `effort_for` returns for a filing - the task that most needs the room and is
+# least able to survive losing it, since a truncated schema is a failed call
+# rather than a shorter answer.
+#
+# Generous on purpose: output is billed on what is generated, so unused
+# headroom costs nothing, while too little costs the whole call.
+#
+# Sized for the TAIL, not the average, because thinking is wildly variable.
+# Six filings at "medium" on one run spent 1140, 1305, 2785, 4104 and 4912
+# tokens thinking. A headroom of 3072 covered the middle of that spread and
+# still lost the call that wanted 4912 - so the number below is not "what a
+# filing usually needs", it is "what the greediest one observed needed, with
+# room to spare". Averages are the wrong statistic for a budget whose only
+# failure mode is running out.
+_GEMINI_THINKING_HEADROOM = {"minimal": 0, "low": 512, "medium": 8192, "high": 12288}
+
 
 def _gemini_post(request: urllib.request.Request, timeout: float) -> dict[str, Any]:
     """POST with backoff on the failures that are Google being busy.
@@ -858,6 +913,8 @@ def _complete_gemini(
     if not settings.llm_api_key:
         raise ValueError("LLM_API_KEY is required by the gemini provider")
 
+    level = effort if effort in _GEMINI_THINKING_LEVELS else _GEMINI_DEFAULT_THINKING
+
     body: dict[str, Any] = {
         "systemInstruction": {"parts": [{"text": _flatten_system(system)}]},
         "contents": [
@@ -867,7 +924,10 @@ def _complete_gemini(
             }
             for message in messages
         ],
-        "generationConfig": {"maxOutputTokens": max_tokens},
+        "generationConfig": {
+            "maxOutputTokens": max_tokens + _GEMINI_THINKING_HEADROOM[level],
+            "thinkingConfig": {"thinkingLevel": level},
+        },
     }
     if output_format is not None:
         body["generationConfig"]["responseMimeType"] = "application/json"
@@ -898,11 +958,23 @@ def _complete_gemini(
         raise ValueError("no candidates from gemini")
 
     candidate = candidates[0]
-    # MAX_TOKENS on a schema call means truncated JSON, which json.loads would
-    # reject a moment later with a parse error that names the wrong culprit.
     finish = candidate.get("finishReason", "")
     if finish and finish not in ("STOP", "MAX_TOKENS"):
         raise ValueError(f"gemini stopped early ({finish})")
+
+    # MAX_TOKENS plus a schema means JSON cut mid-string. Letting that reach
+    # json.loads produces "Unterminated string starting at char 148", which
+    # reads as a model that cannot follow a schema - the wrong culprit, and one
+    # that sends you looking at the prompt instead of at the budget. Thinking
+    # is charged against this same counter and is what usually eats it, so say
+    # that here, where the numbers to say it with are still in scope.
+    if finish == "MAX_TOKENS" and output_format is not None:
+        thoughts = (payload.get("usageMetadata") or {}).get("thoughtsTokenCount", 0)
+        raise ValueError(
+            f"gemini ran out of output budget before finishing the schema "
+            f"(limit {body['generationConfig']['maxOutputTokens']}, "
+            f"{thoughts} of it spent thinking at level {level!r})"
+        )
 
     text = "".join(
         part.get("text", "")
