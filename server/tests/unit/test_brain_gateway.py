@@ -51,15 +51,43 @@ def _configured(monkeypatch):
     monkeypatch.setenv("BRAIN_FORCE_OFFLINE", "0")
 
 
-def _complete(captured, reply, messages=None, **kwargs):
+def _complete(captured, reply, messages=None, system=None, **kwargs):
     captured["reply"] = reply
     return llm._complete_gateway(
-        "SYSTEM-MARKER",
+        system or [{"type": "text", "text": "SYSTEM-MARKER"}],
         messages or [{"role": "user", "content": "PROMPT-MARKER"}],
         model="",
         max_tokens=512,
+        effort="low",
         **kwargs,
-    )
+    ).text
+
+
+# --- what this provider can and cannot do -----------------------------------
+#
+# These limits were always real; what is new is that they are DECLARED. The
+# gateway used to be handed a JSON schema it had no way to enforce, and the
+# answer came back looking like every other answer - so a suggestion that
+# happened to parse was indistinguishable from a guarantee.
+
+
+def test_the_limits_are_declared_rather_than_discovered():
+    caps = llm.capabilities()
+    assert caps.structured_output is False
+    assert caps.system_turn is False
+    assert caps.caching is False
+
+
+def test_the_cache_blocks_collapse_instead_of_being_dropped():
+    """No breakpoints to place here - but every block still has to arrive.
+
+    Silently sending only the first block would cost the character sheet, and
+    the symptom (a generic assistant answering in Hebrew) looks like a prompt
+    problem rather than a provider one.
+    """
+    folded = llm._flatten_system(llm.build_system("CHARACTER-MARKER"))
+    assert "CHARACTER-MARKER" in folded
+    assert llm.SYSTEM_PREAMBLE.split("\n")[0] in folded
 
 
 # --- the credential check ---------------------------------------------------

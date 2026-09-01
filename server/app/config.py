@@ -98,6 +98,7 @@ class Settings:
     aws_region: str
     topical_subjects: tuple[str, ...]
     brain_force_offline: bool
+    brain_cache_ttl: str
 
     # --- uploads ---
     upload_dir: str
@@ -179,7 +180,21 @@ def get_settings() -> Settings:
         llm_endpoint=_str("LLM_ENDPOINT", ""),
         # Empty means "whatever brain/llm.py defaults this provider to".
         llm_model=_str("LLM_MODEL", ""),
-        llm_timeout_seconds=_int("LLM_TIMEOUT_SECONDS", 10),
+        # 60 seconds, not 10.
+        #
+        # Ten was chosen when the brain sent a one-shot prompt and got a
+        # sentence back. Current models think before they answer - adaptive
+        # thinking is on, and it should be - and a juror weighing a case
+        # regularly runs past ten seconds. Every one of those calls raised a
+        # timeout, landed in the `except` in brain/__init__.py, and produced a
+        # perfectly plausible line from the phrase bank instead. Nothing broke;
+        # the court just quietly sounded canned, on the good path, with
+        # credentials configured and /api/health reporting a working backend
+        # right up until the failure counter was read.
+        #
+        # The worker can afford to wait: it is not serving a request, and the
+        # tick it is inside is a background job by construction.
+        llm_timeout_seconds=_int("LLM_TIMEOUT_SECONDS", 60),
         # What the bots are allowed to consider "current". The clock gives
         # them the season and the day for free; this is the seam for
         # anything genuinely in the news, deliberately operator-set rather
@@ -189,6 +204,14 @@ def get_settings() -> Settings:
         # AWS_DEFAULT_REGION is boto3's spelling; accept either.
         aws_region=_str("AWS_REGION", "") or _str("AWS_DEFAULT_REGION", ""),
         brain_force_offline=_bool("BRAIN_FORCE_OFFLINE", False),
+        # How long a cached prompt prefix lives. "5m" or "1h", and 5m is right
+        # for a court that is doing anything at all: a cache read refreshes the
+        # timer for free, so continuous traffic keeps a 5-minute entry warm
+        # indefinitely, while the 1-hour entry costs twice as much to write.
+        # An hour only pays on a deployment with quiet stretches longer than
+        # five minutes - which is a thing to measure on /api/health's cache
+        # counters, not to guess at here.
+        brain_cache_ttl="1h" if _str("BRAIN_CACHE_TTL", "5m") == "1h" else "5m",
         # Where uploaded images land. A directory rather than object storage
         # because the compose stack mounts a volume over it; on EC2 the same
         # variable can point at a mounted EBS path.

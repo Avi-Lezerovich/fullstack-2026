@@ -1,4 +1,4 @@
-"""The deterministic offline generator - the default brain.
+"""The deterministic offline generator - the court stenographer.
 
 No API key, no network, no latency, and the same inputs always produce the same
 output. That last property is not a limitation, it is the point:
@@ -6,11 +6,34 @@ output. That last property is not a limitation, it is the point:
 * the trial engine can retry a crashed tick and reproduce the identical
   comment, so the dedupe key and the text agree;
 * tests can assert on real generated output instead of mocking it away;
-* the whole application runs and demonstrates fully with nothing configured.
+* the whole application runs and demonstrates fully with nothing configured -
+  which is a hard requirement, not a nicety.
 
-The seed is a hash of *all* the inputs, so a different personality or a
-different case gives different text, while the same pair gives the same text
-forever.
+The seed is a hash of *all* the inputs, so a different case gives different
+text, while the same case gives the same text forever.
+
+--- what this is NOT, deliberately -------------------------------------------
+
+It used to try to be the characters. Each personality carried a `[tone:x]`
+marker, and this module drew that tone's phrases from a twelve-bank corpus to
+produce something that read like a juror speaking.
+
+It read like a juror speaking for about a day. A phrase bank cannot read the
+case in front of it, so what it actually produced was a *register* - the same
+nine openings and six shapes, recombined, bolted onto whatever case came next.
+The failure mode was not "the fallback is a bit flat". It was that the site
+appeared to have twenty personalities who all said the same kind of thing, and
+no reader could tell that a fallback was involved at all. Shallow characters
+are a far worse outcome than obviously-absent ones.
+
+So this writes **the minute** instead: what was filed, what was heard, what was
+decided. Impersonal, clerical, correct, and unmistakably not a person talking.
+Nobody reads a docket entry and concludes the judge is boring.
+
+The practical consequence is that nothing here has to be good, so nothing here
+has to grow. `tone_of` is gone along with the banks it selected: the offline
+path no longer has a notion of who is speaking, because it no longer pretends
+to be them.
 """
 
 from __future__ import annotations
@@ -25,11 +48,7 @@ from . import corpus
 
 DEFAULT_MAX_CHARS = 400
 
-# Personalities carry their voice as a marker inside the prompt, because
-# generate() receives the prompt and nothing else about the speaker.
-_TONE_RE = re.compile(r"\[tone:([a-z_]+)\]")
 _SLOT_RE = re.compile(r"\{([a-z_]+)\}")
-FALLBACK_TONE = "deadpan"
 
 
 class _Blanks(dict):
@@ -41,13 +60,6 @@ class _Blanks(dict):
 
     def __missing__(self, key: str) -> str:  # pragma: no cover - trivial
         return ""
-
-
-def tone_of(personality_prompt: str) -> str:
-    """The [tone:x] marker, or a safe default."""
-    match = _TONE_RE.search(personality_prompt or "")
-    tone = match.group(1) if match else FALLBACK_TONE
-    return tone if tone in corpus.BANKS["opening"] else FALLBACK_TONE
 
 
 def slots_in(template: str) -> list[str]:
@@ -134,7 +146,6 @@ def generate(
 ) -> str:
     context = context or {}
     rng = random.Random(seed_for(personality_prompt, task, context))
-    tone = tone_of(personality_prompt)
 
     templates = corpus.TEMPLATES.get(task)
     if not templates:
@@ -142,16 +153,12 @@ def generate(
         # mid-trial is worse than a generic line.
         return trim(context.get("fallback") or "אין לי מה להוסיף.", max_chars)
 
+    # The personality still seeds the choice even though it no longer selects a
+    # voice: two jurors filing the same minute on the same case should not write
+    # a byte-identical line, or the deliberation reads as a copy-paste error
+    # rather than as a record of seven people.
     template = rng.choice(templates)
-    values = _context_values(context, rng)
-
-    for slot in slots_in(template):
-        if slot in values:
-            continue
-        bank = corpus.BANKS.get(slot, {}).get(tone)
-        values[slot] = rng.choice(bank) if bank else ""
-
-    return trim(_fill(template, values), max_chars)
+    return trim(_fill(template, _context_values(context, rng)), max_chars)
 
 
 def invent_lawsuit(

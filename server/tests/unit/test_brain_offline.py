@@ -12,11 +12,10 @@ from __future__ import annotations
 
 import pytest
 
-from app import seed_data
+from app import brain, seed_data
 from app.brain import corpus, decide, occasion, offline
 
 ALL_AGENTS = seed_data.all_agents()
-TONES_IN_USE = sorted({agent["tone_tag"] for agent in ALL_AGENTS})
 
 
 # --- the corpus is data, so its integrity has to be asserted ----------------
@@ -28,48 +27,80 @@ def test_every_task_has_templates(task):
 
 
 def test_every_template_slot_resolves():
-    """A typo in a template surfaces as a literal "{defendat}" in the UI."""
+    """A typo in a template surfaces as a literal "{defendat}" in the UI.
+
+    Sharper than it used to be: with the tone banks gone, every slot has to be
+    a CONTEXT slot, so this now says "the only variable parts of a minute come
+    from the case" rather than merely "this name is known somewhere".
+    """
     for task, templates in corpus.TEMPLATES.items():
         for template in templates:
             for slot in offline.slots_in(template):
-                assert slot in corpus.BANKS or slot in corpus.CONTEXT_SLOTS, (
+                assert slot in corpus.CONTEXT_SLOTS, (
                     f"template for {task!r} uses unknown slot {slot!r}"
                 )
 
 
-@pytest.mark.parametrize("tone", TONES_IN_USE)
-def test_every_tone_in_use_has_every_bank(tone):
-    """A tone missing one bank degrades to silence in that slot, not an error.
+def test_every_brain_task_can_be_written_offline():
+    """The zero-credential path must cover every task, not most of them.
 
-    `offline.generate` fills a missing bank with "" and carries on, so a judge
-    of an incomplete tone would deliver an empty ruling and nothing would say
-    why.
+    A task with no template falls through to "אין לי מה להוסיף", which is a
+    juror going silent in a trial that has to reach a verdict. `bot_comment_reply`
+    was added long after this file and would have been missed.
     """
-    for slot, banks in corpus.BANKS.items():
-        assert banks.get(tone), f"tone {tone!r} has no {slot!r} bank"
+    for task in brain.TASKS:
+        assert task in corpus.TEMPLATES, f"{task} has no offline minute"
 
 
-def test_no_bank_is_empty():
-    for slot, banks in corpus.BANKS.items():
-        for tone, phrases in banks.items():
-            assert phrases, f"{slot}/{tone} is empty"
+def test_the_stenographer_does_not_impersonate_anyone():
+    """The point of the rewrite, pinned.
+
+    Two personalities as unlike each other as this file contains, on one case,
+    must produce lines that read as the same clerk writing - not as two
+    characters. First person singular is the tell: a minute has no "I" in it,
+    and the moment one appears the fallback is auditioning again.
+    """
+    context = {"defendant": "המדפסת", "charges": ["גרימת עייפות"]}
+    for agent in ALL_AGENTS:
+        text = offline.generate(agent["personality_prompt"], "jury_deliberation", context)
+        for tell in ("אני ", "אני,", "שלי ", "תראו", "בימיי"):
+            assert tell not in text, (
+                f"the offline minute for {agent['personality_name']} reads as a "
+                f"person speaking, not as a record: {text!r}"
+            )
 
 
 # --- the cast ---------------------------------------------------------------
 
 
-def test_tone_marker_matches_the_declared_tone():
-    """`tone_tag` and the [tone:x] inside the prompt must agree.
+def test_every_personality_has_exemplars():
+    """Three lines the character actually said.
 
-    They are two copies of one fact - the column drives the UI badge, the
-    marker drives the phrase bank - so a mismatch shows one voice and writes
-    in another.
+    A described voice converges with every other voice fitting the description;
+    an exemplar does not. These are the whole of what makes two `pedantic`
+    jurors distinguishable at output number one hundred, and a personality
+    added without them regresses silently - it still works, it just sounds like
+    the others.
     """
     for agent in ALL_AGENTS:
-        assert offline.tone_of(agent["personality_prompt"]) == agent["tone_tag"], (
-            f"{agent['personality_name']} is tagged {agent['tone_tag']} "
-            f"but its prompt resolves to {offline.tone_of(agent['personality_prompt'])}"
+        prompt = agent["personality_prompt"]
+        assert "דברים שאמרת כאן בעבר" in prompt, (
+            f"{agent['personality_name']} has no exemplar lines"
         )
+        assert prompt.count('\n- "') >= 2, (
+            f"{agent['personality_name']} has fewer than two exemplars"
+        )
+
+
+def test_no_personality_still_carries_the_dead_tone_marker():
+    """`[tone:x]` selected a phrase bank that no longer exists.
+
+    Left in, it would ride along inside the cached character block on every
+    single call, meaning nothing and costing tokens - and the next reader would
+    spend an afternoon looking for what consumes it.
+    """
+    for agent in ALL_AGENTS:
+        assert "[tone:" not in agent["personality_prompt"], agent["personality_name"]
 
 
 def test_slugs_and_emails_are_unique():
@@ -125,16 +156,28 @@ def test_generation_is_deterministic():
     assert first == offline.generate(prompt, "jury_deliberation", context)
 
 
-def test_different_personalities_say_different_things():
-    """Two jurors on one case should not produce one sentence twice."""
+def test_a_seated_panel_does_not_read_as_a_stuck_printer():
+    """Seven jurors on one case must not file one line seven times.
+
+    The bar here is deliberately much lower than it used to be, and the change
+    is the point rather than a regression. The old assertion was "twenty jurors
+    produce twenty distinct sentences", which the phrase bank could meet
+    because it was pretending to be twenty people. A minute is not pretending:
+    the same clerical sentence recurring across cases is what a docket looks
+    like, and demanding otherwise is what pushed this file toward impersonation
+    in the first place.
+
+    What still has to hold is legibility. Seven identical consecutive lines
+    read as a bug in the site, not as a record - so a full panel gets checked,
+    at panel size, and nothing larger is claimed.
+    """
     context = {"defendant": "יום שני", "charges": ["הפרת שלווה"]}
+    jurors = [a for a in ALL_AGENTS if a["role"] == "juror"][:7]
     said = {
         offline.generate(a["personality_prompt"], "jury_deliberation", context)
-        for a in ALL_AGENTS
-        if a["role"] == "juror"
+        for a in jurors
     }
-    jurors = sum(1 for a in ALL_AGENTS if a["role"] == "juror")
-    assert len(said) >= jurors - 1
+    assert len(said) >= 4, said
 
 
 def test_trim_never_returns_empty():

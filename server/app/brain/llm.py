@@ -33,6 +33,29 @@ rejected outright, so variety cannot be bought with a dial.
 3. Every call draws a seeded ANGLE: one rhetorical move plus a length. It is
    seeded from the same hash the offline generator uses, so two jurors on one
    case pull different angles while a retried tick reproduces its own.
+4. The character sheet carries EXEMPLARS - a few lines this personality has
+   actually said. A description of a voice produces the average of every voice
+   that fits the description; two real lines produce that voice.
+
+--- on the shape of the request, which is a caching decision ------------------
+
+The system prompt is assembled as separate BLOCKS, ordered least-volatile
+first, with a cache breakpoint after each of the first two:
+
+    block 1   world + house style      identical for all 31 bots, every task
+    block 2   this character's sheet   per bot
+    block 3   the situation            per call, never cached
+
+That order is the whole point. The previous version put the character sheet
+*between* the two shared blocks, which reads well and means no two calls in the
+entire application ever shared a prefix - and prompt caching is a prefix match,
+so a single differing byte early invalidates everything after it. One trial is
+seven jurors plus a judge, each re-processing the same ~1.4k tokens of Hebrew
+from scratch.
+
+Block 2 still sits immediately before the situation, so the "be this person"
+instruction is the last thing read before the task - the property the old
+ordering was reaching for - and now a shared prefix exists as well.
 """
 
 from __future__ import annotations
@@ -41,7 +64,7 @@ import json
 import logging
 import random
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from ..config import get_settings
@@ -130,6 +153,18 @@ TASK_BRIEFS: dict[str, str] = {
         "ואתה עונה לו. **אל תחזור על מה שכבר נאמר**, ובמיוחד לא על מה שאתה "
         "עצמך כתב שם קודם."
     ),
+    # A human answered one of this bot's own comments, on a case, in public.
+    # Before this task existed the answer went nowhere: the bots argued in
+    # public and were mute the moment anybody argued back, which is the single
+    # most obvious way a personality stops reading as a personality.
+    "bot_comment_reply": (
+        "מישהו הגיב לתגובה שאתה עצמך כתבת על תיק, ואתה עונה לו - בפומבי, "
+        "מתחת לתיק, מול כל מי שקורא.\n\n"
+        "**זו לא הזדמנות לנאום.** ענה לו על מה שהוא אמר בפועל: תסכים, תתעקש, "
+        "תתקן אותו, או תודה שהוא צודק ותמשיך משם בכל זאת. משפט או שניים. "
+        "אתה כבר אמרת את דעתך פעם אחת - עכשיו אתה מדבר איתו, לא אל הקהל.\n\n"
+        "אם הוא צוחק עליך, זה בסדר גמור. תישאר הדמות שאתה."
+    ),
     "bot_reply": (
         "מישהו שלח לך הודעה פרטית ואתה עונה לו. זו שיחה בין שניים, לא הצהרה "
         "לפרוטוקול - תהיה ישיר, תתייחס למה שהוא כתב בפועל, ותישאר בדיוק אותה "
@@ -217,6 +252,19 @@ _CONTEXT_LABELS: tuple[tuple[str, str], ...] = (
     # --- what has already been said here ------------------------------------
     ("discussion", "מה כבר נכתב בתגובות"),
     ("you_already_said", "מה שאתה עצמך כבר כתבת שם"),
+    ("replying_to", "התגובה שאתה עונה לה"),
+    # Only ever present on the fallback path, where something other than the
+    # model chose the vote. Telling the juror which way it went is what stops
+    # the deliberation arguing against its own tally - see brain.deliberate.
+    ("your_vote", "לאן אתה נוטה בסופו של דבר"),
+    # --- your own past on this site -----------------------------------------
+    #
+    # The episodic layer: what this bot itself has done here. Read from
+    # `agent_events`, so it is a record rather than a recollection - a juror
+    # cannot misremember which way it voted.
+    ("your_record", "מה שאתה עצמך עשית כאן קודם"),
+    ("about_this_bot", "מי הדמות שמולך"),
+    ("with_this_bot", "ההיסטוריה שלך איתו"),
     # --- who you are talking to, and what you remember about them -----------
     #
     # These four are the memory. The first two are read live from the database
@@ -260,7 +308,7 @@ def build_prompt(task: str, context: dict[str, Any], angle: str = "") -> str:
             continue
         if isinstance(value, (list, tuple)):
             value = "; ".join(str(item) for item in value)
-        elif key == "verdict":
+        elif key in ("verdict", "your_vote"):
             # "guilty" in the middle of a Hebrew prompt is a seam showing.
             value = _VERDICT_WORDS.get(str(value), value)
         details.append(f"- {label}: {value}")
@@ -272,56 +320,192 @@ def build_prompt(task: str, context: dict[str, Any], angle: str = "") -> str:
     return "\n".join(lines)
 
 
-def build_system(personality_prompt: str) -> str:
-    """World, then character, then house style.
+# The shared half of the system prompt, frozen and identical for every bot and
+# every task. Built once at import: an f-string here, or a `datetime.now()`, or
+# anything else that varies would silently cost every cache read in the app.
+SHARED_SYSTEM = f"{SYSTEM_PREAMBLE}\n\n{STYLE_RULES}"
 
-    The character sits in the middle on purpose: it is the part the model
-    should weigh most heavily, and it reads as the answer to the world the
-    preamble just described.
+
+def _cache_control() -> dict[str, str]:
+    """The breakpoint marker, at the configured TTL.
+
+    A cache read refreshes the entry's timer for free, so the 5-minute default
+    stays warm indefinitely under continuous traffic and is strictly cheaper
+    than the 1-hour TTL (which costs 2x to write rather than 1.25x). An hour is
+    worth buying only for a court that is quiet for stretches longer than five
+    minutes - BRAIN_CACHE_TTL=1h, measured, not guessed.
     """
-    return "\n\n".join(
-        (SYSTEM_PREAMBLE, f"## מי אתה\n\n{personality_prompt.strip()}", STYLE_RULES)
-    )
+    ttl = get_settings().brain_cache_ttl
+    return {"type": "ephemeral"} if ttl == "5m" else {"type": "ephemeral", "ttl": ttl}
+
+
+def build_system(personality_prompt: str, situation: str = "") -> list[dict[str, Any]]:
+    """The system prompt as cache-ordered blocks. See the module docstring.
+
+    `situation` is used by the one task that cannot put its brief in a user
+    turn: a private reply, whose `messages` must be the real conversation. It
+    is appended as a third, deliberately UNCACHED block - it changes on every
+    message, and marking it would pay the write premium on bytes nothing ever
+    reads back.
+    """
+    blocks: list[dict[str, Any]] = [
+        {"type": "text", "text": SHARED_SYSTEM, "cache_control": _cache_control()},
+        {
+            "type": "text",
+            "text": f"## מי אתה\n\n{personality_prompt.strip()}",
+            "cache_control": _cache_control(),
+        },
+    ]
+    if situation:
+        blocks.append({"type": "text", "text": situation})
+    return blocks
 
 
 def _text_of(message: Any) -> str:
-    """The text blocks of a Messages response, concatenated."""
+    """The text blocks of a Messages response, concatenated.
+
+    Raises on a refusal rather than returning "". Current models answer a
+    declined request with HTTP 200, `stop_reason="refusal"` and NO text blocks,
+    so without this check a refusal is indistinguishable from a network blip:
+    both produce an empty string, both fall back to the offline generator, and
+    `LAST_CALL` reports "empty completion" for a call that was answered
+    perfectly clearly.
+    """
+    if getattr(message, "stop_reason", "") == "refusal":
+        details = getattr(message, "stop_details", None)
+        raise ValueError(f"refused ({getattr(details, 'category', None)})")
     return "".join(
         block.text for block in message.content if getattr(block, "type", "") == "text"
     ).strip()
 
 
-# Adaptive thinking with a low effort budget, rather than thinking disabled.
-# Disabling it on current models is the documented cause of two failure modes
-# (a tool call written into visible text, and leaked internal tags), and the
-# original reason for disabling it here - that thinking tokens would eat a tiny
-# max_tokens - is handled properly below by not setting a tiny max_tokens.
-# These are one-line quips: "low" is the right end of the effort range.
+# Adaptive thinking, rather than thinking disabled. Disabling it on current
+# models is the documented cause of two failure modes (a tool call written into
+# visible text, and leaked internal tags), and the original reason for disabling
+# it here - that thinking tokens would eat a tiny max_tokens - is handled below
+# by not setting a tiny max_tokens.
 _THINKING = {"type": "adaptive"}
-_EFFORT = "low"
+
+# Effort, pinned per task rather than per call.
+#
+# Most of what this court says is a one-line quip and "low" is the right end of
+# the range for those. The exceptions are the tasks with something to weigh: a
+# verdict has to land on the side the jury actually chose, a sentence has to be
+# inventable and specific, a filing has to hold together over three paragraphs,
+# and a memory has to be accurate about a real person.
+#
+# Pinned per task and never varied within one, because changing `effort`
+# invalidates the messages cache on every model and the system cache on some.
+# The tasks therefore cluster: seven jurors at "low" share a cache with each
+# other, and the judge's two calls at "medium" share with each other.
+_EFFORT_BY_TASK: dict[str, str] = {
+    "verdict": "medium",
+    "sentence": "medium",
+    "bot_lawsuit": "medium",
+    "draft_lawsuit": "medium",
+    # Not court speech at all, and the only task where being wrong is a claim
+    # about a real person rather than a duller joke.
+    "remember": "medium",
+}
+_DEFAULT_EFFORT = "low"
+
+
+def effort_for(task: str) -> str:
+    return _EFFORT_BY_TASK.get(task, _DEFAULT_EFFORT)
 
 
 def _max_tokens_for(max_chars: int) -> int:
-    """Token headroom for `max_chars` of Hebrew.
+    """Token headroom for `max_chars` of Hebrew, plus room to think.
 
-    The old formula was `max_chars // 2`, which assumed the ~4 chars/token of
-    English. Hebrew tokenises far worse - closer to one token per character -
-    so that formula was capping the model at roughly an eighth of the text it
-    was being asked for, and the completions came back truncated mid-sentence.
-    Doubling it and adding a floor costs nothing (output is billed on what is
-    actually generated, and `trim()` still enforces the real limit).
+    Two corrections live in this one line, and the second was invisible.
+
+    The first: `max_chars // 2` assumed the ~4 chars/token of English. Hebrew
+    tokenises far worse - closer to one token per character - so that formula
+    capped the model at roughly an eighth of the text it was asked for, and
+    completions came back cut mid-sentence.
+
+    The second: **thinking tokens are billed against max_tokens.** With
+    adaptive thinking on, the old floor of 512 had to cover the reasoning AND
+    the Hebrew for every 240-character task - every bot comment and every
+    private reply on the site. The model spends the budget thinking, the text
+    blocks come back empty, `generate` raises "empty completion", and the reply
+    is written by the phrase bank instead. Nothing logs an error; the site just
+    quietly sounds canned. The floor is what fixes it. Output is billed on what
+    is actually generated and `trim()` still enforces the real length, so the
+    headroom costs nothing when it is not used.
     """
-    return max(512, max_chars * 2)
+    return max(2048, max_chars * 2)
 
 
-def _complete_bedrock(
-    system: str,
+@dataclass(frozen=True)
+class Completion:
+    """What one call to a provider produced, and what it cost.
+
+    The usage counters are not bookkeeping for its own sake: prompt caching
+    fails *silently* - the requests keep succeeding and the bill is just higher
+    - so the only ground truth that the cache is working is
+    `cache_read_input_tokens`, and the only way it stays working is for
+    something to keep watching it. These flow up into brain.LAST_CALL and out
+    through /api/health.
+    """
+
+    text: str
+    cache_read: int = 0
+    cache_write: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+
+def _usage_of(message: Any, text: str) -> Completion:
+    usage = getattr(message, "usage", None)
+    return Completion(
+        text=text,
+        cache_read=int(getattr(usage, "cache_read_input_tokens", 0) or 0),
+        cache_write=int(getattr(usage, "cache_creation_input_tokens", 0) or 0),
+        input_tokens=int(getattr(usage, "input_tokens", 0) or 0),
+        output_tokens=int(getattr(usage, "output_tokens", 0) or 0),
+    )
+
+
+def _complete_sdk(
+    client: Any,
+    system: list[dict[str, Any]],
     messages: list[dict[str, str]],
     *,
     model: str,
     max_tokens: int,
-    output_format: dict[str, Any] | None = None,
-) -> str:
+    effort: str,
+    output_format: dict[str, Any] | None,
+    stream: bool,
+) -> Completion:
+    """One Messages request, for any client with the first-party surface.
+
+    Bedrock's Mantle client and the direct client differ only in construction,
+    so everything after that lives here rather than twice.
+
+    `stream` is not about showing anything to anybody - nothing here is
+    rendered token by token. It is there because the SDK's HTTP timeout applies
+    to the whole non-streaming request, and a filing asks for enough tokens
+    that a slow generation can trip it. Streaming and taking the final message
+    gets the same object without the ceiling.
+    """
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "thinking": _THINKING,
+        "output_config": _output_config(effort, output_format),
+        "system": system,
+        "messages": messages,
+    }
+    if stream:
+        with client.messages.stream(**kwargs) as response:
+            message = response.get_final_message()
+    else:
+        message = client.messages.create(**kwargs)
+    return _usage_of(message, _text_of(message))
+
+
+def _complete_bedrock(system, messages, **kwargs: Any) -> Completion:
     """Claude on Amazon Bedrock, via the SDK's Mantle (Messages API) client.
 
     Credentials come from the standard AWS chain - AWS_ACCESS_KEY_ID and
@@ -337,26 +521,10 @@ def _complete_bedrock(
         timeout=settings.llm_timeout_seconds,
         max_retries=1,
     )
-
-    message = client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        thinking=_THINKING,
-        output_config=_output_config(output_format),
-        system=system,
-        messages=messages,
-    )
-    return _text_of(message)
+    return _complete_sdk(client, system, messages, **kwargs)
 
 
-def _complete_anthropic(
-    system: str,
-    messages: list[dict[str, str]],
-    *,
-    model: str,
-    max_tokens: int,
-    output_format: dict[str, Any] | None = None,
-) -> str:
+def _complete_anthropic(system, messages, **kwargs: Any) -> Completion:
     """Claude on the direct Anthropic API, keyed by LLM_API_KEY."""
     import anthropic
 
@@ -366,16 +534,7 @@ def _complete_anthropic(
         timeout=settings.llm_timeout_seconds,
         max_retries=1,
     )
-
-    message = client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        thinking=_THINKING,
-        output_config=_output_config(output_format),
-        system=system,
-        messages=messages,
-    )
-    return _text_of(message)
+    return _complete_sdk(client, system, messages, **kwargs)
 
 
 # The keys a gateway might name its completion, best first. The endpoint this
@@ -406,6 +565,17 @@ def _flatten(messages: list[dict[str, str]]) -> str:
     )
 
 
+def _flatten_system(system: list[dict[str, Any]]) -> str:
+    """The cache-ordered blocks, back into the one string the gateway takes.
+
+    The blocks exist for a breakpoint the gateway has no way to express, so
+    here they are simply concatenated in the order they were built. Nothing is
+    lost except the caching - which is exactly what `Capabilities.caching`
+    says about this provider.
+    """
+    return "\n\n".join(block["text"] for block in system)
+
+
 def _strip_fence(text: str) -> str:
     """Drop a ```json ... ``` wrapper if the model added one.
 
@@ -422,13 +592,15 @@ def _strip_fence(text: str) -> str:
 
 
 def _complete_gateway(
-    system: str,
+    system: list[dict[str, Any]],
     messages: list[dict[str, str]],
     *,
     model: str,
     max_tokens: int,
+    effort: str,
     output_format: dict[str, Any] | None = None,
-) -> str:
+    stream: bool = False,
+) -> Completion:
     """Claude behind an HTTP endpoint that holds the real credentials for us.
 
     This is the provider for a deployment that has no AWS identity of its own.
@@ -438,11 +610,16 @@ def _complete_gateway(
     which is the entire appeal: it works from any box, including one with no
     instance role.
 
-    `model` and `max_tokens` are accepted to satisfy the provider signature and
-    then ignored, because the far side chooses both. That is a real limitation,
-    not an oversight - see the two below, which are the same shape.
+    Everything except `system` and `messages` is accepted to satisfy the
+    provider signature and then ignored, because the far side chooses all of
+    it. Those are real limitations, and they are now DECLARED rather than
+    worked around in silence - see `GATEWAY_CAPABILITIES` below and the router
+    in `brain/__init__.py`. The difference matters: previously this function
+    was handed a JSON schema it could not enforce and a conversation it could
+    not represent, and the caller had no way to know that what came back was a
+    degraded answer rather than a good one.
 
-    Two things the endpoint does not implement, worked around here:
+    What the endpoint does not implement:
 
     * **No system turn, and no turns at all.** It reads one `prompt` field and
       silently drops the rest. Passing the system prompt as its own key returns
@@ -454,20 +631,24 @@ def _complete_gateway(
       endpoint with one field.
     * **No structured output.** There is nowhere to put `output_config.format`,
       so a schema is demoted to an instruction in the prompt and the fence is
-      stripped off the answer. `invent_lawsuit` still validates what comes
-      back, and still raises into the offline fallback when it is wrong.
+      stripped off the answer. Tasks that need a schema to be *enforced* -
+      filings, votes, memory rewrites - are no longer routed here at all.
+    * **No prompt caching.** No breakpoints to place, so the blocks are simply
+      concatenated. Every call pays full price for the shared prefix.
     * **A hard output cap, and no way to raise it.** The far side stops at its
       own limit and ignores `max_tokens`, which in Hebrew - roughly a token per
       character - lands around 450 characters, a third of what the same cap
       buys in English. Short tasks never notice. A filing written at full
       length comes back cut mid-string and fails `json.loads`, so the schema
       instruction below also asks for a length that fits.
+
+    Usage counters come back empty, which is honest: there is nothing to count.
     """
     settings = get_settings()
     if not settings.llm_endpoint:
         raise ValueError("LLM_ENDPOINT is required by the gateway provider")
 
-    text_prompt = f"{system}\n\n{_flatten(messages)}"
+    text_prompt = f"{_flatten_system(system)}\n\n{_flatten(messages)}"
     if output_format is not None:
         schema = json.dumps(output_format.get("schema", {}), ensure_ascii=False)
         text_prompt += (
@@ -497,22 +678,56 @@ def _complete_gateway(
                 break
 
     text = text.strip()
-    return _strip_fence(text) if output_format is not None else text
+    return Completion(text=_strip_fence(text) if output_format is not None else text)
 
 
-def _output_config(output_format: dict[str, Any] | None) -> dict[str, Any]:
+def _output_config(effort: str, output_format: dict[str, Any] | None) -> dict[str, Any]:
     """`effort` always, `format` only when a task needs parseable output."""
-    config: dict[str, Any] = {"effort": _EFFORT}
+    config: dict[str, Any] = {"effort": effort}
     if output_format is not None:
         config["format"] = output_format
     return config
 
 
 @dataclass(frozen=True)
+class Capabilities:
+    """What a backend can actually do, as opposed to what it is asked to do.
+
+    This exists because of one specific bug shape. The gateway provider has
+    never supported structured output; it was nevertheless handed a JSON schema
+    and asked for a lawsuit. It answered - plausibly, in Hebrew, with a fence
+    around it and sometimes cut off mid-string - and every layer above treated
+    that as an ordinary result. When it parsed, a schema that was supposed to
+    be *enforced* had merely been *suggested*; when it did not, the failure was
+    logged as though the model had misbehaved rather than as a provider that
+    was never able to comply.
+
+    Declaring the limits lets `brain` route around them and say which one bit,
+    so a degraded backend looks degraded instead of looking like a bad model.
+    """
+
+    # Real `system` and `assistant` turns. Without it a conversation is a
+    # labelled transcript inside one string, and the character reads its own
+    # past lines as quotations rather than as its own voice.
+    system_turn: bool = True
+    # A schema the API enforces. Without it there is no such thing as a
+    # guaranteed-parseable answer, so no vote and no filing.
+    structured_output: bool = True
+    # Prompt-cache breakpoints. Without it every call pays full price.
+    caching: bool = True
+
+
+SDK_CAPABILITIES = Capabilities()
+GATEWAY_CAPABILITIES = Capabilities(
+    system_turn=False, structured_output=False, caching=False
+)
+
+
+@dataclass(frozen=True)
 class Provider:
     """One backend: how to call it, when it is usable, what it runs by default."""
 
-    complete: Callable[..., str]
+    complete: Callable[..., Completion]
     # Given a Settings, is this provider credentialed enough to be worth trying?
     # Cheap and local - a real check would mean a network round trip on every
     # health poll. Anything it cannot see (a missing SDK, an expired role, a
@@ -521,6 +736,7 @@ class Provider:
     is_configured: Callable[[Any], bool]
     # Bedrock namespaces its model ids; the direct API does not.
     default_model: str
+    capabilities: Capabilities = field(default_factory=Capabilities)
 
 
 PROVIDERS: dict[str, Provider] = {
@@ -528,11 +744,13 @@ PROVIDERS: dict[str, Provider] = {
         complete=_complete_bedrock,
         is_configured=lambda settings: bool(settings.aws_region),
         default_model="anthropic.claude-opus-5",
+        capabilities=SDK_CAPABILITIES,
     ),
     "anthropic": Provider(
         complete=_complete_anthropic,
         is_configured=lambda settings: bool(settings.llm_api_key),
         default_model="claude-opus-5",
+        capabilities=SDK_CAPABILITIES,
     ),
     "gateway": Provider(
         complete=_complete_gateway,
@@ -542,6 +760,7 @@ PROVIDERS: dict[str, Provider] = {
         ),
         # The endpoint picks the model, so there is no default to name here.
         default_model="",
+        capabilities=GATEWAY_CAPABILITIES,
     ),
 }
 
@@ -550,6 +769,17 @@ def is_configured(settings: Any) -> bool:
     """Whether the configured provider is set up enough to try at all."""
     provider = PROVIDERS.get(settings.llm_provider)
     return provider is not None and provider.is_configured(settings)
+
+
+def capabilities() -> Capabilities:
+    """What the configured provider can do. An unknown provider can do nothing.
+
+    Never raises: this is read on paths that only want to decide whether to
+    attempt something, and "no" is a complete answer for a misconfigured
+    LLM_PROVIDER. The call itself still raises loudly when it is actually made.
+    """
+    provider = PROVIDERS.get(get_settings().llm_provider)
+    return provider.capabilities if provider else Capabilities(False, False, False)
 
 
 def _provider_and_model(settings: Any) -> tuple[Provider, str]:
@@ -569,45 +799,171 @@ def generate(
     *,
     max_chars: int = 400,
     history: list[dict[str, str]] | None = None,
-) -> str:
+) -> Completion:
     """Ask the configured provider. Raises on any failure; the caller falls back.
 
     `history` turns this from a one-shot into a conversation. When it is given,
-    the brief and the context move into the **system** prompt and the messages
-    are the real exchange - the bot's own past lines arriving as `assistant`
-    turns, which is what stops it answering as though it had never met the
-    person. Without it nothing changes: one user turn, exactly as before.
+    the brief and the context move into the **system** prompt as a third,
+    uncached block and the messages are the real exchange - the bot's own past
+    lines arriving as `assistant` turns, which is what stops it answering as
+    though it had never met the person. Without it nothing changes: one user
+    turn, exactly as before.
 
     Putting the brief in the system prompt rather than appending it as a final
     user turn is what keeps the roles alternating, and it is also the honest
     shape: "you are this character, answering a private message, and here is
     what you know" is a standing instruction, not something the human said.
+
+    The situation goes in a **user turn** for every other task, and that is a
+    caching decision as much as a modelling one: it leaves the two system
+    blocks byte-identical across all 31 personalities and all nine tasks, which
+    is the entire shared prefix this application has.
     """
     settings = get_settings()
     provider, model = _provider_and_model(settings)
 
-    system = build_system(personality_prompt)
     prompt = build_prompt(task, context, pick_angle(personality_prompt, task, context))
 
     if history:
+        system = build_system(personality_prompt, situation=prompt)
         messages = list(history)
-        system = f"{system}\n\n---\n\n{prompt}"
     else:
+        system = build_system(personality_prompt)
         messages = [{"role": "user", "content": prompt}]
 
-    text = provider.complete(
+    completion = provider.complete(
         system,
         messages,
         model=model,
         max_tokens=_max_tokens_for(max_chars),
+        effort=effort_for(task),
+        output_format=None,
+        stream=False,
     )
 
-    if not text:
+    if not completion.text:
         # An empty completion is a failure, not a valid answer - falling back
         # gives the user something in character instead of a blank comment.
         raise ValueError(f"empty completion from {settings.llm_provider}")
 
-    return text
+    return completion
+
+
+# --- a juror's vote and its reasoning, in one breath --------------------------
+#
+# The vote used to be a seeded RNG and the prose was written separately around
+# it. That bought reproducibility - a retried tick reached the same verdict -
+# and it cost the thing the site is actually for: a juror could deliver a
+# withering argument for acquittal and be tallied as convicting, because the
+# text and the decision never met. `_case_context` did not even tell the juror
+# which way it had voted.
+#
+# One structured call fixes it at the source. `vote` is a schema-enforced enum,
+# so it is exactly as parseable as the RNG it replaces - this is NOT "parsing a
+# decision out of prose", which is the thing decide.py was right to refuse - and
+# the line is written by the same turn that chose the side, so the two cannot
+# disagree.
+#
+# What it costs: the vote is no longer byte-reproducible from (case, juror).
+# The engine's idempotency does not depend on that and never did - it rests on
+# comments.dedupe_key and the `spoke_at IS NULL` guard, and vote and comment
+# commit in one transaction, so a retry either finds the work done or redoes
+# all of it. `decide.decide_vote` keeps the reproducible behaviour for the
+# offline path, where guilt_bias is still the only thing deciding anything.
+
+DELIBERATION_SCHEMA: dict[str, Any] = {
+    "type": "json_schema",
+    "schema": {
+        "type": "object",
+        "properties": {
+            "vote": {
+                "type": "string",
+                "enum": ["guilty", "not_guilty"],
+                "description": "ההכרעה שלך: guilty = חייב, not_guilty = זכאי",
+            },
+            "line": {
+                "type": "string",
+                "description": (
+                    "מה שאתה אומר בקול באולם, בעברית, באופי שלך. "
+                    "בלי לומר 'אני מצביע' - הנימוק עצמו מסגיר לאן אתה נוטה."
+                ),
+            },
+        },
+        "required": ["vote", "line"],
+        "additionalProperties": False,
+    },
+}
+
+# The juror's disposition, described rather than numeric.
+#
+# `guilt_bias` is a probability in the database, and handing a model "0.75"
+# invites it to perform a number: jurors started announcing their own leanings
+# ("אני נוטה להרשיע ב-75 אחוז מהמקרים"), which no person has ever said in a
+# courtroom. A phrase describes the same disposition in the register the
+# character actually thinks in.
+_DISPOSITIONS: tuple[tuple[float, str], ...] = (
+    (0.25, "אתה כמעט אף פעם לא מרשיע. צריך ממש הרבה כדי לשכנע אותך."),
+    (0.40, "אתה נוטה לזכות. ספק סביר הוא ספק, ואתה מוצא אותו כמעט תמיד."),
+    (0.60, "אתה מתלבט באמת. שני הצדדים צריכים לעבוד בשבילך."),
+    (0.75, "אתה נוטה להרשיע. מי שהגיע לכאן בדרך כלל עשה משהו."),
+    (1.01, "אתה מרשיע כמעט תמיד. חפות היא מצב נדיר בעולם שלך."),
+)
+
+
+def disposition_of(guilt_bias: float) -> str:
+    for ceiling, phrase in _DISPOSITIONS:
+        if guilt_bias < ceiling:
+            return phrase
+    return _DISPOSITIONS[-1][1]  # pragma: no cover - the last ceiling is > 1
+
+
+def deliberate(
+    personality_prompt: str, context: dict[str, Any], *, guilt_bias: float
+) -> dict[str, Any]:
+    """One juror's vote and the line they say out loud. Raises; caller falls back.
+
+    Requires structured output, which is checked by the caller rather than
+    here - `brain.deliberate` asks `capabilities()` first and never routes a
+    provider that cannot enforce the enum into this function.
+    """
+    settings = get_settings()
+    provider, model = _provider_and_model(settings)
+
+    prompt = "\n\n".join(
+        (
+            build_prompt(
+                "jury_deliberation",
+                context,
+                pick_angle(personality_prompt, "jury_deliberation", context),
+            ),
+            f"## איך אתה בדרך כלל מכריע\n{disposition_of(float(guilt_bias))}\n\n"
+            "זו הנטייה שלך, לא כלל. התיק הזה יכול להזיז אותך ממנה - "
+            "וההכרעה שתחזיר חייבת להיות זו שהנימוק שלך מוביל אליה.",
+        )
+    )
+
+    raw = provider.complete(
+        build_system(personality_prompt),
+        [{"role": "user", "content": prompt}],
+        model=model,
+        max_tokens=_max_tokens_for(400),
+        effort=effort_for("jury_deliberation"),
+        output_format=DELIBERATION_SCHEMA,
+        stream=False,
+    )
+    if not raw.text:
+        raise ValueError(f"empty deliberation from {settings.llm_provider}")
+
+    data = json.loads(raw.text)
+    vote = str(data.get("vote") or "")
+    line = str(data.get("line") or "").strip()
+
+    # Meaning, not shape. A vote outside the enum would be tallied as neither
+    # guilty nor not_guilty and quietly vanish from the count.
+    if vote not in ("guilty", "not_guilty") or not line:
+        raise ValueError("incomplete deliberation from the model")
+
+    return {"vote": vote, "line": line, "usage": raw}
 
 
 # --- a whole filing, invented -------------------------------------------------
@@ -743,12 +1099,19 @@ def invent_lawsuit(
         ],
         model=model,
         max_tokens=_max_tokens_for(900),
+        effort=effort_for("bot_lawsuit"),
         output_format=LAWSUIT_SCHEMA,
+        # The only streaming call in the application, and not so anybody can
+        # watch: this asks for the most tokens of anything here, and the SDK's
+        # HTTP timeout applies to a whole non-streaming request. A filing that
+        # generates slowly would trip the timeout, land in the fallback, and
+        # skip the tick - for no reason except the shape of the request.
+        stream=True,
     )
-    if not raw:
+    if not raw.text:
         raise ValueError(f"empty filing from {settings.llm_provider}")
 
-    data = json.loads(raw)
+    data = json.loads(raw.text)
 
     title = " ".join(str(data.get("title") or "").split())[:512]
     defendant = " ".join(str(data.get("defendant") or "").split())[:255]
@@ -760,17 +1123,40 @@ def invent_lawsuit(
     if not (title and defendant and body and charges):
         raise ValueError("incomplete filing from the model")
 
-    return {"title": title, "defendant_text": defendant, "charges": charges, "body": body}
+    return {
+        "title": title,
+        "defendant_text": defendant,
+        "charges": charges,
+        "body": body,
+        "usage": raw,
+    }
 
 
 # --- remembering --------------------------------------------------------------
 #
-# The third memory layer: everything older than the window, compressed. This is
+# The consolidation layer: everything older than the window, compressed. This is
 # the only place the model is asked to write something that will be fed back to
 # it later, which is exactly why the brief below is about accuracy and the
 # schema caps the length. A memory that grows without a ceiling eventually IS
 # the prompt, and a memory that invents becomes a bot confidently telling a user
 # about a lawsuit they never filed.
+#
+# It is also the layer to be most suspicious of, and that is a change of stance
+# rather than a caveat. Repeatedly asking a model to rewrite its own memory
+# degrades that memory: the current literature measures the utility of a
+# consolidated memory rising, then falling below the utility of having no
+# memory at all, with the damage coming from the rewriting step itself rather
+# than from bad source material. The summaries always read plausibly, which is
+# precisely why nobody notices.
+#
+# Two things follow, and both are load-bearing:
+#
+#   1. This is now a CACHE over `agent_events` and the message table, never the
+#      only record. A summary that came out wrong is one rebuild away from
+#      correct, because the episodes it was built from still exist.
+#   2. It stays GATED - written once per windowful, when something has actually
+#      scrolled out of reach, and never on a schedule. See
+#      memory_service._is_stale.
 
 MEMORY_SCHEMA: dict[str, Any] = {
     "type": "json_schema",
@@ -813,9 +1199,11 @@ MEMORY_BRIEF = """אתה מעדכן את הזיכרון שלך לגבי האדם
 
 
 def remember(personality_prompt: str, context: dict[str, Any]) -> dict[str, Any]:
-    """Rewrite this bot's memory of one person. Raises; the caller decides.
+    """Rewrite this bot's memory of one subject. Raises; the caller decides.
 
-    `context` carries the old memory and the exchange since it was written.
+    `context` carries the old memory and whatever has happened since it was
+    written - a transcript for a person, a list of episodes for a colleague or
+    for the bot's own record.
     """
     settings = get_settings()
     provider, model = _provider_and_model(settings)
@@ -828,22 +1216,29 @@ def remember(personality_prompt: str, context: dict[str, Any]) -> dict[str, Any]
             "## פרטים שכבר רשמת\n"
             + "\n".join(f"- {fact}" for fact in context["you_know"])
         )
-    sections.append(f"## ההתכתבות\n{context.get('transcript', '')}")
+    if context.get("transcript"):
+        sections.append(f"## ההתכתבות\n{context['transcript']}")
+    if context.get("episodes"):
+        sections.append(
+            "## מה קרה מאז\n" + "\n".join(f"- {line}" for line in context["episodes"])
+        )
 
     raw = provider.complete(
         build_system(personality_prompt),
         [{"role": "user", "content": "\n\n".join(sections)}],
         model=model,
         max_tokens=_max_tokens_for(600),
+        effort=effort_for("remember"),
         output_format=MEMORY_SCHEMA,
+        stream=False,
     )
-    if not raw:
+    if not raw.text:
         raise ValueError(f"empty memory from {settings.llm_provider}")
 
-    data = json.loads(raw)
+    data = json.loads(raw.text)
     summary = " ".join(str(data.get("summary") or "").split())
     facts = [" ".join(str(f).split()) for f in (data.get("facts") or []) if str(f).strip()]
     if not summary:
         raise ValueError("the model returned no summary")
 
-    return {"summary": summary, "facts": facts}
+    return {"summary": summary, "facts": facts, "usage": raw}

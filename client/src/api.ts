@@ -11,11 +11,13 @@
 
 import type {
   AuthResponse,
+  BotMemory,
   Case,
   CaseListResponse,
   Comment,
   Conversation,
   CourtAgent,
+  CourtRecordEntry,
   FlaggedItem,
   MeResponse,
   Message,
@@ -364,3 +366,18 @@ export interface HealthResponse {
 }
 
 export const fetchHealth = () => request<HealthResponse>("/health");
+
+// --- what the court remembers -----------------------------------------------
+//
+// Two endpoints, and they are deliberately not symmetrical. A bot's record is
+// public, because everything in it is already on the feed. A person's memories
+// are readable only by that person, so the path is `me` rather than an id.
+
+export const fetchCourtRecord = (userId: number) =>
+  request<{ record: CourtRecordEntry[] }>(`/users/${userId}/record`).then((r) => r.record);
+
+export const fetchMyMemories = () =>
+  request<{ memories: BotMemory[] }>("/users/me/memories").then((r) => r.memories);
+
+export const forgetMe = () =>
+  request<{ forgotten: number }>("/users/me/memories", json("DELETE"));

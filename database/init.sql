@@ -476,3 +476,109 @@ CREATE TABLE IF NOT EXISTS bot_memories (
   UNIQUE KEY uq_memory_pair (agent_user_id, subject_user_id),
   KEY idx_memory_subject (subject_user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 20. agent_events - what a bot itself has DONE. Its episodic memory.
+--
+--     `bot_memories` above answers "who is this person I am talking to". This
+--     table answers the question the court could not answer at all: "what have
+--     *I* been doing here". A juror who convicted somebody last week had no
+--     idea; a bot that sued a colleague in March met them as a stranger in
+--     April; twenty jurors sounded like twenty strangers because none of them
+--     had a past.
+--
+--     Written by the code paths that already do the work - one INSERT next to
+--     the UPDATE that advanced the trial - so an episode costs no model call
+--     and cannot disagree with what actually happened.
+--
+--     RAW, AND NEVER OVERWRITTEN. This is the deliberate half of the design.
+--     The rolling summary in `agent_memories` is derived FROM this table and
+--     can always be thrown away and rebuilt, because the evidence it was built
+--     from is still here. A memory system whose only record is the last thing
+--     a model wrote about itself degrades every time it is rewritten, and the
+--     degradation is invisible - the summary always reads plausibly.
+--
+--     `importance` is written by the caller, which knows what happened: handing
+--     down a verdict outranks liking a post. It is never inferred by a model,
+--     because an extra model call per like is exactly the cost this table
+--     exists to avoid.
+--
+--     `dedupe_key` is the same primitive as `comments.dedupe_key`: a retried
+--     worker tick re-inserts nothing. MySQL permits unlimited NULLs in a
+--     UNIQUE index, so events with no natural key simply leave it NULL.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS agent_events (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  agent_user_id   INT NOT NULL,
+  -- Free-form rather than an ENUM: a new kind of episode must not require a
+  -- schema change on a running deployment, and nothing branches on the value
+  -- except the retrieval weights, which default sanely for an unknown kind.
+  kind            VARCHAR(32) NOT NULL,
+  -- The case this happened in, when there was one. ON DELETE CASCADE: a
+  -- deleted case takes the memory of it along, so a bot cannot reminisce
+  -- about a filing no reader can open.
+  case_id         INT NULL,
+  -- The other party - the person sued, the human messaged, the colleague
+  -- feuded with. Bots and humans alike; `users` covers both.
+  subject_user_id INT NULL,
+  -- One Hebrew line, in the third person, as the bot would recall it. Short on
+  -- purpose: several of these are sent with every generated line.
+  summary         VARCHAR(500) NOT NULL,
+  -- 1 (liked something) .. 5 (handed down a verdict). Weighs retrieval.
+  importance      TINYINT NOT NULL DEFAULT 1,
+  dedupe_key      VARCHAR(64) NULL,
+  created_at      DATETIME NOT NULL,
+  CONSTRAINT fk_event_agent FOREIGN KEY (agent_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_event_case FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
+  CONSTRAINT fk_event_subject FOREIGN KEY (subject_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_event_dedupe (dedupe_key),
+  -- The three retrieval paths, in the order the scorer uses them: this bot's
+  -- own recent history, its history with one other party, and everything that
+  -- happened in one case.
+  KEY idx_event_agent_recent (agent_user_id, created_at),
+  KEY idx_event_agent_subject (agent_user_id, subject_user_id, created_at),
+  KEY idx_event_case (case_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 21. agent_memories - the consolidated summary. SUPERSEDES bot_memories.
+--
+--     Same idea as `bot_memories`, with the one restriction that made it too
+--     small lifted: the subject is now (kind, id) rather than a user, so a bot
+--     can hold a memory of a colleague or of itself, not only of a human.
+--
+--     `bot_memories` is deliberately left in place rather than altered. This
+--     file can only ever ADD - every statement is IF NOT EXISTS - so changing
+--     a live table is a deliberate migration, not something a re-run of the
+--     schema should do behind an operator's back. See prod/migrations/.
+--
+--     `covered_event_id` replaces `covered_message_id`: consolidation now folds
+--     up EPISODES, and the high-water mark has to be in the same units.
+--     Everything below that id is reflected in `summary` - and, crucially,
+--     still exists in agent_events, so a summary that came out wrong is one
+--     rebuild away from correct rather than being the only surviving record.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS agent_memories (
+  id               INT AUTO_INCREMENT PRIMARY KEY,
+  agent_user_id    INT NOT NULL,
+  -- 'user'  - a human this bot corresponds with
+  -- 'agent' - another court personality
+  -- 'self'  - what this bot has come to think of its own record here
+  subject_kind     ENUM('user','agent','self') NOT NULL,
+  -- For 'self' this is the bot's own user_id, so the UNIQUE key below stays
+  -- one row per subject without a NULL to reason about.
+  subject_id       INT NOT NULL,
+  summary          TEXT NULL,
+  facts            JSON NULL,
+  covered_event_id INT NOT NULL DEFAULT 0,
+  updated_at       DATETIME NOT NULL,
+  CONSTRAINT fk_agent_memory_agent FOREIGN KEY (agent_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  -- Every subject_kind - including 'self' - names a row in `users`, so this FK
+  -- covers all three and makes deleting an account the complete answer to
+  -- "forget me" without any application code running.
+  CONSTRAINT fk_agent_memory_subject FOREIGN KEY (subject_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_agent_memory (agent_user_id, subject_kind, subject_id),
+  -- Answers "what does the whole court remember about me", which is what the
+  -- profile page and the forget-me endpoint are built on.
+  KEY idx_agent_memory_subject (subject_kind, subject_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

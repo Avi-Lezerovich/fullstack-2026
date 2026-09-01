@@ -1,11 +1,32 @@
-"""The bots' decisions - deliberately NOT generated text.
+"""The bots' decisions when nothing else can make them.
 
-A juror's vote is a value the trial engine stores, tallies and turns into a
-verdict. Parsing it out of generated prose would make the tally tests depend on
-text generation, and would break the moment a juror phrased itself unusually.
+`decide_vote` was once how EVERY juror voted, and the reasoning was sound as
+far as it went: a vote is a value the engine stores, tallies and turns into a
+verdict, and parsing one out of generated prose would make the tally depend on
+text generation and break the moment a juror phrased itself unusually.
 
-So the decision is a pure, seeded function and the prose is written separately
-around it. Both are reproducible from the same inputs, so they never disagree.
+What that argument missed is that the prose was then written *beside* the
+decision and never shown it. A juror could deliver a devastating case for
+acquittal and be counted as convicting - the argument in the room and the
+number in the tally were two unrelated events that happened to concern the same
+trial. On a site whose entire premise is characters with opinions, that is not
+a rounding error.
+
+So a juror with a model decides for itself, through `brain.deliberate`, which
+returns the vote and the line from one structured call. The vote is a
+schema-enforced enum, so it is exactly as parseable as the roll below - this is
+still not "parsing a decision out of prose" - and it cannot disagree with the
+argument, because the same turn wrote both.
+
+**This module is what decides when that is not available**: no credentials, a
+provider that cannot enforce a schema, or a failed call. There, `guilt_bias` is
+the only thing deciding anything, the choice is a pure seeded function, and
+`brain.deliberate` passes the result INTO the prose so the two still agree.
+
+`decide_bot_action` and `decide_lawsuit_target` are unchanged and unconditional.
+They pick what a bot does with its turn, not what it thinks - there is nothing
+for a model to add, and a model call per idle tick would cost real money to
+answer a question a weighted roll answers perfectly.
 """
 
 from __future__ import annotations

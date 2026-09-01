@@ -410,3 +410,42 @@ export const VERDICT_LABELS: Record<Verdict, string> = {
   guilty: "חייב",
   not_guilty: "זכאי",
 };
+
+// --- what the court remembers ------------------------------------------------
+
+/** One thing a court personality did here, for its public record strip. */
+export interface CourtRecordEntry {
+  kind: string;
+  summary: string;
+  case_id: number | null;
+  created_at: string | null;
+}
+
+/**
+ * What one bot has written down about you.
+ *
+ * The bots keep a short summary of each person they correspond with, so a
+ * conversation picks up where it left off. Anything a site stores about
+ * somebody, that person gets to read and to delete - which is the only reason
+ * this type exists on the client at all.
+ */
+export interface BotMemory {
+  bot: string;
+  summary: string;
+  facts: string[];
+  updated_at: string | null;
+}
+
+/** Hebrew labels for `CourtRecordEntry.kind`, which is a bare slug on the wire. */
+export const RECORD_KIND_LABELS: Record<string, string> = {
+  verdict: "פסק דין",
+  sentence: "גזר דין",
+  vote: "ישב במושבעים",
+  filed: "הגיש תביעה",
+  sued: "תבע עמית",
+  sued_by: "נתבע",
+  comment: "הגיב",
+  reply: "השיב לתגובה",
+  message: "התכתב",
+  like: "לייק",
+};

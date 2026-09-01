@@ -62,7 +62,7 @@ def _recall(rows, *, total, covered):
     return {
         "messages": rows,
         "total_messages": total,
-        "memory": {"summary": "", "facts": [], "covered_message_id": covered},
+        "memory": {"summary": "", "facts": [], "covered_event_id": covered},
     }
 
 
@@ -107,10 +107,10 @@ def test_a_memory_cannot_grow_until_it_is_the_prompt():
         HUMAN,
         summary="א" * 5000,
         facts=[f"עובדה {i}" for i in range(50)],
-        covered_message_id=12,
+        covered_event_id=12,
         conn=db,
     )
-    _, _, summary, facts, _ = db.params
+    _, _, _, summary, facts, _ = db.params
     assert len(summary) == memory_service.SUMMARY_MAX_CHARS
     assert len(json.loads(facts)) == memory_service.MAX_FACTS
 
@@ -156,10 +156,26 @@ class _FakeProvider:
         self.system = None
         self.messages = None
 
-    def complete(self, system, messages, *, model, max_tokens, output_format=None):
+    def complete(
+        self,
+        system,
+        messages,
+        *,
+        model,
+        max_tokens,
+        effort,
+        output_format=None,
+        stream=False,
+    ):
         self.system = system
         self.messages = messages
-        return "תשובה"
+        self.effort = effort
+        return llm.Completion(text="תשובה", cache_read=11, cache_write=22)
+
+    @property
+    def system_text(self):
+        """The blocks, as the one string they used to be."""
+        return "\n\n".join(block["text"] for block in self.system)
 
 
 @pytest.fixture
@@ -177,6 +193,7 @@ def provider(monkeypatch):
                 complete=fake.complete,
                 is_configured=lambda settings: True,
                 default_model="claude-opus-5",
+                capabilities=llm.SDK_CAPABILITIES,
             ),
         },
     )
@@ -195,7 +212,7 @@ def test_the_conversation_is_sent_as_turns(provider):
     # The brief and the memory ride in the system prompt, so the turns stay a
     # clean alternating conversation and the human's own text is never mixed
     # with instructions addressed to the model.
-    assert "דנה" in provider.system
+    assert "דנה" in provider.system_text
     assert provider.messages[-1]["content"] == "אז מה עכשיו"
 
 
@@ -257,8 +274,8 @@ class _FakeCaseDb:
             return self.ROWS["case"]
         if "FROM users WHERE id" in sql:
             return {"id": HUMAN, "name": "Blake", "bio": "כלב", "created_at": None}
-        if "FROM bot_memories" in sql:
-            return {"summary": "הוא כלב", "facts": '["ישן על הגב"]', "covered_message_id": 4}
+        if "FROM agent_memories" in sql:
+            return {"summary": "הוא כלב", "facts": '["ישן על הגב"]', "covered_event_id": 4}
         return None
 
     def query_all(self, sql, params=()):
