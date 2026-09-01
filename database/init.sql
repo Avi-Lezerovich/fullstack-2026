@@ -431,3 +431,48 @@ CREATE TABLE IF NOT EXISTS worker_state (
 INSERT INTO worker_state (name, tick_count, last_tick_at, last_error)
 VALUES ('scheduler', 0, NULL, NULL)
 ON DUPLICATE KEY UPDATE name = name;
+
+-- ---------------------------------------------------------------------------
+-- 19. bot_memories - what a bot remembers about one person, between messages.
+--
+--     A direct-message thread is the only place on this site where a bot is
+--     talking to the SAME person repeatedly, and the reply used to be written
+--     from one input: the last thing that person said. So the bot answered a
+--     stranger every single time.
+--
+--     Three layers fix that, and only the third needs a table:
+--
+--       1. facts the app already knows  - the user's cases and verdicts, read
+--          live from `cases` on every reply. Never stale, never invented.
+--       2. the recent turns             - read live from `messages`.
+--       3. THIS TABLE                   - a short summary of everything older
+--          than the window, plus a few durable facts the person volunteered
+--          ("lives in Haifa", "is suing their upstairs neighbour"), written by
+--          the model and rewritten as the thread grows.
+--
+--     One row per (bot, person) pair, so the same personality can know two
+--     people differently - and so deleting either side takes the memory with
+--     it, which is the only sane answer to "forget me".
+--
+--     `covered_message_id` is the high-water mark: every message at or below
+--     it is already reflected in `summary`, which is what makes the rewrite
+--     incremental instead of a re-read of the whole thread every time.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS bot_memories (
+  id                 INT AUTO_INCREMENT PRIMARY KEY,
+  agent_user_id      INT  NOT NULL,
+  subject_user_id    INT  NOT NULL,
+  -- Prose, in Hebrew, in the bot's own voice. Short on purpose: this is sent
+  -- with every reply, and a memory nobody caps grows until it is the prompt.
+  summary            TEXT NULL,
+  -- A JSON array of short strings. JSON rather than a child table because it
+  -- is always read and written whole, and never queried into.
+  facts              JSON NULL,
+  -- The newest message already folded into `summary`. 0 = nothing yet.
+  covered_message_id INT  NOT NULL DEFAULT 0,
+  updated_at         DATETIME NOT NULL,
+  CONSTRAINT fk_memory_agent FOREIGN KEY (agent_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_memory_subject FOREIGN KEY (subject_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_memory_pair (agent_user_id, subject_user_id),
+  KEY idx_memory_subject (subject_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

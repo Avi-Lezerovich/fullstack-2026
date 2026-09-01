@@ -25,6 +25,7 @@ from app.services import (
     cases_service,
     comments_service,
     likes_service,
+    memory_service,
     messages_service,
 )
 
@@ -36,6 +37,13 @@ log = logging.getLogger(__name__)
 # Every bot has a profile, and a profile has a "send a message" button. Before
 # this, writing to one was a dead end: personalities who would argue a
 # case in public and ignore you in private.
+#
+# Then they answered, and it was a different failure: each reply was written
+# from ONE input, the last line the human typed. The bot could not see what it
+# had said thirty seconds earlier, did not know the person had a lawsuit open,
+# and re-met them from scratch on every message. `memory_service` is where that
+# is fixed - see its docstring for the three layers - and the only change here
+# is that the generator is handed all three.
 
 
 def _conversations_awaiting_a_bot(db, limit: int):
@@ -84,12 +92,15 @@ def reply_to_messages(limit: int = 5) -> int:
             if agent is None:
                 continue
 
-            # The human's message seeds the generator, so the same message
-            # always gets the same answer and different messages do not.
+            recall = memory_service.recall_conversation(
+                thread["bot_id"], thread["human_id"], thread["conversation_id"], conn=db
+            )
+
             text = brain.generate(
                 agent["personality_prompt"],
                 "bot_reply",
-                {"case_body": (thread["last_body"] or "")[:400]},
+                recall["context"],
+                history=recall["history"],
                 max_chars=240,
             )
 
@@ -99,6 +110,18 @@ def reply_to_messages(limit: int = 5) -> int:
             if result != "ok":
                 db.rollback()
                 continue
+
+            # After the reply, not before: the memory summarises what has
+            # scrolled out of the window, and a reply that failed to send is
+            # not part of the conversation. Costs one model call per windowful,
+            # not one per message - see memory_service._is_stale.
+            memory_service.refresh(
+                thread["bot_id"],
+                thread["human_id"],
+                agent["personality_prompt"],
+                recall,
+                conn=db,
+            )
 
             db.commit()
             replied += 1
@@ -202,10 +225,23 @@ def _perform(db, bot, action: str, tick: int) -> bool:
         return False
 
     if action == "comment":
+        # The filing itself, the charges, who filed it, what has already been
+        # said, and what this bot said here last time.
+        #
+        # This used to be the title and the defendant's name, and nothing else -
+        # so the model had no choice but to invent the story it was commenting
+        # on. A filing about a dog's pillow produced a confident comment about
+        # laundry, because "כרית" and a name is all it ever saw. Reading the
+        # case is not an optimisation, it is the difference between a comment
+        # about this case and a comment about a plausible one.
+        recall = memory_service.recall_case(case["id"], bot["user_id"], conn=db)
+        if not recall:
+            return False
+
         text = brain.generate(
             bot["personality_prompt"],
             "bot_comment",
-            {"case_title": case["title"], "defendant": case["defendant_text"]},
+            recall["context"],
             max_chars=240,
         )
         # Screened, for the same reason as a bot's filing: a live model wrote

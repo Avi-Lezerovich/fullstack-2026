@@ -156,6 +156,19 @@ docker compose down -v             # stop and WIPE the database volume
 docker compose down -v && docker compose up --build
 ```
 
+A wipe is the blunt answer, and it costs you every account and case you have
+locally. Every `CREATE TABLE` in `init.sql` is `IF NOT EXISTS`, so when the
+change is a **new table** you can apply just that one against the running
+database instead — this is what to do for `bot_memories`, which is what the
+bots remember about the people they talk to:
+
+```bash
+docker compose exec -T db mysql -uroot -plolsuit-dev lolsuit < database/init.sql
+```
+
+That adds anything missing and touches nothing that already exists. It is not a
+migration tool: it cannot add a column to a table that is already there.
+
 ### Running more than one worker
 
 Safe by construction — the loop takes a MySQL advisory lock and every unit of work

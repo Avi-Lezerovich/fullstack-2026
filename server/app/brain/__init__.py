@@ -133,11 +133,21 @@ def generate(
     context: dict[str, Any] | None = None,
     *,
     max_chars: int = offline.DEFAULT_MAX_CHARS,
+    history: list[dict[str, str]] | None = None,
 ) -> str:
     """In-character text for a task. Never raises, never returns empty.
 
     `context` must be flat and JSON-serialisable - that constraint is what
     makes the offline seed reproducible and the model prompt trivial to build.
+
+    `history` is the conversation so far, as `{"role", "content"}` turns, for
+    the one task that has one: a private reply. The live backend sends them as
+    real turns; the offline generator has no notion of a conversation and
+    cannot become context-aware by being handed more context - but it still
+    **seeds** on the turns, and that part matters. Its whole variety mechanism
+    is a hash of its inputs, so a reply written from a context that does not
+    change when the human says something new is the same reply, forever. The
+    seed sees the conversation; the phrase bank does not.
     """
     context = context or {}
     settings = get_settings()
@@ -146,7 +156,9 @@ def generate(
         try:
             from . import llm
 
-            text = llm.generate(personality_prompt, task, context, max_chars=max_chars)
+            text = llm.generate(
+                personality_prompt, task, context, max_chars=max_chars, history=history
+            )
             LAST_CALL.record_llm_ok()
             return offline.trim(text, max_chars)
         except Exception as exc:
@@ -158,7 +170,12 @@ def generate(
     else:
         LAST_CALL.record_offline()
 
-    return offline.generate(personality_prompt, task, context, max_chars=max_chars)
+    return offline.generate(
+        personality_prompt,
+        task,
+        {**context, "turns": [turn["content"] for turn in history]} if history else context,
+        max_chars=max_chars,
+    )
 
 
 def invent_lawsuit(
@@ -199,4 +216,44 @@ def invent_lawsuit(
     return offline.invent_lawsuit(personality_prompt, seed_extra, target)
 
 
-__all__ = ["generate", "invent_lawsuit", "status", "LAST_CALL", "Task", "TASKS"]
+def remember(personality_prompt: str, context: dict[str, Any]) -> dict[str, Any] | None:
+    """Rewrite what a bot remembers about one person, or None.
+
+    None is returned whenever the model did not answer - and there is
+    deliberately no offline path. The other tasks degrade to a phrase bank and
+    the worst case is a duller comment; a memory is a claim about a real person
+    that the bot will repeat back to them for weeks. A generator that cannot
+    read cannot summarise, and inventing what somebody told you is worse than
+    remembering nothing.
+
+    The consequence when the backend is down is mild and self-correcting: the
+    stored memory simply stops advancing, the recent-window layer keeps working
+    on its own, and the next successful call summarises everything that piled
+    up in the meantime.
+    """
+    settings = get_settings()
+    if not settings.use_llm:
+        LAST_CALL.record_offline()
+        return None
+
+    try:
+        from . import llm
+
+        memory = llm.remember(personality_prompt, context)
+        LAST_CALL.record_llm_ok()
+        return memory
+    except Exception as exc:
+        LAST_CALL.record_llm_failure(exc)
+        log.warning("memory rewrite failed; the old memory stands", exc_info=True)
+        return None
+
+
+__all__ = [
+    "generate",
+    "invent_lawsuit",
+    "remember",
+    "status",
+    "LAST_CALL",
+    "Task",
+    "TASKS",
+]

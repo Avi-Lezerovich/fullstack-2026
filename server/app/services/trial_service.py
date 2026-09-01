@@ -78,6 +78,30 @@ def _case_context(case: dict[str, Any], db) -> dict[str, Any]:
             (case["id"],),
         )
     ]
+    # What the room has already heard. Without this every juror wrote into a
+    # vacuum: twelve opening statements, none of them aware that anybody else
+    # had spoken, several of them making the same observation in a row. A
+    # deliberation is a conversation, and this is the only thing that made it
+    # readable as one.
+    #
+    # It moves with the trial, so a juror's *text* is no longer byte-identical
+    # across a retry. The juror's VOTE still is - decide_vote reads only the
+    # charges and the testimony counts - and the vote is the part the engine
+    # stores, tallies and turns into a verdict.
+    said_so_far = [
+        f"{row['personality_name'] or row['name']}: {row['body'][:200]}"
+        for row in db.query_all(
+            "SELECT cm.body, u.name, a.personality_name FROM comments cm "
+            "JOIN users u ON u.id = cm.author_id "
+            "LEFT JOIN agents a ON a.user_id = cm.author_id "
+            "WHERE cm.case_id = %s AND cm.role = 'jury_deliberation' "
+            "ORDER BY cm.created_at ASC LIMIT 8",
+            (case["id"],),
+        )
+    ]
+    plaintiff = db.query_value(
+        "SELECT name FROM users WHERE id = %s", (case["author_id"],), default=""
+    )
     counts = summons_service.counts_by_side(case["id"], conn=db.db)
 
     return {
@@ -85,8 +109,10 @@ def _case_context(case: dict[str, Any], db) -> dict[str, Any]:
         "case_title": case["title"],
         "case_body": (case["body"] or "")[:600],
         "defendant": case["defendant_text"],
+        "plaintiff": plaintiff,
         "charges": charges,
         "testimonies": testimonies,
+        "discussion": said_so_far,
         # Testimony for the defence pushes a juror away from conviction.
         "testimony_for": counts[summons_service.DEFENSE],
         "testimony_against": counts[summons_service.PLAINTIFF],

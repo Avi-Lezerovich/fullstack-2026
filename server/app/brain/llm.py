@@ -86,7 +86,11 @@ TASK_BRIEFS: dict[str, str] = {
     "jury_deliberation": (
         "אתה מושבע. אתה מדבר עכשיו בקול, באולם, מול שאר המושבעים ומול הצדדים. "
         "תגיד את הדבר האחד שאתה חושב על התיק - נימוק, תהייה, התפרצות, או הערה "
-        "צדדית שמסגירה בדיוק איזה מין אדם אתה. אתה לא מכריע, אתה מדבר."
+        "צדדית שמסגירה בדיוק איזה מין אדם אתה. אתה לא מכריע, אתה מדבר.\n\n"
+        "**קראת את התיק, והוא לפניך.** תיאחז בפרט אמיתי מתוכו - משהו שכתוב "
+        "שם ולא במקום אחר. אם כבר דיברו לפניך, אתה שמעת אותם: אפשר להסכים, "
+        "להתנגד, או להמשיך משפט של מישהו - רק לא לחזור עליו ולא לדבר כאילו "
+        "אתה הראשון שפותח את הפה."
     ),
     "verdict": (
         "אתה השופט, וזה רגע ההכרעה. ההצבעה כבר נספרה ואתה יודע את התוצאה - "
@@ -118,13 +122,24 @@ TASK_BRIEFS: dict[str, str] = {
         "כזו שמישהו באמת היה כותב מתחת לפוסט - לא הודעה רשמית."
     ),
     "bot_comment": (
-        "אתה גולש באתר ותיק אחד תפס לך את העין. תגיב עליו כמו שמגיבים ברשת: "
-        "קצר, מיידי, בלי פתיחה מנומסת. אתה לא באולם עכשיו - אתה בטלפון."
+        "אתה גולש באתר ותיק אחד תפס לך את העין, וקראת אותו. תגיב עליו כמו "
+        "שמגיבים ברשת: קצר, מיידי, בלי פתיחה מנומסת. אתה לא באולם עכשיו - "
+        "אתה בטלפון.\n\n"
+        "כתב התביעה עצמו נמסר לך למטה, וגם מה שכבר נכתב שם בתגובות. תגיב על "
+        "משהו שקראת בפועל - פרט מתוך התביעה, או משהו שמישהו אמר בתגובות "
+        "ואתה עונה לו. **אל תחזור על מה שכבר נאמר**, ובמיוחד לא על מה שאתה "
+        "עצמך כתב שם קודם."
     ),
     "bot_reply": (
         "מישהו שלח לך הודעה פרטית ואתה עונה לו. זו שיחה בין שניים, לא הצהרה "
         "לפרוטוקול - תהיה ישיר, תתייחס למה שהוא כתב בפועל, ותישאר בדיוק אותה "
-        "דמות שאתה באולם."
+        "דמות שאתה באולם.\n\n"
+        "**אתם כבר באמצע שיחה.** ההתכתבות עד עכשיו נמצאת לפניך, ומה שאתה "
+        "יודע עליו רשום למטה. אל תציג את עצמך מחדש, אל תתחיל מאפס, ואל תשאל "
+        "אותו דבר שכבר סיפר לך. אם הוא הגיש תביעה - אתה יודע איזו ואיך היא "
+        "נגמרה, ומותר לך להזכיר את זה. אם הבטחת לו משהו בהודעה קודמת, אתה "
+        "זוכר את זה.\n\n"
+        "מה שרשום למטה הוא מה שאתה יודע. לא להמציא עליו עובדות נוספות."
     ),
 }
 
@@ -199,6 +214,19 @@ _CONTEXT_LABELS: tuple[tuple[str, str], ...] = (
     ("tally_guilty", "קולות 'חייב'"),
     ("tally_not_guilty", "קולות 'זכאי'"),
     ("verdict", "ההכרעה שהתקבלה"),
+    # --- what has already been said here ------------------------------------
+    ("discussion", "מה כבר נכתב בתגובות"),
+    ("you_already_said", "מה שאתה עצמך כבר כתבת שם"),
+    # --- who you are talking to, and what you remember about them -----------
+    #
+    # These four are the memory. The first two are read live from the database
+    # and cannot be wrong; the last two were written by the model on a previous
+    # turn and are capped in memory_service for exactly that reason.
+    ("about_them", "מי האדם שמולך"),
+    ("their_cases", "התיקים שלו באתר"),
+    ("met_before", "מה שכבר אמרת עליו בפומבי"),
+    ("you_remember", "מה שאתה זוכר מהשיחות הקודמות איתו"),
+    ("you_know", "פרטים שהוא סיפר לך"),
 )
 
 _VERDICT_WORDS = {"guilty": "חייב", "not_guilty": "זכאי"}
@@ -288,7 +316,7 @@ def _max_tokens_for(max_chars: int) -> int:
 
 def _complete_bedrock(
     system: str,
-    prompt: str,
+    messages: list[dict[str, str]],
     *,
     model: str,
     max_tokens: int,
@@ -316,14 +344,14 @@ def _complete_bedrock(
         thinking=_THINKING,
         output_config=_output_config(output_format),
         system=system,
-        messages=[{"role": "user", "content": prompt}],
+        messages=messages,
     )
     return _text_of(message)
 
 
 def _complete_anthropic(
     system: str,
-    prompt: str,
+    messages: list[dict[str, str]],
     *,
     model: str,
     max_tokens: int,
@@ -345,7 +373,7 @@ def _complete_anthropic(
         thinking=_THINKING,
         output_config=_output_config(output_format),
         system=system,
-        messages=[{"role": "user", "content": prompt}],
+        messages=messages,
     )
     return _text_of(message)
 
@@ -354,6 +382,28 @@ def _complete_anthropic(
 # was built against returns `text`; the others cost nothing to accept and save
 # the next person a debugging session if theirs differs.
 _GATEWAY_TEXT_KEYS = ("text", "completion", "response", "output")
+
+
+# Labels for the transcript the gateway provider has to be handed as text.
+# "אתה" for the assistant side is deliberate: the string is read by the model
+# as its own past speech, and third-person ("הבוט אמר") reliably produced
+# answers that discussed the character instead of being it.
+_TURN_LABELS = {"assistant": "אתה", "user": "הוא"}
+
+
+def _flatten(messages: list[dict[str, str]]) -> str:
+    """One string for an endpoint that accepts exactly one string.
+
+    A single-turn call renders as just its content - unchanged from before
+    turns existed, which is what keeps every non-conversational task byte-
+    identical to what it was.
+    """
+    if len(messages) == 1:
+        return messages[0]["content"]
+    return "\n\n".join(
+        f"{_TURN_LABELS.get(message['role'], message['role'])}: {message['content']}"
+        for message in messages
+    )
 
 
 def _strip_fence(text: str) -> str:
@@ -373,7 +423,7 @@ def _strip_fence(text: str) -> str:
 
 def _complete_gateway(
     system: str,
-    prompt: str,
+    messages: list[dict[str, str]],
     *,
     model: str,
     max_tokens: int,
@@ -394,10 +444,14 @@ def _complete_gateway(
 
     Two things the endpoint does not implement, worked around here:
 
-    * **No system turn.** It reads one `prompt` field and silently drops the
-      rest. Passing the system prompt as its own key returns a cheerful 200
-      with the character quietly missing - the model answers as a generic
-      assistant - so the two are folded into one string instead.
+    * **No system turn, and no turns at all.** It reads one `prompt` field and
+      silently drops the rest. Passing the system prompt as its own key returns
+      a cheerful 200 with the character quietly missing - the model answers as
+      a generic assistant - so system and messages are folded into one string
+      instead, with the conversation rendered as a labelled transcript. That is
+      strictly worse than real turns (the model reads its own past answers as
+      quoted text rather than as its own voice), and it is the price of an
+      endpoint with one field.
     * **No structured output.** There is nowhere to put `output_config.format`,
       so a schema is demoted to an instruction in the prompt and the fence is
       stripped off the answer. `invent_lawsuit` still validates what comes
@@ -413,7 +467,7 @@ def _complete_gateway(
     if not settings.llm_endpoint:
         raise ValueError("LLM_ENDPOINT is required by the gateway provider")
 
-    text_prompt = f"{system}\n\n{prompt}"
+    text_prompt = f"{system}\n\n{_flatten(messages)}"
     if output_format is not None:
         schema = json.dumps(output_format.get("schema", {}), ensure_ascii=False)
         text_prompt += (
@@ -514,14 +568,36 @@ def generate(
     context: dict[str, Any],
     *,
     max_chars: int = 400,
+    history: list[dict[str, str]] | None = None,
 ) -> str:
-    """Ask the configured provider. Raises on any failure; the caller falls back."""
+    """Ask the configured provider. Raises on any failure; the caller falls back.
+
+    `history` turns this from a one-shot into a conversation. When it is given,
+    the brief and the context move into the **system** prompt and the messages
+    are the real exchange - the bot's own past lines arriving as `assistant`
+    turns, which is what stops it answering as though it had never met the
+    person. Without it nothing changes: one user turn, exactly as before.
+
+    Putting the brief in the system prompt rather than appending it as a final
+    user turn is what keeps the roles alternating, and it is also the honest
+    shape: "you are this character, answering a private message, and here is
+    what you know" is a standing instruction, not something the human said.
+    """
     settings = get_settings()
     provider, model = _provider_and_model(settings)
 
+    system = build_system(personality_prompt)
+    prompt = build_prompt(task, context, pick_angle(personality_prompt, task, context))
+
+    if history:
+        messages = list(history)
+        system = f"{system}\n\n---\n\n{prompt}"
+    else:
+        messages = [{"role": "user", "content": prompt}]
+
     text = provider.complete(
-        build_system(personality_prompt),
-        build_prompt(task, context, pick_angle(personality_prompt, task, context)),
+        system,
+        messages,
         model=model,
         max_tokens=_max_tokens_for(max_chars),
     )
@@ -653,13 +729,18 @@ def invent_lawsuit(
 
     raw = provider.complete(
         build_system(personality_prompt),
-        "\n\n".join(
-            (
-                FILING_BRIEF,
-                _target_section(target),
-                f"## הזווית שלך הפעם\n{angle}",
-            )
-        ),
+        [
+            {
+                "role": "user",
+                "content": "\n\n".join(
+                    (
+                        FILING_BRIEF,
+                        _target_section(target),
+                        f"## הזווית שלך הפעם\n{angle}",
+                    )
+                ),
+            }
+        ],
         model=model,
         max_tokens=_max_tokens_for(900),
         output_format=LAWSUIT_SCHEMA,
@@ -680,3 +761,89 @@ def invent_lawsuit(
         raise ValueError("incomplete filing from the model")
 
     return {"title": title, "defendant_text": defendant, "charges": charges, "body": body}
+
+
+# --- remembering --------------------------------------------------------------
+#
+# The third memory layer: everything older than the window, compressed. This is
+# the only place the model is asked to write something that will be fed back to
+# it later, which is exactly why the brief below is about accuracy and the
+# schema caps the length. A memory that grows without a ceiling eventually IS
+# the prompt, and a memory that invents becomes a bot confidently telling a user
+# about a lawsuit they never filed.
+
+MEMORY_SCHEMA: dict[str, Any] = {
+    "type": "json_schema",
+    "schema": {
+        "type": "object",
+        "properties": {
+            "summary": {
+                "type": "string",
+                "description": (
+                    "סיכום ההתכתבות בעברית, עד 4 משפטים. מה הוא רצה, מה סיכמתם, "
+                    "באיזו נימה. בלי ציטוטים ארוכים."
+                ),
+            },
+            "facts": {
+                "type": "array",
+                "items": {"type": "string"},
+                "maxItems": 8,
+                "description": (
+                    "פרטים יציבים שהוא סיפר על עצמו, משפט קצר כל אחד. "
+                    "רק מה שנאמר במפורש."
+                ),
+            },
+        },
+        "required": ["summary", "facts"],
+        "additionalProperties": False,
+    },
+}
+
+MEMORY_BRIEF = """אתה מעדכן את הזיכרון שלך לגבי האדם הזה, לקראת הפעם הבאה שתדברו.
+
+זה לא טקסט לאולם ואף אחד לא יקרא אותו חוץ ממך. אין כאן בדיחות ואין כאן דמות - יש רק מה שכדאי שתזכור.
+
+**הכללים:**
+- רק מה שנאמר בפועל בהתכתבות. לא להסיק, לא להשלים, לא לנחש.
+- אם משהו כבר בזיכרון הישן ולא סותר את מה שנאמר מאז - להשאיר אותו.
+- אם משהו בזיכרון הישן התברר כלא נכון - לתקן.
+- לא לרשום מה שהאתר כבר יודע לבד (התיקים שלו, פסקי הדין) - זה נקרא מהמסד בכל פעם.
+- לא לרשום סיסמאות, כתובות, טלפונים או פרטי תשלום, גם אם נכתבו.
+- קצר. הזיכרון הזה נשלח איתך בכל תשובה."""
+
+
+def remember(personality_prompt: str, context: dict[str, Any]) -> dict[str, Any]:
+    """Rewrite this bot's memory of one person. Raises; the caller decides.
+
+    `context` carries the old memory and the exchange since it was written.
+    """
+    settings = get_settings()
+    provider, model = _provider_and_model(settings)
+
+    sections = [MEMORY_BRIEF]
+    if context.get("you_remember"):
+        sections.append(f"## הזיכרון הקודם שלך\n{context['you_remember']}")
+    if context.get("you_know"):
+        sections.append(
+            "## פרטים שכבר רשמת\n"
+            + "\n".join(f"- {fact}" for fact in context["you_know"])
+        )
+    sections.append(f"## ההתכתבות\n{context.get('transcript', '')}")
+
+    raw = provider.complete(
+        build_system(personality_prompt),
+        [{"role": "user", "content": "\n\n".join(sections)}],
+        model=model,
+        max_tokens=_max_tokens_for(600),
+        output_format=MEMORY_SCHEMA,
+    )
+    if not raw:
+        raise ValueError(f"empty memory from {settings.llm_provider}")
+
+    data = json.loads(raw)
+    summary = " ".join(str(data.get("summary") or "").split())
+    facts = [" ".join(str(f).split()) for f in (data.get("facts") or []) if str(f).strip()]
+    if not summary:
+        raise ValueError("the model returned no summary")
+
+    return {"summary": summary, "facts": facts}
