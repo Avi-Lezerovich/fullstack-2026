@@ -56,7 +56,9 @@ CREATE TABLE IF NOT EXISTS agents (
   moderator_kind        ENUM('sweeper','clerk','arbiter') NULL,
   personality_name      VARCHAR(100) NOT NULL,
   personality_prompt    TEXT         NOT NULL,
-  -- Selects the phrase bank the offline generator draws from.
+  -- Groups the cast on the About page. It once also selected which phrase
+  -- bank the offline generator drew from; that generator writes one
+  -- register now and no longer knows who is speaking.
   tone_tag              VARCHAR(32)  NOT NULL,
   -- Juror dial: probability mass toward a guilty vote, blended with charge
   -- severity by brain.decide.decide_vote().
@@ -543,9 +545,9 @@ CREATE TABLE IF NOT EXISTS agent_events (
 -- ---------------------------------------------------------------------------
 -- 21. agent_memories - the consolidated summary. SUPERSEDES bot_memories.
 --
---     Same idea as `bot_memories`, with the one restriction that made it too
---     small lifted: the subject is now (kind, id) rather than a user, so a bot
---     can hold a memory of a colleague or of itself, not only of a human.
+--     Same idea as `bot_memories`, rebuilt so the high-water mark counts the
+--     right thing and so the row can be rebuilt from evidence that still
+--     exists.
 --
 --     `bot_memories` is deliberately left in place rather than altered. This
 --     file can only ever ADD - every statement is IF NOT EXISTS - so changing
@@ -561,24 +563,24 @@ CREATE TABLE IF NOT EXISTS agent_events (
 CREATE TABLE IF NOT EXISTS agent_memories (
   id               INT AUTO_INCREMENT PRIMARY KEY,
   agent_user_id    INT NOT NULL,
-  -- 'user'  - a human this bot corresponds with
-  -- 'agent' - another court personality
-  -- 'self'  - what this bot has come to think of its own record here
-  subject_kind     ENUM('user','agent','self') NOT NULL,
-  -- For 'self' this is the bot's own user_id, so the UNIQUE key below stays
-  -- one row per subject without a NULL to reason about.
+  -- Who the memory is about. A users.id, so it can name a human or another
+  -- court personality without the schema caring which - the only thing that
+  -- decides what gets consolidated is `memory_service.refresh`, and today that
+  -- is message threads. An earlier draft carried a `subject_kind` ENUM here
+  -- reserving 'agent' and 'self'; nothing could ever write them, and a column
+  -- with two unreachable values is a claim about the design that is not true.
   subject_id       INT NOT NULL,
   summary          TEXT NULL,
   facts            JSON NULL,
   covered_event_id INT NOT NULL DEFAULT 0,
   updated_at       DATETIME NOT NULL,
   CONSTRAINT fk_agent_memory_agent FOREIGN KEY (agent_user_id) REFERENCES users(id) ON DELETE CASCADE,
-  -- Every subject_kind - including 'self' - names a row in `users`, so this FK
-  -- covers all three and makes deleting an account the complete answer to
-  -- "forget me" without any application code running.
+  -- The subject is always a row in `users`, so this FK makes deleting an
+  -- account the complete answer to "forget me" without any application code
+  -- running.
   CONSTRAINT fk_agent_memory_subject FOREIGN KEY (subject_id) REFERENCES users(id) ON DELETE CASCADE,
-  UNIQUE KEY uq_agent_memory (agent_user_id, subject_kind, subject_id),
+  UNIQUE KEY uq_agent_memory (agent_user_id, subject_id),
   -- Answers "what does the whole court remember about me", which is what the
-  -- profile page and the forget-me endpoint are built on.
-  KEY idx_agent_memory_subject (subject_kind, subject_id)
+  -- forget-me endpoint is built on.
+  KEY idx_agent_memory_subject (subject_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

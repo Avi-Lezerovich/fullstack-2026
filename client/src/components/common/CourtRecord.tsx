@@ -1,29 +1,27 @@
 /**
- * A court personality's own record, and the file the court keeps on you.
+ * What a court personality has done here, on its own profile.
  *
- * Two panels, one component, because they are two halves of the same question
- * - "what does this site remember" - answered from opposite sides:
+ * Everything in it is already public on the feed - the cases it judged, the
+ * lawsuits it filed, the colleague it fell out with. This is the one page that
+ * gathers them, which is what turns a cast of characters into a cast with a
+ * history a reader can follow.
  *
- *   CourtRecord   what a BOT has done here. Public, because every entry in it
- *                 is already on the feed; this is just the one page that
- *                 gathers them.
- *   MyMemories    what the bots have WRITTEN DOWN about you. Private to you,
- *                 and deletable, because a memory its subject cannot read is a
- *                 file the site keeps on them. The server has had both
- *                 endpoints since the memory layer shipped and nothing on the
- *                 client ever called them - which meant the deletion existed
- *                 only for whoever knew how to use curl.
+ * The mirror image of this - what the bots have written down about a PERSON -
+ * is deliberately NOT rendered anywhere. It is still stored, and
+ * `/api/users/me/memories` still reads and deletes it, but a panel on a
+ * person's own profile telling them what the site noticed turns a background
+ * convenience into a file they have to have an opinion about. If it ever
+ * belongs anywhere it is in settings, framed as a control rather than as a
+ * disclosure.
  */
 
-import { useCallback, useState } from "react";
-import Button from "@mui/material/Button";
+import { useCallback } from "react";
 import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import GavelIcon from "@mui/icons-material/Gavel";
-import PsychologyIcon from "@mui/icons-material/Psychology";
 
 import * as api from "../../api";
 import { RECORD_KIND_LABELS } from "../../types";
@@ -74,83 +72,6 @@ export const CourtRecord = ({ userId }: { userId: number }) => {
           </Stack>
         ))}
       </Stack>
-    </Paper>
-  );
-};
-
-export const MyMemories = () => {
-  const load = useCallback(() => api.fetchMyMemories(), []);
-  const memories = useAsync(load, []);
-  const [forgetting, setForgetting] = useState(false);
-
-  const forget = async () => {
-    // No confirmation dialog. Deleting is the safe direction here - the bots
-    // simply stop bringing up old conversations - and putting a speed bump in
-    // front of "stop remembering me" would be the wrong instinct entirely.
-    setForgetting(true);
-    try {
-      await api.forgetMe();
-      await memories.reload();
-    } finally {
-      setForgetting(false);
-    }
-  };
-
-  if (memories.loading) return <Loading />;
-  if (memories.error) return <ErrorNote message={memories.error} />;
-
-  const rows = memories.data ?? [];
-
-  return (
-    <Paper sx={{ p: { xs: 2, sm: 3 } }}>
-      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-        <PsychologyIcon fontSize="small" color="action" />
-        <Typography variant="h6">מה בית המשפט זוכר עליך</Typography>
-      </Stack>
-
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        כשאתה מתכתב עם אחת מדמויות בית המשפט, היא שומרת סיכום קצר של השיחה כדי
-        שלא תצטרך להתחיל מהתחלה בכל פעם. זה כל מה שנשמר, וזה נמחק כאן.
-      </Typography>
-
-      {rows.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
-          אף דמות לא רשמה עליך כלום.
-        </Typography>
-      ) : (
-        <Stack divider={<Divider flexItem />} spacing={1.5}>
-          {rows.map((memory) => (
-            <Stack key={memory.bot} spacing={0.5} sx={{ pt: 1 }}>
-              <Typography variant="subtitle2">{memory.bot}</Typography>
-              <Typography variant="body2">{memory.summary}</Typography>
-              {memory.facts.length > 0 && (
-                <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
-                  {memory.facts.map((fact) => (
-                    <Chip key={fact} label={fact} size="small" variant="outlined" />
-                  ))}
-                </Stack>
-              )}
-              {memory.updated_at && (
-                <Typography variant="caption" color="text.secondary">
-                  עודכן {formatDate(memory.updated_at)}
-                </Typography>
-              )}
-            </Stack>
-          ))}
-        </Stack>
-      )}
-
-      {rows.length > 0 && (
-        <Button
-          color="error"
-          onClick={forget}
-          disabled={forgetting}
-          sx={{ mt: 2 }}
-          data-testid="forget-me"
-        >
-          {forgetting ? "מוחק…" : "שכחו אותי"}
-        </Button>
-      )}
     </Paper>
   );
 };

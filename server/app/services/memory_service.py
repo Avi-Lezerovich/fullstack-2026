@@ -32,7 +32,10 @@ wrong they can be:
    mind right now.
 4. **The consolidated summary** (`agent_memories`). Everything older than the
    window, compressed by the model into a few lines and a handful of durable
-   facts. One row per (bot, subject).
+   facts. One row per (bot, subject), and in practice the subject is always a
+   person: a message thread is the only place here with a window long enough
+   for anything to scroll out of. What a bot knows about a COLLEAGUE is served
+   from layer 3 and never compressed - see `refresh`.
 
 **Layer 4 is the only one that can be wrong**, because it is the only one a
 model wrote - and the current literature is blunt about what happens to a
@@ -276,19 +279,8 @@ def events_of(agent_user_id: int, limit: int = 12, conn: Db | None = None) -> li
 
 # --- layer 4: the consolidated memory ----------------------------------------
 
-# The three things a bot can hold a memory of. `subject_kind` exists because
-# the previous table could only key on a human, which is what made a colleague
-# a stranger every time.
-USER = "user"
-AGENT = "agent"
-SELF = "self"
-
-
 def get_memory(
-    agent_user_id: int,
-    subject_id: int,
-    subject_kind: str = USER,
-    conn: Db | None = None,
+    agent_user_id: int, subject_id: int, conn: Db | None = None
 ) -> dict[str, Any]:
     """This bot's memory of this subject. Always a dict, empty when there is none.
 
@@ -298,8 +290,8 @@ def get_memory(
     with owned(conn) as db:
         row = db.query_one(
             "SELECT summary, facts, covered_event_id FROM agent_memories "
-            "WHERE agent_user_id = %s AND subject_kind = %s AND subject_id = %s",
-            (agent_user_id, subject_kind, subject_id),
+            "WHERE agent_user_id = %s AND subject_id = %s",
+            (agent_user_id, subject_id),
         )
     if row is None:
         return {"summary": "", "facts": [], "covered_event_id": 0}
@@ -332,7 +324,6 @@ def save_memory(
     agent_user_id: int,
     subject_id: int,
     *,
-    subject_kind: str = USER,
     summary: str,
     facts: list[str],
     covered_event_id: int,
@@ -340,7 +331,7 @@ def save_memory(
 ) -> None:
     """Write (or overwrite) what this bot remembers about this subject.
 
-    An upsert, because the triple is unique and the memory is a replacement
+    An upsert, because the pair is unique and the memory is a replacement
     rather than an append - the model is given the old summary and asked for
     the new one, so two workers racing here leave a coherent row either way.
     """
@@ -352,15 +343,13 @@ def save_memory(
     with owned(conn) as db:
         db.execute(
             "INSERT INTO agent_memories "
-            "  (agent_user_id, subject_kind, subject_id, summary, facts, covered_event_id, "
-            "   updated_at) "
-            "VALUES (%s, %s, %s, %s, %s, %s, UTC_TIMESTAMP()) "
+            "  (agent_user_id, subject_id, summary, facts, covered_event_id, updated_at) "
+            "VALUES (%s, %s, %s, %s, %s, UTC_TIMESTAMP()) "
             "ON DUPLICATE KEY UPDATE "
             "  summary = VALUES(summary), facts = VALUES(facts), "
             "  covered_event_id = VALUES(covered_event_id), updated_at = VALUES(updated_at)",
             (
                 agent_user_id,
-                subject_kind,
                 subject_id,
                 summary,
                 json.dumps(facts, ensure_ascii=False),
@@ -374,17 +363,20 @@ def memories_of(subject_user_id: int, conn: Db | None = None) -> list[dict[str, 
     """Everything every bot remembers about this person, for their own eyes.
 
     A memory the subject cannot read is a file the site keeps on them. This is
-    the read half of that; `forget` is the other half. Scoped to `subject_kind
-    = 'user'` deliberately: what one bot has written about another bot is house
-    business, not somebody's personal data.
+    the read half of that; `forget` is the other half.
+
+    Nothing in the UI renders this. The endpoint exists because the data does,
+    and because an endpoint is what a future settings screen would be built on
+    - but a panel on somebody's own profile listing what the site has noticed
+    about them turns a background convenience into a disclosure they have to
+    have an opinion about. See client/src/components/common/CourtRecord.tsx.
     """
     with owned(conn) as db:
         rows = db.query_all(
             "SELECT m.summary, m.facts, m.updated_at, u.name, a.personality_name "
             "FROM agent_memories m JOIN users u ON u.id = m.agent_user_id "
             "LEFT JOIN agents a ON a.user_id = m.agent_user_id "
-            "WHERE m.subject_kind = 'user' AND m.subject_id = %s "
-            "ORDER BY m.updated_at DESC",
+            "WHERE m.subject_id = %s ORDER BY m.updated_at DESC",
             (subject_user_id,),
         )
     return [
@@ -423,8 +415,7 @@ def forget(subject_user_id: int, conn: Db | None = None) -> int:
     """
     with owned(conn) as db:
         removed = db.execute(
-            "DELETE FROM agent_memories WHERE subject_kind = 'user' AND subject_id = %s",
-            (subject_user_id,),
+            "DELETE FROM agent_memories WHERE subject_id = %s", (subject_user_id,)
         ).rowcount
         removed += db.execute(
             "DELETE FROM bot_memories WHERE subject_user_id = %s", (subject_user_id,)
@@ -545,7 +536,7 @@ def recall_conversation(
     with owned(conn) as db:
         rows = messages_service.recent_messages(conversation_id, limit=WINDOW, conn=db.db)
         profile = about_user(human_user_id, bot_user_id, conn=db.db)
-        memory = get_memory(bot_user_id, human_user_id, USER, conn=db.db)
+        memory = get_memory(bot_user_id, human_user_id, conn=db.db)
         record = recall_for_agent(
             bot_user_id, subject_user_id=human_user_id, conn=db.db
         )
@@ -619,7 +610,7 @@ def recall_case(case_id: int, bot_user_id: int, conn: Db | None = None) -> dict[
             )
         ]
         author = about_user(int(case["author_id"]), bot_user_id, conn=db.db)
-        memory = get_memory(bot_user_id, int(case["author_id"]), USER, conn=db.db)
+        memory = get_memory(bot_user_id, int(case["author_id"]), conn=db.db)
         record = recall_for_agent(
             bot_user_id,
             case_id=case_id,
@@ -691,7 +682,7 @@ def recall_comment_reply(
             )
         ]
         profile = about_user(int(reply["author_id"]), bot_user_id, conn=db.db)
-        memory = get_memory(bot_user_id, int(reply["author_id"]), USER, conn=db.db)
+        memory = get_memory(bot_user_id, int(reply["author_id"]), conn=db.db)
         record = recall_for_agent(
             bot_user_id,
             case_id=int(case["id"]),
@@ -798,7 +789,6 @@ def refresh(
     save_memory(
         bot_user_id,
         subject_user_id,
-        subject_kind=USER,
         summary=written["summary"],
         facts=written["facts"],
         # Everything in the window is now reflected in the summary. The window

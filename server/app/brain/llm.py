@@ -429,8 +429,9 @@ def _max_tokens_for(max_chars: int) -> int:
     the Hebrew for every 240-character task - every bot comment and every
     private reply on the site. The model spends the budget thinking, the text
     blocks come back empty, `generate` raises "empty completion", and the reply
-    is written by the phrase bank instead. Nothing logs an error; the site just
-    quietly sounds canned. The floor is what fixes it. Output is billed on what
+    is written by the offline stenographer instead. Nothing logs an error; the
+    site just quietly goes clerical. The floor is what fixes it. Output is
+    billed on what
     is actually generated and `trim()` still enforces the real length, so the
     headroom costs nothing when it is not used.
     """
@@ -452,8 +453,6 @@ class Completion:
     text: str
     cache_read: int = 0
     cache_write: int = 0
-    input_tokens: int = 0
-    output_tokens: int = 0
 
 
 def _usage_of(message: Any, text: str) -> Completion:
@@ -462,8 +461,6 @@ def _usage_of(message: Any, text: str) -> Completion:
         text=text,
         cache_read=int(getattr(usage, "cache_read_input_tokens", 0) or 0),
         cache_write=int(getattr(usage, "cache_creation_input_tokens", 0) or 0),
-        input_tokens=int(getattr(usage, "input_tokens", 0) or 0),
-        output_tokens=int(getattr(usage, "output_tokens", 0) or 0),
     )
 
 
@@ -570,8 +567,7 @@ def _flatten_system(system: list[dict[str, Any]]) -> str:
 
     The blocks exist for a breakpoint the gateway has no way to express, so
     here they are simply concatenated in the order they were built. Nothing is
-    lost except the caching - which is exactly what `Capabilities.caching`
-    says about this provider.
+    lost except the caching, which this provider has no way to express.
     """
     return "\n\n".join(block["text"] for block in system)
 
@@ -702,25 +698,28 @@ class Capabilities:
     logged as though the model had misbehaved rather than as a provider that
     was never able to comply.
 
-    Declaring the limits lets `brain` route around them and say which one bit,
+    Declaring the limit lets `brain` route around it and say what was missing,
     so a degraded backend looks degraded instead of looking like a bad model.
+
+    Only the limits something BRANCHES on live here. An earlier version also
+    carried `system_turn` and `caching` flags, which were true statements that
+    nothing ever read: the gateway degrades on both without needing to be
+    asked, because folding turns into a transcript and ignoring a cache
+    breakpoint both produce a correct answer, just a worse or dearer one. A
+    field that only ever gets asserted in its own test is documentation
+    pretending to be a mechanism - the gateway's docstring above says all three
+    limits in prose, where they belong.
     """
 
-    # Real `system` and `assistant` turns. Without it a conversation is a
-    # labelled transcript inside one string, and the character reads its own
-    # past lines as quotations rather than as its own voice.
-    system_turn: bool = True
     # A schema the API enforces. Without it there is no such thing as a
-    # guaranteed-parseable answer, so no vote and no filing.
+    # guaranteed-parseable answer, so no vote and no filing - and "the model
+    # returned something plausible" is not a substitute, because the rule that
+    # a bot may never sue a person is checked against exactly such a field.
     structured_output: bool = True
-    # Prompt-cache breakpoints. Without it every call pays full price.
-    caching: bool = True
 
 
 SDK_CAPABILITIES = Capabilities()
-GATEWAY_CAPABILITIES = Capabilities(
-    system_turn=False, structured_output=False, caching=False
-)
+GATEWAY_CAPABILITIES = Capabilities(structured_output=False)
 
 
 @dataclass(frozen=True)
@@ -779,7 +778,7 @@ def capabilities() -> Capabilities:
     LLM_PROVIDER. The call itself still raises loudly when it is actually made.
     """
     provider = PROVIDERS.get(get_settings().llm_provider)
-    return provider.capabilities if provider else Capabilities(False, False, False)
+    return provider.capabilities if provider else Capabilities(structured_output=False)
 
 
 def _provider_and_model(settings: Any) -> tuple[Provider, str]:

@@ -72,10 +72,15 @@ def _complete(captured, reply, messages=None, system=None, **kwargs):
 
 
 def test_the_limits_are_declared_rather_than_discovered():
-    caps = llm.capabilities()
-    assert caps.structured_output is False
-    assert caps.system_turn is False
-    assert caps.caching is False
+    """Only the one that routing branches on is a field.
+
+    The endpoint also has no system turn and no cache breakpoints. Both are
+    documented in `_complete_gateway` and neither is a flag, because neither
+    changes what anything DOES - folding turns into a transcript and ignoring a
+    breakpoint both produce a correct answer, just a worse or dearer one. An
+    enforced schema is the one limit where the honest response is to not ask.
+    """
+    assert llm.capabilities().structured_output is False
 
 
 def test_the_cache_blocks_collapse_instead_of_being_dropped():

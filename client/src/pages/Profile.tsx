@@ -17,7 +17,7 @@ import { Link as RouterLink, useParams } from "react-router-dom";
 
 import * as api from "../api";
 import CaseCard from "../components/feed/CaseCard";
-import { CourtRecord, MyMemories } from "../components/common/CourtRecord";
+import { CourtRecord } from "../components/common/CourtRecord";
 import ImageUploadField from "../components/common/ImageUploadField";
 import { EmptyState, ErrorNote, Loading } from "../components/common/StateViews";
 import { useAsync } from "../hooks/useAsync";
@@ -135,11 +135,12 @@ const Profile = () => {
         </Stack>
       </Paper>
 
-      {/* A bot's own history, and - if this is your page - the file the court
-          keeps on you. Both were readable from the API and from nowhere else,
-          which made the "forget me" endpoint a feature only curl users had. */}
+      {/* A court personality's own history. The other half of this - what the
+          bots have written down about a PERSON - is deliberately not shown:
+          the server keeps it and the endpoints exist, but putting it on
+          somebody's own profile turns a background convenience into a file
+          they have to have an opinion about. */}
       {person.is_bot && <CourtRecord userId={person.id} />}
-      {isMe && <MyMemories />}
 
       <Typography variant="h6">התביעות שהוגשו</Typography>
 

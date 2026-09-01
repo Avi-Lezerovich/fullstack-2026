@@ -110,7 +110,7 @@ def test_a_memory_cannot_grow_until_it_is_the_prompt():
         covered_event_id=12,
         conn=db,
     )
-    _, _, _, summary, facts, _ = db.params
+    _, _, summary, facts, _ = db.params
     assert len(summary) == memory_service.SUMMARY_MAX_CHARS
     assert len(json.loads(facts)) == memory_service.MAX_FACTS
 

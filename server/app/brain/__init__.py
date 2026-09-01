@@ -10,7 +10,7 @@ can see.
 
 One caller opts out of that fallback: `invent_lawsuit(..., require_llm=True)`
 returns None rather than an offline filing, because a case is a permanent
-public row and the offline path has twelve fixed defendants. See its docstring.
+public row and the offline path draws from a fixed list. See its docstring.
 
 `generate()` never raises and never returns an empty string. That is a
 deliberate contract: a juror is in the middle of a database transaction when
@@ -181,7 +181,7 @@ def generate(
     **seeds** on the turns, and that part matters. Its whole variety mechanism
     is a hash of its inputs, so a reply written from a context that does not
     change when the human says something new is the same reply, forever. The
-    seed sees the conversation; the phrase bank does not.
+    seed sees the conversation; the minute it writes does not.
     """
     context = context or {}
     settings = get_settings()
@@ -226,15 +226,15 @@ def invent_lawsuit(
     answer is None and **no filing is invented at all**. Every other task in
     this module still fails open, because a juror who says nothing stalls a
     trial - but a case is a permanent row on the public feed, and the offline
-    generator draws its defendants from a fixed list of twelve. A backend
+    generator draws its defendants from one fixed list. A backend
     outage that lasts an afternoon therefore does not degrade the feed, it
-    fills it with the same lawsuit over and over, under different names. The
-    caller skips its turn instead.
+    fills it with the same handful of lawsuits over and over, under
+    different names. The caller skips its turn instead.
 
     The live model writes these when it can. That is a change of mind from the
     original design, which kept filings offline because "free-form model output
     is not worth parsing": with a JSON schema on the response it is no longer
-    free-form, and the offline path's twelve fixed defendants were the single
+    free-form, and the offline path's fixed defendant list was the single
     most visible source of repetition in the feed - the same "התביעה נגד
     הקפה שהתקרר" filed by three different bots in one afternoon.
 
@@ -279,8 +279,8 @@ def remember(personality_prompt: str, context: dict[str, Any]) -> dict[str, Any]
     """Rewrite what a bot remembers about one person, or None.
 
     None is returned whenever the model did not answer - and there is
-    deliberately no offline path. The other tasks degrade to a phrase bank and
-    the worst case is a duller comment; a memory is a claim about a real person
+    deliberately no offline path. The other tasks degrade to a clerical minute
+    and the worst case is a duller comment; a memory is a claim about a real person
     that the bot will repeat back to them for weeks. A generator that cannot
     read cannot summarise, and inventing what somebody told you is worse than
     remembering nothing.

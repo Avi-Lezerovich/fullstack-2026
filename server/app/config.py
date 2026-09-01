@@ -187,10 +187,11 @@ def get_settings() -> Settings:
         # thinking is on, and it should be - and a juror weighing a case
         # regularly runs past ten seconds. Every one of those calls raised a
         # timeout, landed in the `except` in brain/__init__.py, and produced a
-        # perfectly plausible line from the phrase bank instead. Nothing broke;
-        # the court just quietly sounded canned, on the good path, with
-        # credentials configured and /api/health reporting a working backend
-        # right up until the failure counter was read.
+        # perfectly plausible clerical line from the offline stenographer
+        # instead. Nothing broke; the court just quietly stopped having
+        # personalities, on the good path, with credentials configured and
+        # /api/health reporting a working backend right up until somebody
+        # read the failure counter.
         #
         # The worker can afford to wait: it is not serving a request, and the
         # tick it is inside is a background job by construction.

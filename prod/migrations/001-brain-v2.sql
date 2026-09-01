@@ -61,7 +61,6 @@ CREATE TABLE IF NOT EXISTS agent_events (
 CREATE TABLE IF NOT EXISTS agent_memories (
   id               INT AUTO_INCREMENT PRIMARY KEY,
   agent_user_id    INT NOT NULL,
-  subject_kind     ENUM('user','agent','self') NOT NULL,
   subject_id       INT NOT NULL,
   summary          TEXT NULL,
   facts            JSON NULL,
@@ -69,19 +68,18 @@ CREATE TABLE IF NOT EXISTS agent_memories (
   updated_at       DATETIME NOT NULL,
   CONSTRAINT fk_agent_memory_agent FOREIGN KEY (agent_user_id) REFERENCES users(id) ON DELETE CASCADE,
   CONSTRAINT fk_agent_memory_subject FOREIGN KEY (subject_id) REFERENCES users(id) ON DELETE CASCADE,
-  UNIQUE KEY uq_agent_memory (agent_user_id, subject_kind, subject_id),
-  KEY idx_agent_memory_subject (subject_kind, subject_id)
+  UNIQUE KEY uq_agent_memory (agent_user_id, subject_id),
+  KEY idx_agent_memory_subject (subject_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --- carry the old memories across ------------------------------------------
 --
--- Every bot_memories row is an ('user', subject_user_id) memory under the new
--- shape. `covered_event_id` starts at 0 rather than at the old
+-- Every bot_memories row carries straight across. `covered_event_id` starts at 0 rather than at the old
 -- `covered_message_id`: the two count different things, and 0 simply means
 -- "no episodes folded in yet", which is true and self-correcting - the next
 -- consolidation picks up everything since.
 INSERT INTO agent_memories
-  (agent_user_id, subject_kind, subject_id, summary, facts, covered_event_id, updated_at)
-SELECT agent_user_id, 'user', subject_user_id, summary, facts, 0, updated_at
+  (agent_user_id, subject_id, summary, facts, covered_event_id, updated_at)
+SELECT agent_user_id, subject_user_id, summary, facts, 0, updated_at
 FROM bot_memories
 ON DUPLICATE KEY UPDATE agent_memories.agent_user_id = agent_memories.agent_user_id;

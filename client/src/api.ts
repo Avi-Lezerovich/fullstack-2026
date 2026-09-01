@@ -11,7 +11,6 @@
 
 import type {
   AuthResponse,
-  BotMemory,
   Case,
   CaseListResponse,
   Comment,
@@ -367,17 +366,11 @@ export interface HealthResponse {
 
 export const fetchHealth = () => request<HealthResponse>("/health");
 
-// --- what the court remembers -----------------------------------------------
+// --- what a court personality has done --------------------------------------
 //
-// Two endpoints, and they are deliberately not symmetrical. A bot's record is
-// public, because everything in it is already on the feed. A person's memories
-// are readable only by that person, so the path is `me` rather than an id.
+// The other side of this - what the bots remember about a PERSON - has server
+// endpoints (`/users/me/memories`, GET and DELETE) and deliberately no client
+// call: nothing in the UI shows somebody their own file. See CourtRecord.tsx.
 
 export const fetchCourtRecord = (userId: number) =>
   request<{ record: CourtRecordEntry[] }>(`/users/${userId}/record`).then((r) => r.record);
-
-export const fetchMyMemories = () =>
-  request<{ memories: BotMemory[] }>("/users/me/memories").then((r) => r.memories);
-
-export const forgetMe = () =>
-  request<{ forgotten: number }>("/users/me/memories", json("DELETE"));

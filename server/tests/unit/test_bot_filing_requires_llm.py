@@ -3,9 +3,9 @@
 Everything else the brain does fails open: a juror whose API call times out
 still says something, because the alternative is a trial that stalls. A filing
 is the one exception, and the reason is that it is *permanent and public*. The
-offline generator picks its defendant from a fixed list of twelve, so an
-afternoon with a dead backend does not make the feed a little duller - it fills
-it with the same lawsuit under a dozen different names.
+offline generator picks its defendant from one fixed list, so an afternoon
+with a dead backend does not make the feed a little duller - it fills it with
+the same handful of lawsuits under different names.
 
 These tests pin both halves of that: the filing path closes, and every other
 path stays open.
