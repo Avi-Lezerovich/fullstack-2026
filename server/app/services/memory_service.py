@@ -251,12 +251,19 @@ def recall_for_agent(
     return [row["summary"] for row in rows]
 
 
-def events_of(agent_user_id: int, limit: int = 12, conn: Db | None = None) -> list[dict[str, Any]]:
+def events_of(
+    agent_user_id: int, limit: int = RECALL_LIMIT, conn: Db | None = None
+) -> list[dict[str, Any]]:
     """This bot's record, newest first, for its own public profile.
 
     Chronological rather than scored: a profile is a history, and a reader
     scanning one wants "what has this judge been up to", not "what is on its
-    mind". `recall_for_agent` is the other question.
+    mind". `recall_for_agent` is the other question, and it is the one with the
+    interesting answer - this is just the recent end of the same table.
+
+    `limit` is the caller's editorial decision, not this function's; the API
+    sets it (`users.RECORD_LIMIT`) because how much of a record to show is a
+    property of the page, not of the data.
     """
     with owned(conn) as db:
         rows = db.query_all(

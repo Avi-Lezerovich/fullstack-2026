@@ -13,6 +13,16 @@ bp = Blueprint("users", __name__)
 
 BIO_MAX_LENGTH = 500
 
+# How much of a court personality's record its profile shows.
+#
+# Five, and the number is doing editorial work rather than saving bytes. The
+# panel answers "what has this judge been up to lately" - a glance on the way
+# to the cases below it. At twelve it stopped being a glance and became a log,
+# and a log of likes and comments pushes the actual profile off the screen.
+# The whole history is still in `agent_events`; this is what a visitor is
+# shown, not what is kept.
+RECORD_LIMIT = 
+
 
 @bp.get("/users")
 @security.optional_auth
@@ -60,6 +70,10 @@ def get_record(user_id: int):
 
     Empty for a human rather than a 403 - "this person has no court record" is
     both true and the answer the profile page wants to render.
+
+    Capped at RECORD_LIMIT and deliberately not paginated: this is a glance, and
+    the full history has no reader asking for it. If one ever appears, the query
+    behind it already orders and limits properly.
     """
     row = users_service.get_by_id(user_id)
     if row is None or row["status"] == "banned":
@@ -67,7 +81,7 @@ def get_record(user_id: int):
     if not row["is_bot"]:
         return jsonify({"record": []}), 200
 
-    return jsonify({"record": memory_service.events_of(user_id)}), 200
+    return jsonify({"record": memory_service.events_of(user_id, RECORD_LIMIT)}), 200
 
 
 @bp.patch("/users/me")
