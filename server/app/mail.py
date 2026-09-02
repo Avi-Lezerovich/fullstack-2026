@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 import smtplib
 import sys
+import threading
 from dataclasses import dataclass, field
 from email.message import EmailMessage
 
@@ -82,8 +83,31 @@ def send_mail(to: str, subject: str, body: str) -> Message:
             _send_console(message)
     except Exception:  # pragma: no cover - delivery failures must not 500
         log.exception("could not deliver mail to %s", to)
+    else:
+        # Worth a line even on success: without it the log is silent when mail
+        # works and silent-plus-a-traceback when it does not, which makes "did
+        # that reset link ever go out?" unanswerable after the fact.
+        log.info("mail delivered to %s via %s", to, settings.mail_backend)
 
     return message
+
+
+def send_mail_async(to: str, subject: str, body: str) -> None:
+    """Hand delivery to a background thread and return immediately.
+
+    The password-reset endpoint answers identically for a registered address
+    and an unknown one - that is the whole point of it. Sending inline would
+    undo that: an unknown address returns at once while a known one waits out
+    an SMTP round trip, and the response *time* leaks what the response body
+    refuses to. Off the request thread, both answer at the same speed.
+
+    A bare daemon thread is enough. send_mail swallows every exception, and it
+    touches no Flask request context - get_settings() reads the environment
+    afresh on each call - so there is nothing here to carry across.
+    """
+    threading.Thread(
+        target=send_mail, args=(to, subject, body), daemon=True
+    ).start()
 
 
 def password_reset_body(name: str, reset_url: str, ttl_minutes: int) -> str:

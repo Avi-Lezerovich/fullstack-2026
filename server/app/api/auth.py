@@ -108,7 +108,7 @@ def request_password_reset():
     )
 
     reset_url = f"{settings.client_origin.rstrip('/')}/reset-password?token={raw_token}"
-    mail.send_mail(
+    mail.send_mail_async(
         to=user["email"],
         subject="איפוס סיסמה - LolSuit",
         body=mail.password_reset_body(user["name"], reset_url, settings.reset_ttl_minutes),
