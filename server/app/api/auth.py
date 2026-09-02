@@ -120,6 +120,7 @@ def request_password_reset():
         to=user["email"],
         subject="איפוס סיסמה - LolSuit",
         body=mail.password_reset_body(user["name"], reset_url, settings.reset_ttl_minutes),
+        html=mail.password_reset_html(user["name"], reset_url, settings.reset_ttl_minutes),
     )
     return generic
 
