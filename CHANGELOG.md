@@ -5,6 +5,72 @@ major number moves when an upgrade needs a step other than pulling the image.
 
 ---
 
+## 2.1.0
+
+**"Forgot password" sends an actual email.**
+
+### Added
+
+- **A relay the containers can reach.** The SMTP backend in `app/mail.py` has
+  been there all along, but no deployment could use it: `MAIL_BACKEND` defaults
+  to `console`, and neither compose file passed a single `MAIL_*` or `SMTP_*`
+  variable through to the server — so setting one in `.env` changed nothing
+  inside the container, and reset links only ever reached
+  `docker compose logs server`. They now reach the `server` service (and only
+  that one; `seed` and `worker` send no mail), with the variables documented in
+  both `.env.example` files and `DOCKER.md`. Verified end to end against a real
+  relay. Leave `MAIL_BACKEND` unset and nothing changes.
+- **The court's seal on the message.** The email now carries an HTML
+  alternative in the site's own stationery — seal, purple-and-gold rule, a real
+  button — with the plain text kept as the *first* alternative, so a client
+  that refuses HTML still gets a usable link. The seal travels as an inline
+  attachment rather than a link back to the site: a remote `<img>` is blocked
+  by default in most clients, and loading it would tell the server the message
+  had been opened, which a password-reset email has no business reporting.
+- **A cooldown between reset links.** `RESET_COOLDOWN_SECONDS` (default 60).
+  With a real relay behind it the request endpoint is otherwise a gadget for
+  mailing any registered address on demand — a loop fills a victim's inbox and
+  burns the relay's daily quota. The check reads `created_at` on rows already
+  in `password_resets`, so it adds no table and no state. Inside the window the
+  answer is the same generic one as always: a "slow down" here would confirm
+  the address is registered, which is exactly what this endpoint refuses to say.
+
+### Fixed
+
+- **The reset endpoint no longer leaks registration through its response
+  time.** It is written to answer identically for a known address and an
+  unknown one — but it sent the mail inline, so an unknown address returned at
+  once while a registered one waited out an SMTP round trip. Seconds, not
+  microseconds, and trivially measurable. Delivery moved to a daemon thread.
+- **The web process logs.** It configured no logging at all, so module loggers
+  fell back to the root logger's `WARNING` default and every `log.info` was
+  discarded before reaching stdout — the only place anyone can read it under
+  gunicorn. `basicConfig` sits at module level in `run.py`, because gunicorn
+  imports that file and never runs its `__main__` block. Successful delivery
+  now logs a line, so "did that reset link ever go out?" is answerable.
+- **Hebrew in the email lays out right-to-left in Gmail.** Direction was
+  declared once on `<html>`; Gmail discards the html/head/body wrapper, so it
+  survived every browser preview and vanished in the client that matters most.
+  Every cell declares its own `dir` and alignment now, and a test asserts it
+  against what Gmail keeps rather than what we write.
+- **The seal survives dark mode.** Dark-mode clients recolour the card behind
+  an image but never the image itself, so the opaque parchment square became a
+  glaring white block. The PNG keeps transparent corners with only the disc
+  filled, and reads as a medallion on either background.
+- **The reset page stopped pointing users at the server log.** It told every
+  visitor that "in development the link is written to the server log" — true
+  when nothing could send mail, misleading now, and meaningless to the person
+  reading it either way.
+
+### Note on deliverability
+
+Sending from an address on a domain you do not own — a `@gmail.com` sender
+through a relay — cannot be DKIM-signed for that domain, and some recipients
+will spam-folder it. Fine for this project; the fix, if it ever matters, is a
+domain of your own authenticated at the relay.
+
+---
+
 ## 2.0.2
 
 **The Gemini provider survives contact with the free tier.**

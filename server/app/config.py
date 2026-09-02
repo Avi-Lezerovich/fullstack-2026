@@ -72,6 +72,7 @@ class Settings:
     session_secure: bool
     session_ttl_days: int
     reset_ttl_minutes: int
+    reset_cooldown_seconds: int
     bcrypt_rounds: int
 
     # --- trial timing ---
@@ -155,6 +156,10 @@ def get_settings() -> Settings:
         session_secure=_bool("FLASK_SESSION_SECURE", False),
         session_ttl_days=_int("SESSION_TTL_DAYS", 7),
         reset_ttl_minutes=_int("RESET_TTL_MINUTES", 30),
+        # A second reset link inside this window is not sent. Cheap defence
+        # against using the endpoint to bomb someone's inbox - and against
+        # burning the mail provider's daily quota.
+        reset_cooldown_seconds=_int("RESET_COOLDOWN_SECONDS", 60),
         # Only ever lowered by the test suite. Never lower it in a deployment.
         bcrypt_rounds=max(4, _int("BCRYPT_ROUNDS", 12)),
         phase_minutes=_int("PHASE_MINUTES", 1440),

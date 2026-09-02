@@ -41,7 +41,7 @@ const ForgotPassword = () => {
             אם הכתובת רשומה במערכת, נשלח אליה קישור לאיפוס הסיסמה. הקישור תקף ל-30 דקות.
           </Alert>
           <Typography variant="body2" color="text.secondary">
-            בסביבת פיתוח הקישור נכתב ללוג של השרת.
+            לא הגיע? כדאי לבדוק גם בתיקיית הספאם.
           </Typography>
           <Link component={RouterLink} to="/login">
             חזרה לכניסה

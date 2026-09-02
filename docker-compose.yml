@@ -107,6 +107,19 @@ services:
       # Uploaded images. Inside the image this is a plain directory; the named
       # volume below is what makes them outlive `docker compose up --build`.
       UPLOAD_DIR: /app/uploads
+      # Password-reset email. Unset means the console backend, i.e. the reset
+      # link is printed to `docker compose logs server` and nothing is sent.
+      # Fill these in .env to deliver for real. See .env.example.
+      MAIL_BACKEND: ${MAIL_BACKEND:-console}
+      MAIL_FROM: ${MAIL_FROM:-court@lolsuit.local}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-1}
+      # How long a user must wait before a second reset link is sent. The
+      # endpoint answers identically either way; it just does not send twice.
+      RESET_COOLDOWN_SECONDS: ${RESET_COOLDOWN_SECONDS:-60}
     volumes:
       - uploads:/app/uploads
     ports:
