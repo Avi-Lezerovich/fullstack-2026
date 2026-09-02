@@ -103,6 +103,14 @@ def request_password_reset():
     if user is None or user["status"] == "banned":
         return generic
 
+    # Already sent one a moment ago. Still the generic answer - a "slow down"
+    # here would tell an attacker the address is registered, which is exactly
+    # what the rest of this endpoint refuses to say.
+    if auth_service.reset_requested_recently(
+        user["id"], settings.reset_cooldown_seconds
+    ):
+        return generic
+
     raw_token = auth_service.issue_password_reset(
         user["id"], ttl_minutes=settings.reset_ttl_minutes
     )

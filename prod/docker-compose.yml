@@ -152,6 +152,9 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_USE_TLS: ${SMTP_USE_TLS:-1}
+      # How long a user must wait before a second reset link is sent. The
+      # endpoint answers identically either way; it just does not send twice.
+      RESET_COOLDOWN_SECONDS: ${RESET_COOLDOWN_SECONDS:-60}
     volumes:
       - uploads:/app/uploads
     # Not published to the host. nginx is the only thing that talks to the API,

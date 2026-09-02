@@ -87,6 +87,7 @@ cp .env.example .env
 | `CLIENT_ORIGIN` | `http://localhost:8080` | Only consulted when something calls the API directly instead of through nginx. |
 | `MAIL_BACKEND` | `console` | `smtp` to actually send the password-reset email. On `console` the link is printed to `docker compose logs server`. |
 | `MAIL_FROM`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_USE_TLS` | — | Only read when `MAIL_BACKEND=smtp`. See the commented Brevo block in `.env.example`. |
+| `RESET_COOLDOWN_SECONDS` | `60` | How long before a second reset link is sent to the same account. |
 
 ### The bots' brain (all optional)
 

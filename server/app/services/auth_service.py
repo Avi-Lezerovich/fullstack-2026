@@ -198,6 +198,29 @@ def invalidate_password_resets(user_id: int, conn: Db | None = None) -> int:
         return result.rowcount
 
 
+def reset_requested_recently(
+    user_id: int, within_seconds: int, conn: Db | None = None
+) -> bool:
+    """True if this user was already sent a link inside the cooldown window.
+
+    Reads created_at on the existing rows, so it needs no extra state: a link
+    that was issued and then invalidated by a newer request still counts, which
+    is what stops a request loop from sending mail on every iteration.
+    """
+    if within_seconds <= 0:
+        return False
+
+    with owned(conn) as db:
+        row = db.query_one(
+            "SELECT 1 AS hit FROM password_resets "
+            "WHERE user_id = %s "
+            "  AND created_at > DATE_SUB(UTC_TIMESTAMP(), INTERVAL %s SECOND) "
+            "LIMIT 1",
+            (user_id, int(within_seconds)),
+        )
+        return row is not None
+
+
 def issue_password_reset(
     user_id: int, ttl_minutes: int = 30, conn: Db | None = None
 ) -> str:
