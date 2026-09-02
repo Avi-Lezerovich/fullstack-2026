@@ -146,11 +146,37 @@ restore_env_tag() {
   sed -i.bak "s|^[[:space:]]*TAG=.*|TAG=${CURRENT_TAG}|" "$ENV_FILE" && rm -f "${ENV_FILE}.bak"
 }
 
+# --- validate .env BEFORE touching anything -----------------------------------
+# `docker compose pull` fails on a bad env file too - every secret in this
+# compose file is `${VAR:?...}` - and its exit code looks identical to "the
+# image does not exist" or "not logged in". Checking config here first means a
+# missing CLIENT_ORIGIN is reported as exactly that, not misdiagnosed as a
+# Docker Hub problem while nothing has actually been pulled yet.
+CONFIG_ERR="$(docker compose -f "$COMPOSE_FILE" config -q 2>&1 1>/dev/null || true)"
+if [ -n "$CONFIG_ERR" ]; then
+  restore_env_tag
+  die "$ENV_FILE is incomplete or invalid - nothing was pulled, nothing changed.
+
+    $CONFIG_ERR
+
+    Every required value is a blank line in $ENV_FILE waiting to be filled in:
+      grep -E '^[A-Z_]+=$' $ENV_FILE"
+fi
+
 # --- pull ---------------------------------------------------------------------
 # The whole minimal-downtime trick, in one command. The running containers are
 # untouched while this downloads; only after it finishes does anything stop.
 step "Pulling images  ${DIM}(the old version keeps serving during this)${OFF}"
-if ! docker compose -f "$COMPOSE_FILE" pull --quiet; then
+# `set -e` treats `VAR=$(failing_command)` as a failing simple command and
+# exits the SCRIPT right there, before the next line ever reads $? - silently
+# skipping both the error message and restore_env_tag. set +e/-e around just
+# this one command is what lets the failure be inspected instead of fatal.
+set +e
+PULL_ERR="$(docker compose -f "$COMPOSE_FILE" pull --quiet 2>&1 1>/dev/null)"
+PULL_STATUS=$?
+set -e
+[ -n "$PULL_ERR" ] && printf '%s\n' "$PULL_ERR" >&2
+if [ "$PULL_STATUS" -ne 0 ]; then
   restore_env_tag
   die "pull failed. ${TARGET_VERSION} may not exist on Docker Hub, or this host
     is not logged in for a private repository (\`docker login\`).
