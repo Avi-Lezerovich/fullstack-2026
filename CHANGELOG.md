@@ -62,6 +62,15 @@ major number moves when an upgrade needs a step other than pulling the image.
   when nothing could send mail, misleading now, and meaningless to the person
   reading it either way.
 
+- **`deploy.sh` tells the truth about why it failed.** It reported every failed
+  `docker compose pull` as "the image may not exist / you are not logged in",
+  which sent the search in the wrong direction when the real cause was a blank
+  required variable in `prod/.env`. It now validates `docker compose config -q`
+  first and changes nothing while the file is wrong. Worse, and fixed here too:
+  under `set -e`, `VAR=$(failing_command)` exits the script before the next
+  line can read `$?`, so a genuine pull failure skipped `restore_env_tag` and
+  left `.env` naming a TAG that was never brought up.
+
 ### Note on deliverability
 
 Sending from an address on a domain you do not own — a `@gmail.com` sender
