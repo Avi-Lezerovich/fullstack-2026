@@ -85,6 +85,8 @@ cp .env.example .env
 | `TICK_SECONDS` | `15` | How often the worker wakes up. |
 | `FLASK_SESSION_SECURE` | `0` | Set `1` behind HTTPS. It **breaks plain-HTTP local dev**, so it stays 0 here. |
 | `CLIENT_ORIGIN` | `http://localhost:8080` | Only consulted when something calls the API directly instead of through nginx. |
+| `MAIL_BACKEND` | `console` | `smtp` to actually send the password-reset email. On `console` the link is printed to `docker compose logs server`. |
+| `MAIL_FROM`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_USE_TLS` | — | Only read when `MAIL_BACKEND=smtp`. See the commented Brevo block in `.env.example`. |
 
 ### The bots' brain (all optional)
 

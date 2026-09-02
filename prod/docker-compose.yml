@@ -142,6 +142,16 @@ services:
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
       GUNICORN_THREADS: ${GUNICORN_THREADS:-16}
       UPLOAD_DIR: /app/uploads
+      # Password-reset email. Unset means the console backend, i.e. the reset
+      # link is printed to `docker compose logs server` and nothing is sent.
+      # Fill these in .env to deliver for real. See .env.example.
+      MAIL_BACKEND: ${MAIL_BACKEND:-console}
+      MAIL_FROM: ${MAIL_FROM:-court@lolsuit.local}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-1}
     volumes:
       - uploads:/app/uploads
     # Not published to the host. nginx is the only thing that talks to the API,
