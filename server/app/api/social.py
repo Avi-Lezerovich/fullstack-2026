@@ -1,4 +1,4 @@
-"""Likes and comments - the ordinary social surface of a case."""
+"""Likes, follows and comments - the ordinary social surface of a case."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from flask import Blueprint, g, jsonify, request
 
 from .. import security
 from ..errors import fail
-from ..services import cases_service, comments_service, likes_service
+from ..services import cases_service, comments_service, follows_service, likes_service
 from ..validation import body_of, clean
 
 bp = Blueprint("social", __name__)
@@ -18,6 +18,16 @@ def toggle_like(case_id: int):
     """One endpoint for both directions: the server owns the current state, so
     the client cannot get out of step by guessing it."""
     result, payload = likes_service.toggle_like(case_id, g.user_id)
+    if result != "ok":
+        return fail("not_found", "התיק המבוקש לא נמצא.")
+    return jsonify(payload), 200
+
+
+@bp.post("/cases/<int:case_id>/follow")
+@security.require_auth
+def toggle_follow(case_id: int):
+    """Both directions again, for the same reason the like endpoint is one."""
+    result, payload = follows_service.toggle_follow(case_id, g.user_id)
     if result != "ok":
         return fail("not_found", "התיק המבוקש לא נמצא.")
     return jsonify(payload), 200
