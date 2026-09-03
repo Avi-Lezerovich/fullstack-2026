@@ -85,6 +85,9 @@ export interface Case {
   like_count: number;
   comment_count: number;
   viewer_has_liked: boolean;
+  viewer_is_following: boolean;
+  /** What the personal feed sorts on. Null until something happens on the case. */
+  last_activity_at: string | null;
 }
 
 

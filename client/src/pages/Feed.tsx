@@ -1,10 +1,8 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import Stack from "@mui/material/Stack";
 import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
-import Typography from "@mui/material/Typography";
 import { Link as RouterLink } from "react-router-dom";
 
 import * as api from "../api";
@@ -17,24 +15,39 @@ import type { CaseStatus } from "../types";
 
 const PAGE_SIZE = 10;
 
-const FILTERS: { label: string; status?: CaseStatus }[] = [
+interface FeedTab {
+  label: string;
+  status?: CaseStatus;
+  /** The personal feed reads a different endpoint and sorts by activity. */
+  mine?: boolean;
+}
+
+const FILTERS: FeedTab[] = [
   { label: "הכול" },
   { label: "איסוף עדויות", status: "witness_phase" },
   { label: "דיוני מושבעים", status: "jury_deliberation" },
   { label: "הוכרעו", status: "verdict_reached" },
 ];
 
+const MY_FEED: FeedTab = { label: "הפיד שלי", mine: true };
+
 const Feed = () => {
   const { user } = useAuth();
   const [tab, setTab] = useState(0);
 
-  const status = FILTERS[tab].status;
+  // Signed out there is no personal feed, so the tabs are exactly what they
+  // always were and no index shifts underneath anybody.
+  const tabs = useMemo(() => (user ? [MY_FEED, ...FILTERS] : FILTERS), [user]);
+  const active = tabs[tab] ?? tabs[0];
+
   const loadPage = useCallback(
     async (offset: number, limit: number) => {
-      const page = await api.fetchCases({ limit, offset, status });
+      const page = active.mine
+        ? await api.fetchMyFeed({ limit, offset })
+        : await api.fetchCases({ limit, offset, status: active.status });
       return { items: page.cases, total: page.total };
     },
-    [status],
+    [active],
   );
   const {
     items: cases,
@@ -42,7 +55,7 @@ const Feed = () => {
     loading,
     hasMore,
     loadMore,
-  } = usePagedList(loadPage, [status], PAGE_SIZE);
+  } = usePagedList(loadPage, [active], PAGE_SIZE);
 
   return (
     <Box>
@@ -50,27 +63,13 @@ const Feed = () => {
           time-critical thing on this page. */}
       {user && <MySummonsPanel />}
 
-      <Stack
-        direction={{ xs: "column", sm: "row" }}
-        justifyContent="space-between"
-        alignItems={{ xs: "stretch", sm: "center" }}
-        spacing={1}
-        sx={{ mb: 2 }}
-      >
-        <Box>
-          <Typography variant="h4" gutterBottom>
-            אולם בית המשפט
-          </Typography>
-          <Typography color="text.secondary">
-            כל תביעה מקבלת משפט מלא: עדים, חבר מושבעים, ופסק דין.
-          </Typography>
-        </Box>
-        {user && (
+      {user && (
+        <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2 }}>
           <Button variant="contained" color="secondary" component={RouterLink} to="/cases/new">
             הגש תביעה
           </Button>
-        )}
-      </Stack>
+        </Box>
+      )}
 
       <Tabs
         value={tab}
@@ -79,7 +78,7 @@ const Feed = () => {
         scrollButtons="auto"
         sx={{ mb: 2 }}
       >
-        {FILTERS.map((filter) => (
+        {tabs.map((filter) => (
           <Tab key={filter.label} label={filter.label} />
         ))}
       </Tabs>
@@ -87,11 +86,20 @@ const Feed = () => {
       {error && <ErrorNote message={error} />}
       {loading && cases.length === 0 && <Loading label="טוען תיקים…" />}
 
-      {!loading && cases.length === 0 && !error && (
+      {!loading && cases.length === 0 && !error && active.mine && (
+        <EmptyState
+          title="אינך עוקב עדיין אחרי אף תביעה"
+          description="עקוב אחרי תיק כדי לראות כאן כל תגובה, עדות והכרעה לפי סדר הזמן."
+        />
+      )}
+
+      {!loading && cases.length === 0 && !error && !active.mine && (
         <EmptyState
           title="אין תיקים להצגה"
           description={
-            status ? "נסה מסנן אחר." : "היכל המשפט ריק כרגע. אולי כדאי להגיש את התביעה הראשונה?"
+            active.status
+              ? "נסה מסנן אחר."
+              : "היכל המשפט ריק כרגע. אולי כדאי להגיש את התביעה הראשונה?"
           }
           action={
             user ? (
@@ -104,7 +112,7 @@ const Feed = () => {
       )}
 
       {cases.map((c) => (
-        <CaseCard key={c.id} case={c} />
+        <CaseCard key={c.id} case={c} showActivity={active.mine} canFollow={Boolean(user)} />
       ))}
 
       {hasMore && (

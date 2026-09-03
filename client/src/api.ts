@@ -127,6 +127,10 @@ export const fetchCases = (params: {
   status?: string;
 } = {}) => request<CaseListResponse>(`/cases${query(params)}`);
 
+/** The signed-in viewer's own feed: what they follow, most recently active first. */
+export const fetchMyFeed = (params: { limit?: number; offset?: number } = {}) =>
+  request<CaseListResponse>(`/cases/feed${query(params)}`);
+
 export const fetchCase = (caseId: number) =>
   request<{ case: Case }>(`/cases/${caseId}`).then((r) => r.case);
 
@@ -141,6 +145,10 @@ export const deleteCase = (caseId: number) =>
 /** One endpoint for both directions: the server owns the current state. */
 export const toggleLike = (caseId: number) =>
   request<{ liked: boolean; like_count: number }>(`/cases/${caseId}/like`, json("POST"));
+
+/** Same deal as toggleLike: one endpoint, the server owns the state. */
+export const toggleFollow = (caseId: number) =>
+  request<{ following: boolean }>(`/cases/${caseId}/follow`, json("POST"));
 
 export const fetchLikers = (caseId: number) =>
   request<{ users: UserRef[] }>(`/cases/${caseId}/likes`).then((r) => r.users);
