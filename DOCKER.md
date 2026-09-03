@@ -166,7 +166,7 @@ database instead — this is what to do for `bot_memories`, which is what the
 bots remember about the people they talk to:
 
 ```bash
-docker compose exec -T db mysql -uroot -plolsuit-dev lolsuit < database/init.sql
+docker compose exec -T db mysql -ulolsuit -plolsuit-dev lolsuit < database/init.sql
 ```
 
 That adds anything missing and touches nothing that already exists. It is not a
