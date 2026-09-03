@@ -584,3 +584,49 @@ CREATE TABLE IF NOT EXISTS agent_memories (
   -- forget-me endpoint is built on.
   KEY idx_agent_memory_subject (subject_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 22. case_follows - "My Feed": the cases a user keeps an eye on. The composite
+--     PRIMARY KEY *is* the "follow once" rule, exactly the way `likes` does it.
+--
+--     `source` records how the row got here: 'manual' when the user tapped
+--     follow, 'auto' when the app added it because they filed the case, were
+--     named as its registered defendant, or testified in it. An explicit
+--     unfollow deletes the row outright; a later auto-trigger (testifying
+--     again) simply re-follows, which is acceptable and keeps the write a
+--     plain upsert with no "muted" bookkeeping.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS case_follows (
+  case_id    INT      NOT NULL,
+  user_id    INT      NOT NULL,
+  source     ENUM('auto','manual') NOT NULL DEFAULT 'manual',
+  created_at DATETIME NOT NULL,
+  PRIMARY KEY (case_id, user_id),
+  CONSTRAINT fk_follows_case FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
+  CONSTRAINT fk_follows_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  -- The feed reads one user's follows newest-first.
+  KEY idx_follows_user (user_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 23. case_activity - one row per case, holding the timestamp of the last
+--     thing worth surfacing in a follower's feed (a comment, testimony, jury
+--     line, phase change, verdict, or close - NOT a like).
+--
+--     Denormalised on purpose, the same way conversations.last_message_at is:
+--     ordering a feed by "latest activity" has to be an indexed read, not a
+--     GREATEST() over four correlated subqueries. case_activity_service.touch()
+--     writes it in the SAME transaction as the event it records, so the bump
+--     and the event commit together or not at all.
+--
+--     `last_activity_kind` is a free-form slug ('filed','comment','testimony',
+--     'deliberation','phase','verdict','closed') for a future "X commented"
+--     label. Nothing branches on it.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS case_activity (
+  case_id            INT         NOT NULL PRIMARY KEY,
+  last_activity_at   DATETIME    NULL,
+  last_activity_kind VARCHAR(24) NOT NULL,
+  CONSTRAINT fk_activity_case FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
+  KEY idx_activity_recent (last_activity_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

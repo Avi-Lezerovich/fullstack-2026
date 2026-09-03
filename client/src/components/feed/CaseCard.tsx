@@ -13,13 +13,21 @@ import { Link as RouterLink } from "react-router-dom";
 
 import CaseStatusChip from "../case/CaseStatusChip";
 import CourtSeal from "../case/CourtSeal";
+import FollowButton from "../case/FollowButton";
 import { DOC_FONT } from "../../theme";
 import type { Case } from "../../types";
 import { initials, relativeTime } from "../../utils/format";
 
 const PREVIEW_LENGTH = 220;
 
-const CaseCard = ({ case: c }: { case: Case }) => {
+interface Props {
+  case: Case;
+  /** The personal feed sorts on activity, so it says what the activity was. */
+  showActivity?: boolean;
+  canFollow?: boolean;
+}
+
+const CaseCard = ({ case: c, showActivity, canFollow }: Props) => {
   const preview =
     c.body.length > PREVIEW_LENGTH ? `${c.body.slice(0, PREVIEW_LENGTH).trimEnd()}…` : c.body;
 
@@ -86,9 +94,22 @@ const CaseCard = ({ case: c }: { case: Case }) => {
               <ChatBubbleOutlineIcon fontSize="small" />
               <Typography variant="caption">{c.comment_count}</Typography>
             </Stack>
+            {showActivity && c.last_activity_at && (
+              <Typography variant="caption">
+                פעילות אחרונה {relativeTime(c.last_activity_at)}
+              </Typography>
+            )}
           </Stack>
         </CardContent>
       </CardActionArea>
+
+      {/* Outside the CardActionArea on purpose: it is a button, and nesting it
+          inside the link would make every tap navigate as well as toggle. */}
+      {canFollow && (
+        <Box sx={{ display: "flex", justifyContent: "flex-end", px: 2, pb: 1 }}>
+          <FollowButton caseId={c.id} following={c.viewer_is_following} />
+        </Box>
+      )}
     </Card>
   );
 }; export default CaseCard;

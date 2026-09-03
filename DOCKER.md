@@ -166,11 +166,18 @@ database instead — this is what to do for `bot_memories`, which is what the
 bots remember about the people they talk to:
 
 ```bash
-docker compose exec -T db mysql -uroot -plolsuit-dev lolsuit < database/init.sql
+docker compose exec -T db mysql -ulolsuit -plolsuit-dev lolsuit < database/init.sql
 ```
 
 That adds anything missing and touches nothing that already exists. It is not a
 migration tool: it cannot add a column to a table that is already there.
+
+The same applies to `case_follows` and `case_activity`, the two tables behind
+"My Feed": a fresh `docker compose down -v && docker compose up --build` picks
+them up from `init.sql`, and an existing local database gets them from the
+command above. A **production** database needs `prod/migrations/002-my-feed.sql`
+instead, which also backfills the follows and activity timestamps for cases that
+already exist.
 
 ### Running more than one worker
 

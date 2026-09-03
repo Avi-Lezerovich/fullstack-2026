@@ -5,6 +5,70 @@ major number moves when an upgrade needs a step other than pulling the image.
 
 ---
 
+## 2.2.0
+
+**You can follow a lawsuit, and the feed you get back is sorted by what
+actually happened.**
+
+### Added
+
+- **A personal feed.** Signed in, the first tab on the front page is now
+  `הפיד שלי`: the cases you follow, most recently active first. You follow a case
+  automatically when you file it, when it names you as the defendant, and when
+  you testify in it — the three ways you are already a party to one — and you can
+  follow or unfollow anything by hand. Signed out, the page is exactly what it
+  was. The tab sits first but is not the one you land on: a new account follows
+  nothing yet, and opening every signed-in visitor on an empty state to reach a
+  feature they have not used is a poor trade for one tap. The open tab is
+  tracked by id rather than by index for a related reason — the viewer resolves
+  a moment after mount, and an index would quietly come to mean the tab next
+  door when the personal feed appeared in front of the list.
+- **"Activity" means the case moved on.** A comment, a testimony, a juror's
+  line, a phase change, a verdict, a close. A like does not count, deliberately:
+  liking a filing says something about the liker, not about the trial. Ordering
+  by that had to survive a page of twenty cases, which rules out a `GREATEST()`
+  over four correlated subqueries per row — so `case_activity` holds one row per
+  case with the timestamp already computed, indexed, and written inside the same
+  transaction as the event that caused it. A case cannot advertise activity that
+  was rolled back, and every bump sits behind the guard that decides whether the
+  transition landed at all: a worker that loses the race to close a case returns
+  before it ever reaches its own write.
+- **`case_follows`, and the rule in the schema.** The composite primary key
+  `(case_id, user_id)` *is* "follow once", the way it already is for `likes`, so
+  the toggle never reads before it writes — it deletes, and the rowcount is the
+  previous state. A `source` column records whether a row came from a tap or from
+  one of the automatic paths, and the automatic insert is a no-op on conflict, so
+  it can never relabel a follow you made yourself.
+- **`GET /api/cases/feed` and `POST /api/cases/<id>/follow`**, plus
+  `viewer_is_following` and `last_activity_at` on every shaped case. Both new
+  fields ride the batch that already answered `viewer_has_liked`, so the list
+  path still costs one query per fact rather than one per case, and an anonymous
+  viewer costs nothing extra at all.
+- **A rejected filing gets no feed presence.** The row is still written — the
+  admin queue is the whole point — but it publishes to nobody, so it earns no
+  activity row and auto-follows no one onto a card only its author can see.
+
+### Changed
+
+- **The front page lost its header, and got its top back.** `אולם בית המשפט` and
+  the line under it explained the site to someone who was already looking at it.
+  Removing them left the file-a-lawsuit button alone on a row of its own, so it
+  now shares a line with the tabs — the two are the only controls on the page —
+  and the first case sits just under the top bar instead of a third of the way
+  down the screen.
+
+### Upgrading
+
+Pull the image. An existing database also needs
+`prod/migrations/002-my-feed.sql`, which creates the two tables and backfills
+them: each case's activity timestamp is reconstructed from the evidence that
+survives — the newest of its filing, verdict, close and last visible comment —
+and the three automatic follow rules are applied once to the history, so nobody
+starts with an empty feed. Safe to re-run; a fresh database gets both tables
+from `database/init.sql` and needs nothing.
+
+---
+
 ## 2.1.0
 
 **"Forgot password" sends an actual email.**

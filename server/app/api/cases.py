@@ -32,6 +32,23 @@ def list_cases():
     return jsonify({"cases": cases, "total": total, "limit": limit, "offset": offset}), 200
 
 
+@bp.get("/cases/feed")
+@security.require_auth
+def my_feed():
+    """The viewer's own feed: what they follow, most recently active first.
+
+    Signed-in only, and no `status` filter - the point of this list is "what
+    has moved", which a phase filter would fight. Same envelope as /cases so
+    the client pages it with the same hook.
+    """
+    limit = positive_int(request.args.get("limit"), 20, maximum=MAX_PAGE_SIZE)
+    offset = positive_int(request.args.get("offset"), 0)
+
+    cases = cases_service.list_followed_cases(g.user_id, limit=limit, offset=offset)
+    total = cases_service.count_followed_cases(g.user_id)
+    return jsonify({"cases": cases, "total": total, "limit": limit, "offset": offset}), 200
+
+
 @bp.post("/cases")
 @security.require_auth
 def create_case():

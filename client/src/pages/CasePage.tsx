@@ -14,6 +14,7 @@ import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import * as api from "../api";
 import CaseStatusChip from "../components/case/CaseStatusChip";
 import CourtSeal from "../components/case/CourtSeal";
+import FollowButton from "../components/case/FollowButton";
 import LikeButton from "../components/case/LikeButton";
 import LikersDialog from "../components/case/LikersDialog";
 import PhaseTimeline from "../components/case/PhaseTimeline";
@@ -212,6 +213,11 @@ const CasePage = () => {
                 מי אהב?
               </Button>
             )}
+            <FollowButton
+              caseId={c.id}
+              following={c.viewer_is_following}
+              disabled={!user}
+            />
           </Stack>
           <Stack direction="row" spacing={1}>
             {user && <ReportButton targetType="case" targetId={c.id} />}

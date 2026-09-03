@@ -20,7 +20,7 @@ from typing import Any
 import pymysql
 
 from ..db import Db, owned
-from . import moderation_service, notifications_service
+from . import case_activity_service, moderation_service, notifications_service
 
 # Replies deeper than this are flattened onto their parent. Three levels is as
 # far as an indented thread stays readable on a phone.
@@ -181,6 +181,19 @@ def create_comment(
 
         if notify_author and moderation_status not in ("hidden", "rejected"):
             _notify_participants(db, case, comment_id, author_id, role, body)
+
+        # Only the two roles written through this door on their own account.
+        # Court speech reaches the feed from trial_service, which knows whether
+        # the transition it is in the middle of actually landed.
+        #
+        # The dedupe branch returns above, so a retried tick cannot re-bump.
+        if moderation_status not in ("hidden", "rejected") and role in (
+            "user",
+            "witness_testimony",
+        ):
+            case_activity_service.touch(
+                case_id, "comment" if role == "user" else "testimony", conn=db.db
+            )
 
         db.commit_if_owned()
         return ("rejected" if moderation_status == "rejected" else "ok"), comment_id
