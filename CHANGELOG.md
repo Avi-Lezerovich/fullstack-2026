@@ -5,10 +5,36 @@ major number moves when an upgrade needs a step other than pulling the image.
 
 ---
 
-## 2.2.0
+## 3.0.0
 
 **You can follow a lawsuit, and the feed you get back is sorted by what
 actually happened.**
+
+### ⚠️ Upgrading needs one manual step
+
+This release adds two tables. Apply them **before** deploying the new images —
+the old image never touches either table, but the new one writes `case_activity`
+inside the same transaction as every comment, so a new server against an
+un-migrated database takes each comment down with it.
+
+```bash
+cd /opt/lolsuit && git pull
+cd prod && ./init-rds.sh --check     # read the list; confirm case_follows + case_activity
+```
+
+If they are not there, apply the migration:
+
+```bash
+docker run --rm -i -e MYSQL_PWD="$DB_PASSWORD" mysql:8.0 \
+  mysql -h "$DB_HOST" -u "$DB_USER" "$DB_NAME" < prod/migrations/002-my-feed.sql
+```
+
+Take an RDS snapshot first. The migration creates the two tables and backfills
+them: each case's activity timestamp is reconstructed from the evidence that
+survives — the newest of its filing, verdict, close and last visible comment —
+and the three automatic follow rules are applied once to the history, so nobody
+starts with an empty feed. Safe to re-run. A fresh database gets both tables
+from `database/init.sql` and needs none of this.
 
 ### Added
 
@@ -57,15 +83,18 @@ actually happened.**
   and the first case sits just under the top bar instead of a third of the way
   down the screen.
 
-### Upgrading
+### Why this is a major
 
-Pull the image. An existing database also needs
-`prod/migrations/002-my-feed.sql`, which creates the two tables and backfills
-them: each case's activity timestamp is reconstructed from the evidence that
-survives — the newest of its filing, verdict, close and last visible comment —
-and the three automatic follow rules are applied once to the history, so nobody
-starts with an empty feed. Safe to re-run; a fresh database gets both tables
-from `database/init.sql` and needs nothing.
+Nothing that was true before this release is false now: no endpoint changed
+shape, no behaviour that existing clients depend on moved. It is a major for one
+reason — it does not upgrade by pulling the image. It needs the migration above,
+run in the right order, against a database you snapshotted first, and by this
+project's rule (see the note at the top of this file) that is what the major
+number is for. `001-brain-v2.sql` shipped as 2.0.0 on the same reasoning.
+
+`client/package.json` moves to `3.0.0` to match; nothing reads it, but a version
+string that disagrees with the release is a small lie that costs nothing to
+avoid.
 
 ---
 

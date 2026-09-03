@@ -398,7 +398,8 @@ Written migrations live in `prod/migrations/`, newest last:
 
 | File | Ships with | What it does |
 | --- | --- | --- |
-| `001-brain-v2.sql` | v1.3.0 | Adds `agent_events` and `agent_memories`, and copies `bot_memories` across. |
+| `001-brain-v2.sql` | v2.0.0 | Adds `agent_events` and `agent_memories`, and copies `bot_memories` across. |
+| `002-my-feed.sql` | v3.0.0 | Adds `case_follows` and `case_activity`, backfills each case's last-activity timestamp and the automatic follows. Apply *before* the new images. |
 
 **A new table needs this step even though `init.sql` already has it.** `init-rds.sh`
 reads `init.sql` from *this instance's own checkout*, so a box that was not pulled
