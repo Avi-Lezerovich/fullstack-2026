@@ -20,7 +20,7 @@ from typing import Any
 import pymysql
 
 from ..db import Db, owned
-from . import comments_service, notifications_service
+from . import comments_service, follows_service, notifications_service
 
 MAX_WITNESSES_PER_SIDE = 3
 
@@ -172,6 +172,11 @@ def testify(
             "WHERE id = %s AND status = 'pending'",
             (comment_id, summons["id"]),
         )
+
+        # You took the stand, so the case is now yours to watch. The activity
+        # bump for the testimony itself already happened inside create_comment.
+        follows_service.follow(case_id, witness_id, source="auto", conn=db.db)
+
         db.commit_if_owned()
         return "ok", comment_id
 

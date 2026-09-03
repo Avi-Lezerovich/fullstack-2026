@@ -34,6 +34,7 @@ from ..config import get_settings
 from ..db import Db, owned
 from . import (
     agents_service,
+    case_activity_service,
     comments_service,
     jury_service,
     memory_service,
@@ -197,6 +198,8 @@ def advance_to_deliberation(case_id: int, conn: Db | None = None) -> str:
         if moved.rowcount != 1:
             return "already_done"
 
+        case_activity_service.touch(case_id, "phase", conn=db.db)
+
         db.commit_if_owned()
         return "ok"
 
@@ -294,6 +297,9 @@ def speak_as_juror(member: dict[str, Any], conn: Db | None = None) -> str:
                 dedupe_key=f"vote:{member['id']}",
                 conn=db.db,
             )
+            # Gated for the same reason as the event above: on already_done the
+            # line on the record is another worker's, and it did its own bump.
+            case_activity_service.touch(case["id"], "deliberation", conn=db.db)
 
         db.commit_if_owned()
         return recorded
@@ -398,6 +404,12 @@ def advance_to_verdict(case_id: int, conn: Db | None = None) -> str:
         )
 
         _notify_verdict(db, case, verdict, sentence_text, comment_id)
+
+        # Last writer wins, and that is the point: the catch-up loop above may
+        # have bumped this case to 'deliberation' several times on its way here,
+        # all in this one transaction. What a follower should see is the verdict.
+        case_activity_service.touch(case_id, "verdict", conn=db.db)
+
         db.commit_if_owned()
         return "ok"
 
@@ -442,6 +454,9 @@ def close_case(case_id: int, conn: Db | None = None) -> str:
         )
         if moved.rowcount != 1:
             return "already_done"
+
+        case_activity_service.touch(case_id, "closed", conn=db.db)
+
         db.commit_if_owned()
         return "ok"
 

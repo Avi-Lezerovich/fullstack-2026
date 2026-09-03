@@ -15,7 +15,7 @@ from typing import Any
 
 from ..clock import witness_deadline_offset
 from ..db import Db, owned
-from . import moderation_service
+from . import case_activity_service, follows_service, moderation_service
 
 MAX_CHARGES = 5
 CHARGE_MAX_LENGTH = 64
@@ -56,6 +56,8 @@ def shape_case(
     like_count: int = 0,
     comment_count: int = 0,
     viewer_has_liked: bool = False,
+    viewer_is_following: bool = False,
+    last_activity_at=None,
 ) -> dict[str, Any] | None:
     """Row -> the JSON the client receives. Pure; mirrored by types.ts."""
     if row is None:
@@ -95,6 +97,10 @@ def shape_case(
         "like_count": int(like_count),
         "comment_count": int(comment_count),
         "viewer_has_liked": bool(viewer_has_liked),
+        "viewer_is_following": bool(viewer_is_following),
+        # Null until something happens on the case. The feed sorts on this
+        # coalesced with filed_at, so a case with no row yet still places.
+        "last_activity_at": _iso(last_activity_at),
     }
 
 
@@ -129,7 +135,12 @@ def _charges_for(case_ids: list[int], db) -> dict[int, list[str]]:
 
 
 def _counts_for(case_ids: list[int], viewer_id: int | None, db) -> dict[int, dict[str, Any]]:
-    """Like and comment totals, plus whether the viewer already liked."""
+    """Everything a card needs beyond the case row itself, for a whole page.
+
+    Like and comment totals, the two viewer-state flags, and the feed's
+    activity timestamp. The keys are exactly shape_case's keyword arguments, so
+    every caller splats this straight in.
+    """
     if not case_ids:
         return {}
     placeholders = ", ".join(["%s"] * len(case_ids))
@@ -154,13 +165,33 @@ def _counts_for(case_ids: list[int], viewer_id: int | None, db) -> dict[int, dic
         )
         liked_ids = {row["case_id"] for row in rows}
 
+    activity = db.query_all(
+        f"SELECT case_id, last_activity_at FROM case_activity "
+        f"WHERE case_id IN ({placeholders})",
+        case_ids,
+    )
+
+    # Same guard as the likes lookup above: an anonymous viewer follows
+    # nothing, so there is no query to run.
+    following_ids: set[int] = set()
+    if viewer_id:
+        rows = db.query_all(
+            f"SELECT case_id FROM case_follows "
+            f"WHERE user_id = %s AND case_id IN ({placeholders})",
+            [viewer_id, *case_ids],
+        )
+        following_ids = {row["case_id"] for row in rows}
+
     like_map = {row["case_id"]: int(row["n"]) for row in likes}
     comment_map = {row["case_id"]: int(row["n"]) for row in comments}
+    activity_map = {row["case_id"]: row["last_activity_at"] for row in activity}
     return {
         case_id: {
             "like_count": like_map.get(case_id, 0),
             "comment_count": comment_map.get(case_id, 0),
             "viewer_has_liked": case_id in liked_ids,
+            "viewer_is_following": case_id in following_ids,
+            "last_activity_at": activity_map.get(case_id),
         }
         for case_id in case_ids
     }
@@ -243,6 +274,17 @@ def create_case(
 
         if scan is not None:
             moderation_service.record_scan("case", case_id, "publish", scan, conn=db.db)
+
+        # A rejected filing never publishes, so it gets no feed presence: no
+        # activity row to sort on, and nobody auto-followed onto a card they
+        # can see but nobody else can.
+        if moderation_status != "rejected":
+            case_activity_service.touch(case_id, "filed", conn=db.db)
+            follows_service.follow(case_id, author_id, source="auto", conn=db.db)
+            if defendant_user_id is not None:
+                follows_service.follow(
+                    case_id, int(defendant_user_id), source="auto", conn=db.db
+                )
 
         db.commit_if_owned()
         return ("rejected" if moderation_status == "rejected" else "ok"), case_id
@@ -353,6 +395,71 @@ def count_cases(
         return int(
             db.query_value(
                 f"SELECT COUNT(*) FROM cases c WHERE {' AND '.join(where)}", params, default=0
+            )
+        )
+
+
+# --- the personal feed ------------------------------------------------------
+#
+# One user's followed cases, newest ACTIVITY first - which is a different
+# question from the public feed's newest FILING first, and the reason
+# case_activity exists. The two queries below must agree on their filters or
+# "load more" breaks; see count_cases' docstring for why.
+
+_FOLLOWED_JOINS = """
+    JOIN case_follows cf ON cf.case_id = c.id AND cf.user_id = %s
+"""
+
+# The author of a hidden filing can still see it, exactly as get_case allows.
+# Admins get no special case: this feed is personal, not a moderation queue.
+_FOLLOWED_VISIBILITY = f"({PUBLIC_VISIBILITY} OR c.author_id = %s)"
+
+
+def list_followed_cases(
+    viewer_id: int,
+    *,
+    limit: int = 20,
+    offset: int = 0,
+    conn: Db | None = None,
+) -> list[dict[str, Any]]:
+    """The viewer's own feed: cases they follow, most recently active first.
+
+    COALESCE to filed_at so a case whose activity row has not been written yet
+    - anything filed before the feature shipped and not yet backfilled - still
+    sorts somewhere sensible instead of falling off the end.
+    """
+    with owned(conn) as db:
+        rows = db.query_all(
+            f"SELECT {_CASE_COLUMNS} {_CASE_JOINS} {_FOLLOWED_JOINS} "
+            "LEFT JOIN case_activity ca ON ca.case_id = c.id "
+            f"WHERE {_FOLLOWED_VISIBILITY} "
+            "ORDER BY COALESCE(ca.last_activity_at, c.filed_at) DESC, c.id DESC "
+            "LIMIT %s OFFSET %s",
+            [viewer_id, viewer_id, int(limit), int(offset)],
+        )
+        case_ids = [row["id"] for row in rows]
+        charges = _charges_for(case_ids, db)
+        counts = _counts_for(case_ids, viewer_id, db)
+
+    return [
+        shape_case(row, charges=charges.get(row["id"], []), **counts[row["id"]])
+        for row in rows
+    ]
+
+
+def count_followed_cases(viewer_id: int, *, conn: Db | None = None) -> int:
+    """How many cases a matching list_followed_cases() would find.
+
+    The same filters, for the same reason count_cases gives: a total counted
+    over a wider set leaves a "load more" button that can never load anything.
+    """
+    with owned(conn) as db:
+        return int(
+            db.query_value(
+                f"SELECT COUNT(*) FROM cases c {_FOLLOWED_JOINS} "
+                f"WHERE {_FOLLOWED_VISIBILITY}",
+                [viewer_id, viewer_id],
+                default=0,
             )
         )
 
