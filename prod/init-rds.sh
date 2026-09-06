@@ -14,7 +14,7 @@
 #  So this is the one manual step between creating the RDS instance and the
 #  first deploy.
 #
-#  It is SAFE TO RE-RUN. All 21 CREATE TABLE statements in init.sql are
+#  It is SAFE TO RE-RUN. All 23 CREATE TABLE statements in init.sql are
 #  IF NOT EXISTS, so a second run adds nothing and drops nothing.
 #
 #  It is also, for the same reason, NOT A MIGRATION TOOL. IF NOT EXISTS can only
@@ -154,7 +154,7 @@ cat <<NEXT
 
     ./deploy.sh ${BOLD}v1.0.1${OFF}
 
-  The seed job runs automatically on deploy and creates the 19 court bots and
+  The seed job runs automatically on deploy and creates the 31 court bots and
   the demo accounts. It is idempotent, so it is safe on every deploy.
 
 NEXT

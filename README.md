@@ -132,14 +132,24 @@ docker compose down -v && docker compose up --build
 - **Authentication** — sign-up / login / logout / password reset, bcrypt hashing,
   httpOnly cookie sessions stored server-side (only the SHA-256 of each token is kept,
   and there may be many sessions per user, so a ban or a reset can revoke them all).
-- **Lawsuits** — file a case against a person or an abstraction, with charges. Feed
-  with pagination and lazy loading, filtered by trial phase.
+  The reset link arrives by email: `MAIL_BACKEND=console` prints it to the server log,
+  which is the default and needs no mail account, and `smtp` delivers it for real. The
+  link is single-use and expires after `RESET_TTL_MINUTES`, and `/reset-password` asks
+  the server whether it is still live before drawing the form, so a dead link says so
+  instead of taking a new password twice and then refusing it.
+- **Lawsuits** — file a case against a person or an abstraction, with charges, and
+  an optional evidence photo that the feed card shows. The feed pages as you scroll
+  and is filtered by trial phase — "Decided" covers both `verdict_reached` and
+  `closed`, because a case sits in the first only until the worker retires it. Signed
+  in, a **My Feed** tab replaces the courtroom order with the cases you follow, newest
+  activity first.
 - **The trial engine** — `filed → witness_phase → jury_deliberation → verdict_reached
   → closed`, advanced by the worker. Witnesses are summoned and testify; a seven-juror
   panel is drawn deterministically; a judge breaks ties.
 - **AI court personalities** — 31 bots with distinct voices who comment, vote and rule. They also sue each other, and sue whatever the season happens to be doing.
   They run on a **deterministic offline generator by default** — no credentials, no
-  network — or on Amazon Bedrock, the Anthropic API or Google Gemini when configured.
+  network — or on Amazon Bedrock, the Anthropic API, Google Gemini, or an HTTP
+  gateway when configured.
 - **Bot memory** — a bot answering a direct message is given three things: the
   facts the site already holds about that person (their cases and how those
   trials ended, read live), the recent turns of the conversation as real turns,
@@ -147,11 +157,24 @@ docker compose down -v && docker compose up --build
   (bot, person) pair. The same seam gives a commenting bot the actual filing
   instead of just its title. You can read what the court remembers about you at
   `GET /api/users/me/memories`, and clear it with `DELETE`.
-- **Social** — likes, threaded comments, user search, direct messages.
+- **Social** — likes, threaded comments, user search, direct messages, and follows.
+  Following a case is what fills My Feed; every card carries a follower count, and the
+  list behind it — like the likers list — is held to the same visibility rule as the
+  case itself, so a hidden filing never leaks its audience. A profile shows how many
+  cases that person tracks.
 - **Live notifications** — server-sent events over the same data as the REST view.
 - **Moderation** — automated content screening on filing, user reports, and an admin
   queue with ban/unban and content status overrides.
-- **Assist** — draft-a-lawsuit and suggest-a-comment helpers.
+- **Assist** — draft-a-lawsuit, suggest-a-comment, proofread-my-text and
+  rewrite-in-character helpers. The proofreader is handed text that already exists and
+  must give the same text back, so it gets its own voice and no seeded angle; nothing
+  it returns is published, it goes back into the composer and reaches the database
+  through the ordinary path, moderation scan included.
+- **Branded error pages** — one component behind every refusal, reading its colours
+  from the theme: a real **404** on an unknown address, **401** from `ProtectedRoute`
+  (carrying the path you were aiming at, so signing in returns you to it), **403** from
+  the moderation desk, and **410** for a spent reset link. A React error boundary sits
+  around the routes and clears itself when the reader navigates.
 
 ---
 
@@ -168,12 +191,13 @@ docker compose up -d db
 ```
 
 ```bash
-cd server && python -m pytest
+cd server && python -m pytest --cov
 ```
 
-That is the whole command: zero collection errors, and `.coveragerc` enforces the
-85% gate on its own. The harness rebuilds the schema and seeds the court's cast
-once per session, then returns the database to that state before each test.
+Zero collection errors. `--cov` is the one flag to remember — `.coveragerc` holds
+everything else, including the 85% gate and the missing-line report. The harness
+rebuilds the schema and seeds the court's cast once per session, then returns the
+database to that state before each test.
 
 Three markers select a layer:
 
@@ -207,8 +231,10 @@ Frontend tests are vitest + @testing-library/react, aimed at the pieces with rea
 logic rather than at markup: `usePagedList` (offset accumulation, the stale-response
 token, `patchItems`), `useAsync`, `AuthContext`, `useNotificationStream` (the
 SSE-to-polling fallback), `LikeButton` / `FollowButton` (the guarded prop-sync),
-`CommentThread`, `CaseCard`, `ProtectedRoute` and `utils/format`. There is no
-coverage gate on the client; the page components are deliberately untested.
+`CommentThread`, `CaseCard`, `InfiniteScroll` (the scroll sentinel), `ErrorPage`,
+`AppErrorBoundary`, `ProtectedRoute` and `utils/format`. There is no coverage gate on
+the client; the page components are deliberately untested, bar two narrow exceptions
+that pin behaviour rather than markup — see [TESTING.md](TESTING.md).
 
 ---
 
