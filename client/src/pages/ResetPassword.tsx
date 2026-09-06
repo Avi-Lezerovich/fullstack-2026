@@ -1,7 +1,6 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
-import Link from "@mui/material/Link";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
@@ -9,7 +8,9 @@ import Typography from "@mui/material/Typography";
 import { Link as RouterLink, useSearchParams } from "react-router-dom";
 
 import * as api from "../api";
-import { ErrorNote } from "../components/common/StateViews";
+import { ErrorPage } from "../components/common/ErrorPage";
+import { ErrorNote, Loading } from "../components/common/StateViews";
+import { useAsync } from "../hooks/useAsync";
 
 const ResetPassword = () => {
   const [params] = useSearchParams();
@@ -20,6 +21,15 @@ const ResetPassword = () => {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // The link is checked before the form is drawn. Rejecting rather than
+  // returning early keeps the hook order fixed, and spares the server a round
+  // trip for a URL with no token in it at all.
+  const load = useCallback(
+    () => (token ? api.validatePasswordReset(token) : Promise.reject(new Error("no token"))),
+    [token],
+  );
+  const check = useAsync(load, [token]);
 
   const mismatch = confirm.length > 0 && confirm !== password;
 
@@ -38,14 +48,28 @@ const ResetPassword = () => {
     }
   };
 
-  if (!token) {
+  if (check.loading) return <Loading label="בודק את הקישור…" />;
+
+  // Missing, forged, expired, already spent: one page for all four. The
+  // server refuses to say which, and the client must not become the oracle
+  // the server declined to be — so `check.error` is not shown.
+  if (check.error) {
     return (
-      <Paper sx={{ p: 3, maxWidth: 440, mx: "auto" }}>
-        <ErrorNote message="הקישור אינו תקין — חסר טוקן איפוס." />
-        <Link component={RouterLink} to="/forgot-password">
-          בקש קישור חדש
-        </Link>
-      </Paper>
+      <ErrorPage
+        code="410"
+        title="צו האיפוס פג תוקפו"
+        description="הקישור תקף לזמן קצר בלבד וניתן לשימוש חד־פעמי. הקישור הזה כבר נוצל או שחלף זמנו."
+        action={
+          <Button
+            component={RouterLink}
+            to="/forgot-password"
+            variant="contained"
+            data-testid="reset-request-new"
+          >
+            בקשת קישור חדש
+          </Button>
+        }
+      />
     );
   }
 
