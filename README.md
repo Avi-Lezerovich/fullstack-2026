@@ -157,35 +157,58 @@ docker compose down -v && docker compose up --build
 
 ## Tests
 
+The backend suite runs against **real MySQL**. `tests/conftest.py` executes
+`database/init.sql` itself into a throwaway `lolsuit_test` database, so the tests
+exercise the actual dialect — the real foreign keys, the real ENUM constraints,
+`FOR UPDATE SKIP LOCKED` and `UTC_TIMESTAMP()` — rather than an approximation of
+them. Your own `lolsuit` database is never touched.
+
 ```bash
-cd server && python -m pytest -v
+docker compose up -d db
 ```
 
-> **Note — five modules still fail at collection, and a bare `pytest` stops there.**
-> All five are pre-MySQL-migration leftovers importing `app/utils.py`, which is gone.
-> Skip them and 330 tests collect; 326 pass, and the four that remain are
-> `tests/integration/test_post_delete_flow.py`, which reaches for a
-> `services.get_db` seam `conftest.py` can no longer patch:
->
-> ```bash
-> cd server && python -m pytest -v \
->   --ignore=tests/unit/test_password_hashing.py \
->   --ignore=tests/unit/test_post_deletion.py \
->   --ignore=tests/unit/test_session_cookie.py \
->   --ignore=tests/unit/test_session_token.py \
->   --ignore=tests/integration/test_auth_flow.py
-> ```
->
-> Repairing them is separate work.
+```bash
+cd server && python -m pytest
+```
+
+That is the whole command: zero collection errors, and `.coveragerc` enforces the
+85% gate on its own. The harness rebuilds the schema and seeds the court's cast
+once per session, then returns the database to that state before each test.
+
+Three markers select a layer:
+
+```bash
+cd server && python -m pytest -m unit
+```
+
+```bash
+cd server && python -m pytest -m "integration or worker"
+```
+
+The `unit` layer is hermetic and needs nothing running. **Without the database the
+`integration` and `worker` tests skip** — loudly, with a reason naming
+`docker compose up -d db` — rather than erroring, so `pytest` still passes on a
+machine with no Docker. The coverage figure below assumes it is up.
+
+Point the harness elsewhere with `TEST_DB_HOST`, `TEST_DB_PORT`,
+`TEST_DB_ROOT_USER`, `TEST_DB_ROOT_PASSWORD` and `TEST_DB_NAME`. It needs an
+account that may `CREATE DATABASE`, which is why it connects as root by default
+while the application itself never does.
 
 ```bash
 cd client && npm test
 ```
 
-> **Note — the frontend suite is one file deep.** `src/test/setup.ts` now exists (it
-> was named by `vite.config.ts` and never created, so the suite used to fail before
-> running anything), and `InfiniteScroll.test.tsx` covers the scroll sentinel. The
-> rest of the components have no tests yet.
+```bash
+cd client && npm run lint
+```
+
+Frontend tests are vitest + @testing-library/react, aimed at the pieces with real
+logic rather than at markup: `usePagedList` (offset accumulation, the stale-response
+token, `patchItems`), `useAsync`, `AuthContext`, `useNotificationStream` (the
+SSE-to-polling fallback), `LikeButton` / `FollowButton` (the guarded prop-sync),
+`CommentThread`, `CaseCard`, `ProtectedRoute` and `utils/format`. There is no
+coverage gate on the client; the page components are deliberately untested.
 
 ---
 
