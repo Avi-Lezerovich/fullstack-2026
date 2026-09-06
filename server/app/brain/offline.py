@@ -162,6 +162,43 @@ def tidy(text: str) -> str:
     return trim(text, SAFETY_CEILING_CHARS)
 
 
+def keep_lines(text: str) -> str:
+    """`tidy` for text that is a document rather than a line spoken aloud.
+
+    `tidy` exists because a juror is saying something in a courtroom, where a
+    newline serves nothing - so it collapses all whitespace and caps the
+    length. Both of those are wrong for the one kind of text that is not the
+    court's to shape: the user's own filing, handed back corrected. Collapsing
+    its blank lines would be an edit nobody asked for, and truncating it at the
+    safety ceiling would silently eat the end of a long filing.
+
+    So this only strips the outer whitespace. The bound on that text belongs
+    where the length is actually known - the endpoint caps it at what the
+    composer it came from can hold.
+    """
+    return text.strip()
+
+
+def correct_text(text: str) -> str:
+    """What correction looks like with no model: the text, unchanged.
+
+    This is not a stub waiting to be filled in. Everything else in this module
+    is a phrase template with slots, and templates cannot proofread - there is
+    no representation of Hebrew here to check anything against. The options
+    were a deterministic tidy-up (collapse double spaces, straighten
+    punctuation) and doing nothing, and the second is the honest one: a
+    "correction" that only ever moves a comma tells the user their spelling was
+    fine when nothing looked at it. Handing the text straight back cannot lie
+    about that, and the endpoint reports `backend: "offline"` so the UI can say
+    plainly that no correction was made.
+
+    The whitespace strip is deliberately the whole of it - `keep_lines` is what
+    the live path uses too, so offline and live differ in what they corrected
+    and in nothing else.
+    """
+    return keep_lines(text)
+
+
 def generate(
     personality_prompt: str,
     task: str,
@@ -170,6 +207,13 @@ def generate(
     max_chars: int = DEFAULT_MAX_CHARS,
 ) -> str:
     context = context or {}
+
+    # Correction never reaches the templates, and must not: falling through to
+    # them would replace the user's paragraphs with "התוכן נסרק. הרישום עודכן
+    # בהתאם." and call it a corrected filing. See `correct_text`.
+    if task == "correct_text":
+        return correct_text(str(context.get("user_text") or ""))
+
     rng = random.Random(seed_for(personality_prompt, task, context))
 
     templates = corpus.TEMPLATES.get(task)

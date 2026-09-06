@@ -17,6 +17,7 @@ from .. import brain, security
 from ..errors import fail
 from ..services import agents_service, cases_service
 from ..validation import body_of, clean
+from .cases import BODY_MAX_LENGTH
 
 bp = Blueprint("assist", __name__)
 
@@ -37,6 +38,29 @@ HOUSE_VOICE = (
     '- "מוגשת בזאת תביעה בעניינה של מדבקת מחיר אשר סירבה לרדת בשלמותה."\n'
     '- "התובע יטען כי המעשה בוצע ביודעין, בשעה 7:04, ובלא כל התראה מוקדמת."\n'
     '- "מתבקש בית המשפט הנכבד להורות על השבת המצב לקדמותו, ולמצער על התנצלות בכתב."'
+)
+
+
+# And the house proofreader, who is emphatically not the house drafter.
+#
+# HOUSE_VOICE above is a *rewriter*: hand it a shabby complaint and it hands
+# back a filing in ceremonial legal Hebrew, which is precisely what
+# /assist/draft-lawsuit is for. Pointed at text the user has already written it
+# does the same thing and calls the result a correction - the user gets back
+# prose they did not write, in a register they did not choose, with their own
+# jokes ironed out. The two endpoints would have collapsed into one.
+#
+# So correction gets its own character sheet, and the whole of that character
+# is restraint. The task brief in brain/llm.py carries the hard rules; this
+# block is what the model is being, and it is being a person who does not write.
+PROOFREADER_VOICE = (
+    "אתה המגיה של בית המשפט. אתה מתקן עברית, אתה לא כותב עברית.\n\n"
+    "**מה אתה עושה:** כתיב, דקדוק, התאמות, מילות יחס, פיסוק. בשקט, בדיוק, "
+    "בלי חוות דעת ובלי הערות שוליים.\n"
+    "**מה מפעיל אותך:** שגיאה. רק שגיאה.\n"
+    "**מה שלא תעשה לעולם:** תשכתב משפט תקין, תייפה ניסוח, תוסיף הומור, תוסיף "
+    "לשון משפטית, או תיגע במילה שאין בה שגיאה. הטקסט שייך למי שכתב אותו, "
+    "והעבודה שלך היא שהוא ייראה בדיוק כפי שהתכוון."
 )
 
 
@@ -89,6 +113,54 @@ def suggest_comment():
     return jsonify(
         {
             "body": brain.generate(HOUSE_VOICE, "suggest_comment", context, max_chars=280),
+            "backend": "llm" if _live() else "offline",
+        }
+    ), 200
+
+
+@bp.post("/assist/correct-text")
+@security.require_auth
+def correct_text():
+    """Hand back what the user wrote, spelled and punctuated properly.
+
+    The third of the spec's writing-help endpoints, and the one that is not
+    writing: /assist/draft-lawsuit invents a filing and /assist/suggest-comment
+    invents a comment, while this one is given text that already exists and
+    must give the same text back. Everything about it - a proofreader instead
+    of the house voice, no seeded angle, no `tidy` on the way out - exists to
+    stop it drifting into being a third drafter.
+
+    Nothing is published here. The corrected text goes back into the composer
+    the user was already filling in, and reaches the database through the
+    ordinary publish path, moderation scan included, exactly like text they
+    typed themselves.
+    """
+    data = body_of(request)
+    # BODY_MAX_LENGTH is the longest thing any composer on the site can hold (a
+    # filing; a comment is shorter). Capping at anything less would silently
+    # drop the end of a long filing and return the truncation as a correction.
+    text = clean(data.get("text"), BODY_MAX_LENGTH)
+
+    if not text:
+        return fail("invalid", "אין טקסט לתיקון.")
+
+    corrected = brain.generate(
+        PROOFREADER_VOICE,
+        "correct_text",
+        {"user_text": text},
+        # Derived from the input rather than pinned, because a correction is as
+        # long as the thing it corrects. A fixed budget - the 700 the drafter
+        # uses - would cap the model mid-filing, and the truncation would look
+        # like the proofreader having deleted the user's last two paragraphs.
+        # `_max_tokens_for` doubles this again for Hebrew and for thinking.
+        max_chars=len(text) + 200,
+    )
+
+    return jsonify(
+        {
+            # The same ceiling the input was held to: a model that loops must
+            # not hand the composer more text than the composer can submit.
+            "body": clean(corrected, BODY_MAX_LENGTH),
             "backend": "llm" if _live() else "offline",
         }
     ), 200

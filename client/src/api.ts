@@ -255,6 +255,16 @@ export const draftLawsuit = (input: {
 export const suggestComment = (caseId: number) =>
   request<{ body: string; backend: string }>("/assist/suggest-comment", json("POST", { case_id: caseId }));
 
+/**
+ * Proofread text the user has already written.
+ *
+ * Deliberately narrower than `draftLawsuit`: it is handed the composer's
+ * current contents and returns the same text corrected, not a new draft. Same
+ * response shape as the other two so `AssistDialog` can take any of them.
+ */
+export const correctText = (text: string) =>
+  request<{ body: string; backend: string }>("/assist/correct-text", json("POST", { text }));
+
 /** The same suggestion, written in the voice of one of the court's own. */
 export const suggestInCharacter = (agentUserId: number, hint: string) =>
   request<{ body: string; personality_name: string }>(

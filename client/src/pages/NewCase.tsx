@@ -148,7 +148,26 @@ const NewCase = () => {
             fullWidth
             inputProps={{ "data-testid": "case-body", maxLength: 8000 }}
           />
-          <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 1 }}>
+          <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1, mt: 1 }}>
+            {/* Two different offers, and keeping them apart is the point: the
+                drafter writes a filing from the details, the proofreader only
+                fixes what the user already wrote. One button doing both would
+                mean every request for a spelling check came back as somebody
+                else's lawsuit. Hence the second one is disabled until there is
+                text of the user's own to correct. */}
+            <AssistButton
+              size="small"
+              label="תקן לי את הניסוח"
+              title="תיקון כתב התביעה"
+              helper="בית המשפט יתקן שגיאות כתיב, דקדוק ופיסוק — בלי לשנות את מה שכתבת. הטקסט המתוקן יחזור לכאן לאישורך."
+              disabled={!body.trim()}
+              load={() => api.correctText(body)}
+              onAccept={setBody}
+              acceptLabel="החלף בטקסט המתוקן"
+              busyLabel="מתקן…"
+              retryLabel="תקן שוב"
+              offlineNote="המנוע המקומי אינו יודע לתקן עברית, ולכן הטקסט הוחזר כפי שהוא. תיקון אמיתי דורש חיבור למודל שפה."
+            />
             {/* Needs at least a defendant — the drafter has nothing to write
                 about otherwise, and the endpoint says so with a 400. */}
             <AssistButton

@@ -3,6 +3,7 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import TextField from "@mui/material/TextField";
 
+import * as api from "../../api";
 import AssistButton from "../assist/AssistButton";
 import { ErrorNote } from "../common/StateViews";
 
@@ -64,6 +65,24 @@ const CommentComposer = ({
         inputProps={{ "data-testid": "comment-body", maxLength: 4000 }}
       />
       <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1, mt: 1 }}>
+        {/* Only once there is something to correct. Unlike the suggestion
+            beside it, this one has no case to fall back on — an empty composer
+            gives it nothing to work with, and the endpoint answers a blank
+            request with a 400. */}
+        {body.trim().length > 0 && (
+          <AssistButton
+            size="small"
+            label="תקן לי"
+            title="תיקון התגובה"
+            helper="בית המשפט יתקן שגיאות כתיב, דקדוק ופיסוק — בלי לשנות את מה שכתבת."
+            load={() => api.correctText(body)}
+            onAccept={setBody}
+            acceptLabel="החלף בטקסט המתוקן"
+            busyLabel="מתקן…"
+            retryLabel="תקן שוב"
+            offlineNote="המנוע המקומי אינו יודע לתקן עברית, ולכן הטקסט הוחזר כפי שהוא. תיקון אמיתי דורש חיבור למודל שפה."
+          />
+        )}
         {assistLoad && (
           <AssistButton
             size="small"
