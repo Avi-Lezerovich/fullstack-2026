@@ -1,7 +1,8 @@
 import Box from "@mui/material/Box";
 import Container from "@mui/material/Container";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 
+import AppErrorBoundary from "./components/common/AppErrorBoundary";
 import Footer from "./components/layout/Footer";
 import TopBar from "./components/layout/TopBar";
 import ProtectedRoute from "./components/routing/ProtectedRoute";
@@ -13,6 +14,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import Login from "./pages/Login";
 import Messages from "./pages/Messages";
 import NewCase from "./pages/NewCase";
+import NotFound from "./pages/NotFound";
 import Profile from "./pages/Profile";
 import ResetPassword from "./pages/ResetPassword";
 import Signup from "./pages/Signup";
@@ -25,27 +27,29 @@ const App = () => {
 
       <Box component="main" sx={{ flex: 1 }}>
         <Container maxWidth="md" sx={{ py: 3 }}>
-          <Routes>
-            <Route path="/" element={<Feed />} />
-            <Route path="/cases/new" element={<ProtectedRoute><NewCase /></ProtectedRoute>} />
-            <Route path="/cases/:caseId" element={<CasePage />} />
-            <Route path="/users" element={<Users />} />
-            <Route path="/about" element={<About />} />
-            <Route
-              path="/messages"
-              element={<ProtectedRoute><Messages /></ProtectedRoute>}
-            />
-            <Route path="/users/:userId" element={<Profile />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/forgot-password" element={<ForgotPassword />} />
-            <Route path="/reset-password" element={<ResetPassword />} />
-            <Route
-              path="/admin"
-              element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>}
-            />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <AppErrorBoundary>
+            <Routes>
+              <Route path="/" element={<Feed />} />
+              <Route path="/cases/new" element={<ProtectedRoute><NewCase /></ProtectedRoute>} />
+              <Route path="/cases/:caseId" element={<CasePage />} />
+              <Route path="/users" element={<Users />} />
+              <Route path="/about" element={<About />} />
+              <Route
+                path="/messages"
+                element={<ProtectedRoute><Messages /></ProtectedRoute>}
+              />
+              <Route path="/users/:userId" element={<Profile />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
+              <Route
+                path="/admin"
+                element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>}
+              />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </AppErrorBoundary>
         </Container>
       </Box>
 

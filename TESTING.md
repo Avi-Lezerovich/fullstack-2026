@@ -9,7 +9,7 @@ lines rather than by comment, which is what the suite settled on.
 | **Unit** | `unit` | 486 | nothing | Pure logic in isolation — password hashing and the length rule bcrypt 5 enforces, cookie flags, the sentiment lexicon, jury selection and tallying, trial-clock arithmetic, the SQL a service sends and the parameters bound to it, and the layering rules the other layers rely on. |
 | **Integration** | `integration` | 461 | MySQL | The real Flask endpoints and the real service layer against a real MySQL schema built from `database/init.sql` — sessions, password resets, the four moderation statuses, content visibility, messages, witnesses, uploads, and the permission matrix on every endpoint. |
 | **Worker** | `worker` | 69 | MySQL | The trial state machine end to end, the three moderator bots, the social bots, and the idempotency guarantee: a tick run twice reaches the same state as a tick run once. Also carry `integration`, so they are counted in the row above. |
-| **Frontend** | — | 120 | nothing | vitest + @testing-library/react over the client's hooks, context and the components with real logic. |
+| **Frontend** | — | 136 | nothing | vitest + @testing-library/react over the client's hooks, context and the components with real logic. |
 
 947 backend tests in total. Every one carries a layer marker — the worker tests
 carry both `worker` and `integration`, which is why the three counts add to more
@@ -138,6 +138,16 @@ Tests aim at the pieces with real logic rather than at markup:
 There is no coverage gate on the client. The page components are deliberately
 untested: they are markup over the hooks above, and asserting on their DOM would
 add numbers rather than confidence.
+
+Two files under `src/pages/` are a narrow, deliberate exception, because what
+they pin is behaviour rather than markup:
+
+- **`App.test.tsx`** — that an unknown address renders the 404 page instead of
+  silently redirecting to the feed. The claim is about the routing table, so it
+  is asserted through the real `App`.
+- **`ResetPassword.test.tsx`** — that the form is not drawn until the server has
+  confirmed the reset link is still live. The bug it prevents cost the user two
+  password entries before telling them the link was dead.
 
 ---
 

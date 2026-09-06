@@ -49,6 +49,10 @@ PUBLIC_BY_DESIGN = {
     "auth.logout",
     "auth.request_password_reset",
     "auth.confirm_password_reset",
+    # Checking whether a reset link is still live, so the page can show the
+    # form or the expired notice. It is reached from an email, which is by
+    # definition a context with no session.
+    "auth.validate_password_reset",
 }
 
 # The path parameters a swept route needs, filled with values that exist for

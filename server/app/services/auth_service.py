@@ -186,6 +186,29 @@ def consume_password_reset(raw_token: str, conn: Db | None = None) -> int | None
         return int(row["user_id"]) if row else None
 
 
+def password_reset_is_valid(raw_token: str, conn: Db | None = None) -> bool:
+    """Whether a reset token could be spent right now. Reads only.
+
+    The page that shows the reset form asks this on load, so a link has to
+    survive being looked at: there is no UPDATE here, and `consume_password_reset`
+    stays the only thing that spends a token. The three conditions are
+    deliberately the same three that function's guarded UPDATE uses, so "the
+    form is showing" and "submitting it will work" cannot drift apart.
+    """
+    if not raw_token:
+        return False
+
+    with owned(conn) as db:
+        row = db.query_one(
+            "SELECT 1 AS hit FROM password_resets "
+            "WHERE token_hash = %s "
+            "  AND used_at IS NULL "
+            "  AND expires_at > UTC_TIMESTAMP()",
+            (hash_token(raw_token),),
+        )
+        return row is not None
+
+
 def invalidate_password_resets(user_id: int, conn: Db | None = None) -> int:
     """Burn any other outstanding reset links for this user."""
     with owned(conn) as db:

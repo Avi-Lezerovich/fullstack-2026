@@ -116,6 +116,10 @@ export const fetchMe = () => request<MeResponse>("/auth/me");
 export const requestPasswordReset = (email: string) =>
   request<OkResponse>("/auth/password-reset/request", json("POST", { email }));
 
+/** Is this reset link still live? Reads only — it never spends the token. */
+export const validatePasswordReset = (token: string) =>
+  request<OkResponse>(`/auth/password-reset/validate${query({ token })}`);
+
 export const confirmPasswordReset = (token: string, password: string) =>
   request<OkResponse>("/auth/password-reset/confirm", json("POST", { token, password }));
 

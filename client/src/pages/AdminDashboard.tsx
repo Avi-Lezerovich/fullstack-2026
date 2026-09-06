@@ -9,11 +9,12 @@ import Tabs from "@mui/material/Tabs";
 import Typography from "@mui/material/Typography";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import PersonIcon from "@mui/icons-material/Person";
-import { Link as RouterLink, Navigate } from "react-router-dom";
+import { Link as RouterLink } from "react-router-dom";
 
 import * as api from "../api";
 import BannedUsers from "../components/moderation/BannedUsers";
 import CourtStatus from "../components/moderation/CourtStatus";
+import { ErrorPage } from "../components/common/ErrorPage";
 import { EmptyState, ErrorNote, Loading } from "../components/common/StateViews";
 import { useAsync } from "../hooks/useAsync";
 import { useAuth } from "../context/AuthContext";
@@ -231,7 +232,22 @@ const AdminDashboard = () => {
   const flagged = useAsync(useCallback(() => api.fetchFlagged(), []), []);
 
   if (loading) return <Loading />;
-  if (!user?.is_admin) return <Navigate to="/" replace />;
+  // 403, not 401: this reader is signed in, and signing in again will not
+  // help them. Bouncing them to the feed said neither.
+  if (!user?.is_admin) {
+    return (
+      <ErrorPage
+        code="403"
+        title="הדלת הזו נעולה"
+        description="הכניסה ללשכת הפיקוח שמורה להרכב השופטים בלבד."
+        action={
+          <Button component={RouterLink} to="/" variant="contained">
+            חזרה לאולם הראשי
+          </Button>
+        }
+      />
+    );
+  }
 
   return (
     <Box>
