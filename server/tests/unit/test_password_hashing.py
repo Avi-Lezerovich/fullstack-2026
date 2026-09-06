@@ -1,135 +1,183 @@
-"""Unit tests — password hashing (the pyramid base).
+# -*- coding: utf-8 -*-
+"""Password hashing, and the validation that has to happen before it.
 
-Target under test: server/app/utils.py -> hash_password() / verify_password().
-These are pure functions: no database, no network, no Flask. Just bcrypt. That
-makes them Fast, Independent, Repeatable, Self-validating (F.I.R.S.T.), and every
-test follows Arrange -> Act -> Assert.
+This file used to import `app.utils`, which has not existed since the MySQL
+migration. The functions themselves survived the move to `app/security.py`
+unchanged, so the behaviour is worth keeping - but the module also gained
+something the old tests could not have covered: `password_problem`.
+
+That function exists because **bcrypt 5 raises rather than truncating**. Older
+bcrypt silently threw away everything past 72 bytes, which meant a 200-character
+password quietly became its first 72 and still worked. Version 5 refuses, so an
+over-long password that reaches `hash_password` is a 500 rather than a 400 -
+and in Hebrew, where every letter is two bytes, 72 bytes is only 36 characters.
+The length has to be judged *before* hashing, and that is what this pins down.
+
+Pure functions: no database, no Flask, no network.
 """
+
+from __future__ import annotations
+
 import pytest
 
-from app.utils import hash_password, verify_password
+from app import security
 
-# Shared, immutable test inputs. `hashed_password` is a precomputed bcrypt hash of
-# `password`, so the verify-only tests skip the (slow) hashing step in Arrange.
-password = "password123"
-hashed_password = "$2b$12$ZYM3GDU8SFRJ2T2JTXuJQ.7bwXVo23OBz76b5LhSQWQ.TH/LDceee"
+pytestmark = pytest.mark.unit
+
+PASSWORD = "correct-horse-battery"
+
+# A bcrypt hash of PASSWORD, precomputed so the verify-only tests below do not
+# pay for hashing twice.
+KNOWN_HASH = "$2b$04$DnT2Plr51j/5V8YsvfHuYOWeWEOi5zlbFOrks8zL6J8jjuvlY.5U6"
 
 
-@pytest.mark.unit
-def test_hash_password_does_not_return_plaintext():
-    # Act — hash it.
-    hashed = hash_password(password)
+@pytest.fixture(autouse=True)
+def cheap_rounds(monkeypatch):
+    """Four rounds, not twelve.
 
-    # Assert — we stored something, and it is NOT the raw password.
+    `get_settings()` re-reads the environment every call, so this takes effect
+    without patching a single application object.
+    """
+    monkeypatch.setenv("BCRYPT_ROUNDS", "4")
+
+
+# --- hashing ----------------------------------------------------------------
+
+
+def test_a_stored_password_is_never_the_password():
+    hashed = security.hash_password(PASSWORD)
+
     assert isinstance(hashed, str)
-    assert hashed != password
+    assert hashed != PASSWORD
+    assert PASSWORD not in hashed
 
 
-@pytest.mark.unit
-def test_hash_is_bcrypt_format():
-    # Act
-    hashed = hash_password(password)
+def test_the_hash_is_bcrypt_and_carries_its_own_cost():
+    """The format matters: it is what lets the cost be raised later.
 
-    # Assert — bcrypt hashes start with the "$2b$" identifier and are 60 chars long.
-    # This documents *which* algorithm we rely on (a security-relevant fact).
+    bcrypt stores the round count inside the digest, so an old hash keeps
+    verifying at its original cost after BCRYPT_ROUNDS is raised for new ones.
+    A digest that did not say `$2b$` would have lost that.
+    """
+    hashed = security.hash_password(PASSWORD)
+
     assert hashed.startswith("$2b$")
     assert len(hashed) == 60
 
 
-@pytest.mark.unit
-def test_verify_password_accepts_correct_password():
-    # Act — verify the SAME password against its precomputed hash.
-    result = verify_password(password, hashed_password)
+def test_the_configured_cost_is_the_cost_that_is_used():
+    """BCRYPT_ROUNDS is honoured, and honoured per call rather than at import.
 
-    # Assert — the correct password is accepted (the positive half of login).
-    assert result is True
+    Without this, lowering the cost for the test suite would look like it
+    worked while every hash still cost twelve rounds.
+    """
+    import os
 
+    os.environ["BCRYPT_ROUNDS"] = "5"
+    assert security.hash_password(PASSWORD).startswith("$2b$05$")
 
-@pytest.mark.unit
-def test_verify_password_rejects_wrong_password():
-    # Act — verify a DIFFERENT password against it.
-    result = verify_password("wrong-password", hashed_password)
-
-    # Assert — the wrong password is rejected (the negative half of login).
-    assert result is False
+    os.environ["BCRYPT_ROUNDS"] = "4"
+    assert security.hash_password(PASSWORD).startswith("$2b$04$")
 
 
-@pytest.mark.unit
-def test_verify_password_is_case_sensitive():
-    # Act — the same characters as the real password, different case.
-    result = verify_password("PASSWORD123", hashed_password)
+def test_the_same_password_twice_gives_two_different_hashes():
+    """A per-hash salt is what makes two identical passwords indistinguishable
+    in a stolen database dump."""
+    first = security.hash_password(PASSWORD)
+    second = security.hash_password(PASSWORD)
 
-    # Assert — passwords are case-sensitive: "PASSWORD123" must not unlock
-    # an account whose password is "password123".
-    assert result is False
-
-
-@pytest.mark.unit
-def test_same_password_produces_different_hashes_but_both_verify():
-    # Arrange / Act — hash the SAME password twice.
-    first = hash_password(password)
-    second = hash_password(password)
-
-    # Assert — bcrypt generates a fresh salt for every hash, so the two strings
-    # differ (defeats rainbow tables and hides that two users share a password)...
     assert first != second
-    # ...yet BOTH still verify against the original password.
-    assert verify_password(password, first) is True
-    assert verify_password(password, second) is True
+    assert security.verify_password(PASSWORD, first)
+    assert security.verify_password(PASSWORD, second)
 
 
-@pytest.mark.unit
-def test_unicode_password_round_trips():
-    # Arrange — a Hebrew password with spaces and punctuation. The app's UI is
-    # Hebrew, so non-ASCII passwords are the norm here, not an edge case; hashing
-    # utf-8-encodes the string before bcrypt sees it.
-    hebrew_password = "סיסמה חזקה 123!"
+def test_a_hebrew_password_survives_the_round_trip():
+    """The UI is Hebrew, so the encode/decode pair is on the common path, not
+    an edge case."""
+    hebrew = "סיסמה־עברית־ארוכה"
 
-    # Act
-    hashed = hash_password(hebrew_password)
-
-    # Assert — the exact same unicode string verifies against its own hash.
-    assert verify_password(hebrew_password, hashed) is True
+    assert security.verify_password(hebrew, security.hash_password(hebrew))
 
 
-@pytest.mark.unit
-def test_hash_password_rejects_passwords_longer_than_72_bytes():
-    # Arrange — one byte past bcrypt's 72-byte input limit.
-    too_long = "x" * 73
-
-    # Act + Assert — bcrypt >= 5 refuses (older versions silently truncated!), so
-    # hash_password propagates ValueError. This pins the contract: callers must
-    # validate length BEFORE hashing — the signup route returns 400 for this.
-    with pytest.raises(ValueError):
-        hash_password(too_long)
+# --- verifying --------------------------------------------------------------
 
 
-@pytest.mark.unit
-def test_verify_password_returns_false_for_overlong_password():
-    # Act — a >72-byte password attempted against a valid stored hash (login path).
-    result = verify_password("x" * 100, hashed_password)
-
-    # Assert — bcrypt raises internally, but login must see a clean False, not a crash.
-    assert result is False
+def test_the_right_password_verifies_and_the_wrong_one_does_not():
+    assert security.verify_password(PASSWORD, KNOWN_HASH)
+    assert not security.verify_password("something-else", KNOWN_HASH)
 
 
-@pytest.mark.unit
-def test_verify_password_returns_false_for_malformed_hash():
-    # Arrange — a stored value that is NOT a valid bcrypt hash (e.g. legacy/corrupt row).
-    garbage = "not--bcrypt-hash"
-
-    # Act — verify against the garbage; bcrypt raises internally.
-    result = verify_password(password, garbage)
-
-    # Assert — the function swallows the error and returns False instead of crashing
-    # the login route (covers verify_password's except branch).
-    assert result is False
+def test_verification_is_case_sensitive():
+    assert not security.verify_password(PASSWORD.upper(), KNOWN_HASH)
 
 
-@pytest.mark.unit
-def test_verify_password_returns_false_for_empty_stored_hash():
-    # Act — an empty stored hash (should never happen, but must not crash login).
-    result = verify_password(password, "")
+@pytest.mark.parametrize(
+    "stored",
+    ["", "not-a-hash", "$2b$12$too-short", "$2b$04$" + "!" * 53],
+    ids=["empty", "garbage", "truncated", "wrong-alphabet"],
+)
+def test_a_malformed_stored_hash_is_a_failed_login_not_a_crash(stored):
+    """A corrupt row must read as "wrong password", not as a 500.
 
-    # Assert — still a clean False, never an exception.
-    assert result is False
+    A user whose row was damaged by a bad migration should see the login form
+    again, and an attacker should not be able to tell the difference between a
+    damaged account and a wrong guess.
+
+    Only strings are tried, because only strings can arrive: `password_hash` is
+    `VARCHAR(255) NOT NULL`, so neither NULL nor a number can come back from
+    the column. `verify_password` catches ValueError and TypeError, which is
+    exactly the set bcrypt raises for a badly shaped string - widening it to
+    guard against a value the schema forbids would be guarding against nothing.
+    """
+    assert security.verify_password(PASSWORD, stored) is False
+
+
+def test_an_overlong_password_fails_verification_rather_than_raising():
+    """bcrypt 5 raises past 72 bytes even when only checking.
+
+    So the guard is needed on the login path too, not only on signup - and
+    `verify_password` swallowing it is what stops a deliberately huge password
+    field from being a one-request denial of service.
+    """
+    assert security.verify_password("a" * 200, KNOWN_HASH) is False
+
+
+# --- the check that has to come first ---------------------------------------
+
+
+def test_a_password_shorter_than_the_minimum_is_refused_with_a_reason():
+    problem = security.password_problem("a" * (security.MIN_PASSWORD_LENGTH - 1))
+
+    assert problem is not None
+    assert str(security.MIN_PASSWORD_LENGTH) in problem
+
+
+def test_a_password_at_the_minimum_is_accepted():
+    """The boundary is inclusive, so the message and the rule agree."""
+    assert security.password_problem("a" * security.MIN_PASSWORD_LENGTH) is None
+
+
+def test_the_length_limit_is_counted_in_bytes_not_characters():
+    """36 Hebrew characters are 72 bytes, and 37 are 74.
+
+    This is the whole reason the limit is expressed in bytes: a character count
+    would accept a Hebrew password that bcrypt then refuses to hash.
+    """
+    at_the_limit = "א" * 36
+    over_the_limit = "א" * 37
+
+    assert len(at_the_limit.encode("utf-8")) == security.MAX_PASSWORD_BYTES
+    assert security.password_problem(at_the_limit) is None
+    assert security.password_problem(over_the_limit) is not None
+
+
+def test_everything_password_problem_accepts_can_actually_be_hashed():
+    """The contract between the two functions, stated as a test.
+
+    `password_problem` is only worth having if it is exactly the set of inputs
+    `hash_password` survives. Anything it waves through that bcrypt then
+    rejects is a 500 on the signup endpoint.
+    """
+    for candidate in ["12345678", "א" * 36, "x" * 72, "סיסמה ארוכה מספיק"]:
+        assert security.password_problem(candidate) is None
+        assert security.verify_password(candidate, security.hash_password(candidate))
