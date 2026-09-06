@@ -26,6 +26,10 @@ import pkgutil
 
 import pytest
 
+# These live in tests/unit and are hermetic - no database, no network - but
+# carried no marker, so `pytest -m unit` silently ran a fraction of the layer.
+pytestmark = pytest.mark.unit
+
 PACKAGES = ("app", "worker", "evals")
 
 

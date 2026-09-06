@@ -15,6 +15,10 @@ import pytest
 from app import brain, seed_data
 from app.brain import corpus, decide, occasion, offline
 
+# These live in tests/unit and are hermetic - no database, no network - but
+# carried no marker, so `pytest -m unit` silently ran a fraction of the layer.
+pytestmark = pytest.mark.unit
+
 ALL_AGENTS = seed_data.all_agents()
 
 

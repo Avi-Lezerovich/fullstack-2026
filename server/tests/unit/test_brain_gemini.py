@@ -20,6 +20,10 @@ import pytest
 
 from app.brain import llm
 
+# These live in tests/unit and are hermetic - no database, no network - but
+# carried no marker, so `pytest -m unit` silently ran a fraction of the layer.
+pytestmark = pytest.mark.unit
+
 
 class _FakeResponse(io.BytesIO):
     """Just enough of an HTTP response for `with urlopen(...) as r: r.read()`."""
