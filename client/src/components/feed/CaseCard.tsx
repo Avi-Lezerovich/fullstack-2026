@@ -78,6 +78,46 @@ const CaseCard = ({ case: c, showActivity, canFollow }: Props) => {
             {preview}
           </Typography>
 
+          {/* The evidence, if any was filed.
+              A card is a fixed-width thing in a scrolling column, so the image
+              is given a fixed height and told to cover it: a phone photo three
+              times taller than it is wide would otherwise push the charges, the
+              counts and the next card entirely off the screen, and a column of
+              cards whose heights depend on what people photographed reads as
+              broken layout rather than as variety. Cropping loses part of the
+              picture — the case page shows it whole, uncropped, which is where
+              a reader who cares about the evidence is going anyway.
+
+              Nothing here is directional. This renders under stylis-plugin-rtl,
+              which mirrors physical offsets (see CourtSeal.tsx for what that
+              did to a centred `left: 50%`); `mt` is block-axis and untouched by
+              it, and `objectPosition` is left at its centred default rather
+              than named, so there is no left/right for the mirror to flip. */}
+          {c.image_url && (
+            <Box
+              component="img"
+              src={c.image_url}
+              alt=""
+              // Same as the case page: a dead link must leave nothing behind.
+              // A broken-image glyph in the middle of the feed looks like the
+              // site is broken, not like one upload expired.
+              onError={(event) => {
+                (event.currentTarget as HTMLImageElement).style.display = "none";
+              }}
+              sx={{
+                display: "block",
+                width: "100%",
+                height: { xs: 180, sm: 220 },
+                objectFit: "cover",
+                borderRadius: 1,
+                border: "1px solid",
+                borderColor: "divider",
+                mt: 1.5,
+              }}
+              data-testid="card-image"
+            />
+          )}
+
           {c.charges.length > 0 && (
             <Stack direction="row" spacing={0.75} sx={{ mt: 1.5 }} flexWrap="wrap" useFlexGap>
               {c.charges.map((charge) => (

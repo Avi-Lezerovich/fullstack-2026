@@ -190,6 +190,31 @@ TASK_BRIEFS: dict[str, str] = {
         "זוכר את זה.\n\n"
         "מה שרשום למטה הוא מה שאתה יודע. לא להמציא עליו עובדות נוספות."
     ),
+    # The one brief that spends most of its words undoing STYLE_RULES.
+    #
+    # Block 1 of the system prompt tells every call on this site to be
+    # specific, to surprise, to fasten onto an absurd detail and to sound like
+    # somebody in particular. That block is byte-identical for all 31
+    # personalities and all ten tasks, which is the entire shared cache prefix
+    # this application has - so a proofreading task cannot be given a system
+    # prompt of its own without paying for it on every other call. It has to
+    # countermand it here instead, in the user turn, which is also the last
+    # thing read before the answer.
+    #
+    # Hence the flat prohibitions. "Correct the text" alone produced a
+    # perfectly good filing that the user had not written.
+    "correct_text": (
+        "מישהו כתב טקסט בעצמו ומבקש שתגיה אותו. אתה מגיה, לא כותב.\n\n"
+        "**מה לתקן:** שגיאות כתיב, דקדוק, התאמת מין ומספר, מילות יחס, "
+        "פיסוק ורווחים כפולים. בלי ניקוד.\n\n"
+        "**מה אסור לגעת בו:** המשמעות, הסגנון, סדר המשפטים, אורך הטקסט, "
+        "וכל מילה שאין בה שגיאה. לא לשפר ניסוח, לא להוסיף מילה שלא הייתה שם, "
+        "לא למחוק משפט, לא להוסיף לשון משפטית, ולא להסביר מה תיקנת. אם הטקסט "
+        "תקין - תחזיר אותו בדיוק כמו שהוא.\n\n"
+        "**הכללים על אופי, קול והפתעה לא חלים כאן.** זה לא הטקסט שלך והקול "
+        "בו אינו שלך. לשמור על מבנה הפסקאות ועל השורות הריקות כפי שהם.\n\n"
+        "יש להחזיר אך ורק את הטקסט המתוקן, בלי מרכאות ובלי הקדמה."
+    ),
 }
 
 
@@ -277,6 +302,12 @@ LENGTHS: tuple[str, ...] = (
 # brief instead of colouring it.
 _LONG_FORM = {"draft_lawsuit", "bot_lawsuit"}
 
+# And one task gets no angle whatsoever. Every line in MOVES and HOOKS is an
+# instruction to be interesting - fasten onto the absurd detail, land the last
+# sentence - which is exactly the wrong thing to hand somebody proofreading a
+# stranger's sentences. An angle on a correction is an invitation to rewrite.
+_NO_ANGLE = {"correct_text"}
+
 
 def pick_angle(personality_prompt: str, task: str, context: dict[str, Any]) -> str:
     """A shape, a thing to fasten onto, and a length.
@@ -290,6 +321,8 @@ def pick_angle(personality_prompt: str, task: str, context: dict[str, Any]) -> s
     they do get a hook, because a filing that fastens onto one specific thing
     is the difference between a lawsuit and an essay about a lawsuit.
     """
+    if task in _NO_ANGLE:
+        return ""
     rng = random.Random(offline.seed_for(personality_prompt, task, context))
     lines = [rng.choice(MOVES), rng.choice(HOOKS)]
     if task not in _LONG_FORM:
@@ -379,6 +412,19 @@ def build_prompt(task: str, context: dict[str, Any], angle: str = "") -> str:
 
     if details:
         lines += ["", "## התיק", *details]
+
+    # The one field that cannot be a bullet.
+    #
+    # Everything above is a fact about a case - one short line each, and the
+    # "- label: value" shape is what keeps them scannable. This is a whole
+    # document that has to come back out the other side unchanged, and a
+    # three-paragraph filing rendered as "- הטקסט: ..." gives the model no way
+    # to see where the user's text stops and the instructions resume. Fenced,
+    # and last, so the closing fence is the final thing read before it answers.
+    user_text = context.get("user_text")
+    if user_text:
+        lines += ["", "## הטקסט שנמסר", "<<<", str(user_text), ">>>"]
+
     if angle:
         lines += ["", "## הזווית שלך הפעם", angle]
     return "\n".join(lines)

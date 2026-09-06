@@ -49,7 +49,22 @@ def test_every_brain_task_can_be_written_offline():
     was added long after this file and would have been missed.
     """
     for task in brain.TASKS:
+        if task in brain.VERBATIM_TASKS:
+            continue
         assert task in corpus.TEMPLATES, f"{task} has no offline minute"
+
+
+def test_correction_has_no_templates_and_must_not_grow_any():
+    """The exemption above, pinned from the other side.
+
+    A minute is the right offline answer for everything the court says and the
+    wrong one for the single task that is not the court speaking. Give
+    `correct_text` a template and the offline path stops handing the user their
+    own filing back and starts replacing it with "התוכן נסרק" - which is not a
+    duller correction, it is the user's text deleted.
+    """
+    for task in brain.VERBATIM_TASKS:
+        assert task not in corpus.TEMPLATES, f"{task} must not be answered from a phrase bank"
 
 
 def test_the_stenographer_does_not_impersonate_anyone():

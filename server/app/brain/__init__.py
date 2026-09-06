@@ -56,6 +56,7 @@ Task = Literal[
     "moderation_note",
     "draft_lawsuit",
     "suggest_comment",
+    "correct_text",
     "bot_lawsuit",
     "bot_comment",
     "bot_comment_reply",
@@ -69,11 +70,27 @@ TASKS: tuple[str, ...] = (
     "moderation_note",
     "draft_lawsuit",
     "suggest_comment",
+    "correct_text",
     "bot_lawsuit",
     "bot_comment",
     "bot_comment_reply",
     "bot_reply",
 )
+
+# The tasks whose answer is the user's own text handed back, rather than
+# something this court thought up.
+#
+# `offline.tidy` is the right clean-up for everything else here - a line spoken
+# in a courtroom has no use for a newline, and a model that loops has to be
+# stopped somewhere. Applied to a correction it is destructive on both counts:
+# it collapses the blank lines between a filing's paragraphs, and it cuts at
+# SAFETY_CEILING_CHARS, so a corrected 3,000-character filing would come back
+# as one paragraph ending in an ellipsis. Since the whole promise of the task
+# is "this is your text, only spelled right", either one breaks it outright.
+#
+# `offline.keep_lines` strips the outer whitespace and nothing else. The length
+# bound moves to the caller, which knows what the text has to fit back into.
+VERBATIM_TASKS: frozenset[str] = frozenset({"correct_text"})
 
 
 class _LastCall:
@@ -201,6 +218,8 @@ def generate(
             LAST_CALL.record_llm_ok(completion)
             # Not trimmed to `max_chars`: how long this is belongs to the
             # character and the angle it drew, not to the caller's token budget.
+            if task in VERBATIM_TASKS:
+                return offline.keep_lines(completion.text)
             return offline.tidy(completion.text)
         except Exception as exc:
             # Unknown provider, missing package, bad key, rate limit, timeout,
@@ -386,4 +405,5 @@ __all__ = [
     "LAST_CALL",
     "Task",
     "TASKS",
+    "VERBATIM_TASKS",
 ]

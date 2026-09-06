@@ -34,6 +34,18 @@ interface Props {
   inCharacter?: boolean;
   /** Seeds an in-character draft, so two cases do not get identical text. */
   hint?: string;
+  /**
+   * The three words that change when this dialog is not drafting anything.
+   *
+   * Correction is the one caller where "מנסח" is a lie in both directions: the
+   * court is not composing, and — offline — it is not correcting either. The
+   * default note tells the user that the same input always yields the same
+   * text, which is true of a generator and meaningless for a proofreader that
+   * did nothing at all.
+   */
+  busyLabel?: string;
+  retryLabel?: string;
+  offlineNote?: string;
 }
 
 /** The roster changes only when the database is re-seeded; fetch it once. */
@@ -62,6 +74,9 @@ const AssistDialog = ({
   acceptLabel = "השתמש בנוסח",
   inCharacter = false,
   hint = "",
+  busyLabel = "מנסח…",
+  retryLabel = "נסח מחדש",
+  offlineNote,
 }: Props) => {
   const [text, setText] = useState("");
   const [backend, setBackend] = useState<string | null>(null);
@@ -173,7 +188,7 @@ const AssistDialog = ({
         )}
 
         {error && <ErrorNote message={error} />}
-        {busy && !text && <Loading label="מנסח…" />}
+        {busy && !text && <Loading label={busyLabel} />}
 
         {(text || !busy) && (
           <TextField
@@ -189,8 +204,13 @@ const AssistDialog = ({
 
         {backend && (
           <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
-            {BACKEND_LABELS[backend] ?? backend}
-            {backend === "offline" && " · אותו קלט מפיק תמיד את אותו נוסח, אז שינוי הפרטים ייתן נוסח אחר"}
+            {backend === "offline" && offlineNote
+              ? offlineNote
+              : `${BACKEND_LABELS[backend] ?? backend}${
+                  backend === "offline"
+                    ? " · אותו קלט מפיק תמיד את אותו נוסח, אז שינוי הפרטים ייתן נוסח אחר"
+                    : ""
+                }`}
           </Typography>
         )}
       </DialogContent>
@@ -198,7 +218,7 @@ const AssistDialog = ({
       <DialogActions>
         <Button onClick={onClose}>ביטול</Button>
         <Button startIcon={<RefreshIcon />} onClick={() => void generate()} disabled={busy}>
-          נסח מחדש
+          {retryLabel}
         </Button>
         <Button
           variant="contained"

@@ -17,6 +17,10 @@ interface Props {
   inCharacter?: boolean;
   /** Seeds an in-character draft so it is about this case, not any case. */
   hint?: string;
+  /** See AssistDialog: the wording changes when the dialog is not drafting. */
+  busyLabel?: string;
+  retryLabel?: string;
+  offlineNote?: string;
 }
 
 /**
