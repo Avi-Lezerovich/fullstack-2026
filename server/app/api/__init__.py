@@ -11,6 +11,7 @@ from __future__ import annotations
 from flask import Flask
 
 from . import (
+    admin_ops,
     assist,
     auth,
     cases,
@@ -32,6 +33,7 @@ _BLUEPRINTS = [
     social.bp,
     trial.bp,
     moderation.bp,
+    admin_ops.bp,
     notifications.bp,
     messages.bp,
     assist.bp,

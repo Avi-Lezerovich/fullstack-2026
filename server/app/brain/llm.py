@@ -566,6 +566,8 @@ class Completion:
     """
 
     text: str
+    input_tokens: int = 0
+    output_tokens: int = 0
     cache_read: int = 0
     cache_write: int = 0
 
@@ -574,6 +576,8 @@ def _usage_of(message: Any, text: str) -> Completion:
     usage = getattr(message, "usage", None)
     return Completion(
         text=text,
+        input_tokens=int(getattr(usage, "input_tokens", 0) or 0),
+        output_tokens=int(getattr(usage, "output_tokens", 0) or 0),
         cache_read=int(getattr(usage, "cache_read_input_tokens", 0) or 0),
         cache_write=int(getattr(usage, "cache_creation_input_tokens", 0) or 0),
     )
@@ -1029,7 +1033,12 @@ def _complete_gemini(
     if not text:
         raise ValueError(f"empty completion from gemini ({finish or 'no reason given'})")
 
-    return Completion(text=text)
+    usage = payload.get("usageMetadata") or {}
+    return Completion(
+        text=text,
+        input_tokens=int(usage.get("promptTokenCount", 0) or 0),
+        output_tokens=int(usage.get("candidatesTokenCount", 0) or 0),
+    )
 
 
 def _output_config(effort: str, output_format: dict[str, Any] | None) -> dict[str, Any]:

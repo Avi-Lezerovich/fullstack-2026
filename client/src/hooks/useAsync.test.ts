@@ -137,4 +137,73 @@ describe("useAsync", () => {
     expect(result.current.error).toBeNull();
     expect(result.current.data).toEqual({ id: 2 });
   });
+
+  it("polls on the given interval when one is passed", async () => {
+    vi.useFakeTimers();
+    const loader = vi.fn().mockResolvedValue({ id: 1 });
+
+    renderHook(() => useAsync(loader, [], 5000));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(loader).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+    });
+    expect(loader).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      vi.advanceTimersByTime(10000);
+      await Promise.resolve();
+    });
+    expect(loader).toHaveBeenCalledTimes(4);
+
+    vi.useRealTimers();
+  });
+
+  it("does not poll when no interval is given", async () => {
+    vi.useFakeTimers();
+    const loader = vi.fn().mockResolvedValue({ id: 1 });
+
+    renderHook(() => useAsync(loader));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(loader).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(60000);
+    });
+    expect(loader).toHaveBeenCalledTimes(1);
+
+    vi.useRealTimers();
+  });
+
+  it("stops the previous interval when the interval itself changes", async () => {
+    vi.useFakeTimers();
+    const loader = vi.fn().mockResolvedValue({ id: 1 });
+
+    const { rerender } = renderHook(
+      ({ interval }: { interval: number }) => useAsync(loader, [], interval),
+      { initialProps: { interval: 5000 } },
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(loader).toHaveBeenCalledTimes(1);
+
+    rerender({ interval: 9999999 });
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+    });
+    // The 5s timer from the first render must have been cleared, not left
+    // running alongside the new, much longer one.
+    expect(loader).toHaveBeenCalledTimes(1);
+
+    vi.useRealTimers();
+  });
 });

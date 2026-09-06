@@ -12,6 +12,9 @@ import PersonIcon from "@mui/icons-material/Person";
 import { Link as RouterLink } from "react-router-dom";
 
 import * as api from "../api";
+import AiUsage from "../components/admin/AiUsage";
+import SiteOverview from "../components/admin/SiteOverview";
+import SystemHealth from "../components/admin/SystemHealth";
 import BannedUsers from "../components/moderation/BannedUsers";
 import CourtStatus from "../components/moderation/CourtStatus";
 import { ErrorPage } from "../components/common/ErrorPage";
@@ -214,12 +217,15 @@ const FlaggedRow = ({ item, onChanged }: { item: FlaggedItem; onChanged: () => v
   );
 };
 
-type View = "reports" | "flagged" | "banned";
+type View = "reports" | "flagged" | "banned" | "overview" | "health" | "ai-usage";
 
 const VIEWS: { id: View; label: string }[] = [
   { id: "reports", label: "תור הדיווחים" },
   { id: "flagged", label: "תוכן מסומן" },
   { id: "banned", label: "משתמשים מושעים" },
+  { id: "overview", label: "סקירה כללית" },
+  { id: "health", label: "מצב מערכת" },
+  { id: "ai-usage", label: "שימוש בבינה מלאכותית" },
 ];
 
 const AdminDashboard = () => {
@@ -275,6 +281,12 @@ const AdminDashboard = () => {
 
       {view === "banned" ? (
         <BannedUsers />
+      ) : view === "overview" ? (
+        <SiteOverview />
+      ) : view === "health" ? (
+        <SystemHealth />
+      ) : view === "ai-usage" ? (
+        <AiUsage />
       ) : view === "flagged" ? (
         <>
           {flagged.error && <ErrorNote message={flagged.error} />}
