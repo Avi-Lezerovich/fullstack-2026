@@ -5,6 +5,68 @@ major number moves when an upgrade needs a step other than pulling the image.
 
 ---
 
+## 3.4.0
+
+**Errors look like the rest of the court now, and a dead reset link says so
+before you choose a new password.**
+
+Upgrades by pulling the image: no schema change, and no endpoint changed
+shape.
+
+> 3.2.0 through 3.3.0 were tagged without an entry here. This file resumes at
+> 3.4.0 rather than reconstructing them.
+
+### Added
+
+- **One branded error page, used everywhere the app has to refuse.** It takes
+  the same title/description/action that `EmptyState` already took, plus the
+  code, and reads its colours from the theme rather than repeating the palette
+  — the seal anchors it, decoratively, so a screen reader is not read the same
+  refusal three times. Four surfaces use it: a real **404** on the `*` route,
+  which used to redirect to the feed and so made a mistyped address
+  indistinguishable from asking for the feed; **401** from `ProtectedRoute`,
+  which used to bounce anonymous visitors to `/login` without a word; **403**
+  from the moderation desk, which used to bounce a signed-in non-admin to the
+  feed, saying nothing and looking exactly like clicking "home"; and **410**
+  for a reset link that is no longer live.
+- **A React error boundary around the routes.** There was none, so anything
+  that threw during render took the whole tree with it and left a white
+  screen. It keeps the TopBar and Footer, and it clears itself when the reader
+  navigates: React gives no way to un-catch an error, so without that one
+  broken page would look like a broken site until a full reload.
+- **`GET /api/auth/password-reset/validate?token=`** — whether a reset link
+  can still be spent, read-only. Its three conditions are the same three as
+  the guarded `UPDATE` in `consume_password_reset`, which stays the only thing
+  that spends a token, so "the form is showing" and "submitting it will work"
+  cannot drift apart. It is a cheaper oracle than confirm — no password needed
+  — so it is at least as silent: missing, forged, expired and spent all get one
+  identical refusal in the same words, and success carries no account details.
+  `/auth/password-reset/request` is untouched and still answers everyone
+  alike.
+
+### Fixed
+
+- **`/reset-password` no longer offers a form for a link that cannot work.**
+  The token expires after `RESET_TTL_MINUTES` and is single-use, but the page
+  only checked that a `token=` was present in the URL — so an expired, already
+  used or invented link rendered the full form, and the reader learned it was
+  dead only after choosing a new password and typing it twice, with no route
+  back to `/forgot-password` from there. The page now asks the server on
+  mount, shows the form only on success, and sends every failure to the 410
+  page with a link to request a fresh one.
+- **Signing in from a gated page still returns you to it.** The 401 page
+  carries the path you were aiming at, the way the old redirect did, so
+  `Login.tsx` can send you back rather than to the feed.
+
+### Changed
+
+- **The test harness builds the schema from `database/init.sql`** instead of
+  mirroring it, so a bare `pytest` runs the suite again rather than stopping at
+  collection on modules that imported a long-removed `app/utils.py`. Shipped
+  ahead of this release and included here for completeness.
+
+---
+
 ## 3.1.0
 
 **Following a case is now a number you can see, and long lists load as you
