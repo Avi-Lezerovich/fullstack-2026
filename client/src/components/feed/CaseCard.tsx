@@ -15,6 +15,7 @@ import { Link as RouterLink } from "react-router-dom";
 import CaseStatusChip from "../case/CaseStatusChip";
 import CourtSeal from "../case/CourtSeal";
 import FollowButton from "../case/FollowButton";
+import LikeButton from "../case/LikeButton";
 import { DOC_FONT } from "../../theme";
 import type { Case } from "../../types";
 import { initials, relativeTime } from "../../utils/format";
@@ -25,10 +26,18 @@ interface Props {
   case: Case;
   /** The personal feed sorts on activity, so it says what the activity was. */
   showActivity?: boolean;
+  /** Signed in: the card gets its action row. Signed out it is counts only. */
   canFollow?: boolean;
+  /**
+   * The viewer liked or followed from here. The card's stat row reads the
+   * `case` prop, so without a way to say so the numbers under the buttons kept
+   * the values the feed was fetched with until the page was reloaded - a like
+   * that visibly did nothing. The list owns the row, so the list applies it.
+   */
+  onChange?: (patch: Partial<Case>) => void;
 }
 
-const CaseCard = ({ case: c, showActivity, canFollow }: Props) => {
+const CaseCard = ({ case: c, showActivity, canFollow, onChange }: Props) => {
   const preview =
     c.body.length > PREVIEW_LENGTH ? `${c.body.slice(0, PREVIEW_LENGTH).trimEnd()}…` : c.body;
 
@@ -127,7 +136,7 @@ const CaseCard = ({ case: c, showActivity, canFollow }: Props) => {
           )}
 
           <Stack direction="row" spacing={2} sx={{ mt: 1.5 }} color="text.secondary">
-            <Stack direction="row" spacing={0.5} alignItems="center">
+            <Stack direction="row" spacing={0.5} alignItems="center" data-testid="card-like-count">
               <FavoriteIcon fontSize="small" color={c.viewer_has_liked ? "error" : "inherit"} />
               <Typography variant="caption">{c.like_count}</Typography>
             </Stack>
@@ -155,17 +164,31 @@ const CaseCard = ({ case: c, showActivity, canFollow }: Props) => {
         </CardContent>
       </CardActionArea>
 
-      {/* Outside the CardActionArea on purpose: it is a button, and nesting it
-          inside the link would make every tap navigate as well as toggle. */}
+      {/* Outside the CardActionArea on purpose: these are buttons, and nesting
+          them inside the link would make every tap navigate as well as toggle.
+          The counts they change are printed in the stat row above, which is
+          why neither button repeats one. */}
       {canFollow && (
-        <Box sx={{ display: "flex", justifyContent: "flex-end", px: 2, pb: 1 }}>
+        <Stack direction="row" spacing={1} sx={{ justifyContent: "flex-end", px: 2, pb: 1 }}>
+          <LikeButton
+            caseId={c.id}
+            liked={c.viewer_has_liked}
+            count={c.like_count}
+            showCount={false}
+            onChange={({ liked, like_count }) =>
+              onChange?.({ viewer_has_liked: liked, like_count })
+            }
+          />
           <FollowButton
             caseId={c.id}
             following={c.viewer_is_following}
             count={c.follow_count}
             showCount={false}
+            onChange={({ following, follow_count }) =>
+              onChange?.({ viewer_is_following: following, follow_count })
+            }
           />
-        </Box>
+        </Stack>
       )}
     </Card>
   );

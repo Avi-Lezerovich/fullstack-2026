@@ -13,6 +13,7 @@ import type {
   AuthResponse,
   Case,
   CaseListResponse,
+  CaseStatus,
   Comment,
   Conversation,
   CourtAgent,
@@ -120,12 +121,23 @@ export const confirmPasswordReset = (token: string, password: string) =>
 
 // --- cases ------------------------------------------------------------------
 
-export const fetchCases = (params: {
+/**
+ * The courtroom feed. `status` may name several phases at once - the "decided"
+ * tab is one filter to a reader and two statuses to the server - and they go
+ * over the wire comma separated, which is the form /cases parses.
+ */
+export const fetchCases = ({
+  status,
+  ...params
+}: {
   limit?: number;
   offset?: number;
   author_id?: number;
-  status?: string;
-} = {}) => request<CaseListResponse>(`/cases${query(params)}`);
+  status?: CaseStatus | CaseStatus[];
+} = {}) =>
+  request<CaseListResponse>(
+    `/cases${query({ ...params, status: Array.isArray(status) ? status.join(",") : status })}`,
+  );
 
 /** The signed-in viewer's own feed: what they follow, most recently active first. */
 export const fetchMyFeed = (params: { limit?: number; offset?: number } = {}) =>

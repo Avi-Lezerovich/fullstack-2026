@@ -13,23 +13,29 @@ import { EmptyState, ErrorNote, Loading } from "../components/common/StateViews"
 import InfiniteScroll from "../components/common/InfiniteScroll";
 import { usePagedList } from "../hooks/usePagedList";
 import { useAuth } from "../context/AuthContext";
-import type { CaseStatus } from "../types";
+import type { Case, CaseStatus } from "../types";
 
 const PAGE_SIZE = 10;
 
 interface FeedTab {
   id: string;
   label: string;
-  status?: CaseStatus;
+  /** One tab may cover several phases; see the decided tab below. */
+  status?: CaseStatus[];
   /** The personal feed reads a different endpoint and sorts by activity. */
   mine?: boolean;
 }
 
 const FILTERS: FeedTab[] = [
   { id: "all", label: "הכול" },
-  { id: "witness_phase", label: "איסוף עדויות", status: "witness_phase" },
-  { id: "jury_deliberation", label: "דיוני מושבעים", status: "jury_deliberation" },
-  { id: "verdict_reached", label: "הוכרעו", status: "verdict_reached" },
+  { id: "witness_phase", label: "איסוף עדויות", status: ["witness_phase"] },
+  { id: "jury_deliberation", label: "דיוני מושבעים", status: ["jury_deliberation"] },
+  // "Decided" is both statuses a verdict can leave a case in. A case sits in
+  // `verdict_reached` only until the worker retires it, and then moves to
+  // `closed` - so a tab that asked for `verdict_reached` alone showed the last
+  // few hours of judgments and hid every case the court had actually finished,
+  // which is the opposite of what a reader opening it wants.
+  { id: "verdict_reached", label: "הוכרעו", status: ["verdict_reached", "closed"] },
 ];
 
 const MY_FEED: FeedTab = { id: "mine", label: "הפיד שלי", mine: true };
@@ -75,7 +81,25 @@ const Feed = () => {
     loading,
     hasMore,
     loadMore,
+    patchItems,
   } = usePagedList(loadPage, [active], PAGE_SIZE);
+
+  /**
+   * A card reporting that the viewer liked or followed it.
+   *
+   * The list owns the rows, so the list is what rewrites one - in place, with
+   * the totals the server itself returned. Refetching the page instead would
+   * be a network round trip and a scroll back to the top to redraw one number,
+   * and on the personal feed it would be worse than that: following a case
+   * changes which rows belong there at all, so a refetch could move or remove
+   * the very card the reader just tapped.
+   */
+  const patchCase = useCallback(
+    (id: number, patch: Partial<Case>) => {
+      patchItems((item) => (item.id === id ? { ...item, ...patch } : item));
+    },
+    [patchItems],
+  );
 
   return (
     // Pulled up against the top bar. The shared Container's `py: 3` is right
@@ -151,7 +175,13 @@ const Feed = () => {
       )}
 
       {cases.map((c) => (
-        <CaseCard key={c.id} case={c} showActivity={active.mine} canFollow={Boolean(user)} />
+        <CaseCard
+          key={c.id}
+          case={c}
+          showActivity={active.mine}
+          canFollow={Boolean(user)}
+          onChange={(patch) => patchCase(c.id, patch)}
+        />
       ))}
 
       <InfiniteScroll

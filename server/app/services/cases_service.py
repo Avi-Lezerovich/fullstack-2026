@@ -11,6 +11,7 @@ moment worth modelling between "submitted" and "open for witnesses".
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from ..clock import witness_deadline_offset
@@ -25,6 +26,39 @@ TITLE_MAX_LENGTH = 512
 # it, so hiding content cannot be forgotten in some forgotten corner.
 # Note that 'flagged' IS public: borderline content stays up, marked for review.
 PUBLIC_VISIBILITY = "c.moderation_status IN ('published', 'flagged')"
+
+# Every value the `status` column can hold, in the order a case passes through
+# them. The API validates a caller's filter against this, so a typo comes back
+# as an error rather than as a silently empty feed.
+CASE_STATUSES = ("filed", "witness_phase", "jury_deliberation", "verdict_reached", "closed")
+
+#: The statuses that mean "the court has spoken" - a verdict has been handed
+#: down, whether or not the file has since been retired. The feed's "הוכרעו"
+#: tab asks for both: `closed` is where every decided case ends up a day later,
+#: so filtering on `verdict_reached` alone empties the tab as the cases the
+#: user came to read age out of it.
+DECIDED_STATUSES = ("verdict_reached", "closed")
+
+
+def _status_clause(
+    status: str | Sequence[str] | None, where: list[str], params: list[Any]
+) -> None:
+    """Append the `status` filter, if any, to a query being built.
+
+    One filter may name several statuses - see DECIDED_STATUSES. It is spelled
+    out here once because list_cases and count_cases must apply exactly the
+    same one; see count_cases' docstring for what disagreeing costs.
+    """
+    if not status:
+        return
+    values = [status] if isinstance(status, str) else [value for value in status if value]
+    if not values:
+        return
+    if len(values) == 1:
+        where.append("c.status = %s")
+    else:
+        where.append(f"c.status IN ({', '.join(['%s'] * len(values))})")
+    params.extend(values)
 
 _CASE_COLUMNS = """
     c.id, c.title, c.body, c.image_url, c.author_id,
@@ -349,7 +383,7 @@ def list_cases(
     *,
     viewer_id: int | None = None,
     author_id: int | None = None,
-    status: str | None = None,
+    status: str | Sequence[str] | None = None,
     limit: int = 20,
     offset: int = 0,
     conn: Db | None = None,
@@ -359,9 +393,7 @@ def list_cases(
     if author_id is not None:
         where.append("c.author_id = %s")
         params.append(author_id)
-    if status:
-        where.append("c.status = %s")
-        params.append(status)
+    _status_clause(status, where, params)
     params.extend([int(limit), int(offset)])
 
     with owned(conn) as db:
@@ -383,7 +415,10 @@ def list_cases(
 
 
 def count_cases(
-    *, author_id: int | None = None, status: str | None = None, conn: Db | None = None
+    *,
+    author_id: int | None = None,
+    status: str | Sequence[str] | None = None,
+    conn: Db | None = None,
 ) -> int:
     """How many cases a matching list_cases() would find.
 
@@ -397,9 +432,7 @@ def count_cases(
     if author_id is not None:
         where.append("c.author_id = %s")
         params.append(author_id)
-    if status:
-        where.append("c.status = %s")
-        params.append(status)
+    _status_clause(status, where, params)
     with owned(conn) as db:
         return int(
             db.query_value(
