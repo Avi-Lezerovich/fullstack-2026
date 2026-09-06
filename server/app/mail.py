@@ -268,7 +268,7 @@ def password_reset_html(name: str, reset_url: str, ttl_minutes: int) -> str:
         </table>
       </td></tr>
 
-      <tr><td align="right" dir="rtl" style="padding:16px 32px 0 32px;font-family:{SERIF};
+      <tr><td align="center" dir="rtl" style="padding:16px 32px 0 32px;font-family:{SERIF};
                font-size:14px;line-height:23px;color:{MUTED};text-align:right;">
         הקישור תקף למשך {ttl_minutes} דקות וניתן לשימוש חד-פעמי בלבד.
         <br>
