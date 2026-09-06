@@ -10,9 +10,21 @@ interface Props {
   liked: boolean;
   count: number;
   disabled?: boolean;
+  /** Whether to print the total beside the word. Mirrors FollowButton. */
+  showCount?: boolean;
+  /** Told the server's answer, so a parent showing the same numbers elsewhere
+   *  - the feed card's stat row - can redraw them without a refetch. */
+  onChange?: (next: { liked: boolean; like_count: number }) => void;
 }
 
-const LikeButton = ({ caseId, liked, count, disabled }: Props) => {
+const LikeButton = ({
+  caseId,
+  liked,
+  count,
+  disabled,
+  showCount = true,
+  onChange,
+}: Props) => {
   const [state, setState] = useState({ liked, like_count: count });
   const [busy, setBusy] = useState(false);
 
@@ -45,6 +57,10 @@ const LikeButton = ({ caseId, liked, count, disabled }: Props) => {
       // out of step by guessing what the new value should be.
       const next = await api.toggleLike(caseId);
       setState(next);
+      // Safe to tell the parent, which will hand these straight back as props:
+      // the guarded sync above compares against the last props it SAW, so it
+      // adopts them once and stops.
+      onChange?.(next);
     } catch {
       // Leaving the previous state visible is the honest outcome of a failed
       // toggle; an optimistic flip here would claim something untrue.
@@ -61,8 +77,10 @@ const LikeButton = ({ caseId, liked, count, disabled }: Props) => {
       startIcon={state.liked ? <FavoriteIcon /> : <FavoriteBorderIcon />}
       data-testid="like-button"
       data-liked={state.liked}
+      data-like-count={state.like_count}
     >
-      {state.like_count}
+      {state.liked ? "אהבתי" : "לייק"}
+      {showCount && ` · ${state.like_count}`}
     </Button>
   );
 }; export default LikeButton;

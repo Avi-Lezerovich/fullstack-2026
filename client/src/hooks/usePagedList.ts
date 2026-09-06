@@ -78,6 +78,22 @@ export function usePagedList<T>(
     void load(items.length, token.current);
   }, [load, items.length, loading]);
 
+  /**
+   * Rewrite rows already on screen, in place.
+   *
+   * For the case where the viewer themselves changed something a row displays
+   * - liking or following from the feed - and the list should show it at once.
+   * `reload()` would also be truthful, but it throws away every page loaded so
+   * far and scrolls the reader back to the top to redraw one number.
+   *
+   * The map runs over every row and returns each one unchanged or replaced, so
+   * the hook needs to know nothing about what a row is or how rows are
+   * identified - that stays with the caller, who does.
+   */
+  const patchItems = useCallback((map: (item: T) => T) => {
+    setItems((current) => current.map(map));
+  }, []);
+
   return {
     items,
     total,
@@ -86,5 +102,6 @@ export function usePagedList<T>(
     hasMore: items.length < total,
     loadMore,
     reload,
+    patchItems,
   };
 }

@@ -177,7 +177,10 @@ const Profile = () => {
         <EmptyState title="עדיין לא הוגשו תביעות" />
       )}
       {cases.data?.cases.map((c) => (
-        <CaseCard key={c.id} case={c} />
+        // A signed-in reader can like and follow from here too. The card
+        // renders its footer either way now, and without this every visitor
+        // would be shown the disabled version of it.
+        <CaseCard key={c.id} case={c} canFollow={Boolean(me)} />
       ))}
 
       <FollowedCasesDialog

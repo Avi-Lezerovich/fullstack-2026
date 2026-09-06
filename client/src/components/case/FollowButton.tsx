@@ -13,6 +13,9 @@ interface Props {
   /** The feed card carries the number in its stat row, so the button there is
    *  the word alone and the count is not printed twice. */
   showCount?: boolean;
+  /** Told the server's answer, so a parent showing the same numbers elsewhere
+   *  - the feed card's stat row - can redraw them without a refetch. */
+  onChange?: (next: { following: boolean; follow_count: number }) => void;
 }
 
 const FollowButton = ({
@@ -21,6 +24,7 @@ const FollowButton = ({
   count,
   disabled,
   showCount = true,
+  onChange,
 }: Props) => {
   const [state, setState] = useState({ following, follow_count: count });
   const [busy, setBusy] = useState(false);
@@ -44,6 +48,11 @@ const FollowButton = ({
       // count cannot drift by being incremented from a stale one.
       const next = await api.toggleFollow(caseId);
       setState(next);
+      // Safe to tell the parent, which will hand these straight back as props:
+      // the sync below compares against the last props it SAW, so it adopts
+      // them once and stops. See LikeButton for why that guard is written that
+      // way rather than around a `busy` flag.
+      onChange?.(next);
     } catch {
       // Leaving the previous state visible is the honest outcome of a failed
       // toggle; an optimistic flip here would claim something untrue.
@@ -62,7 +71,11 @@ const FollowButton = ({
       data-following={state.following}
       data-follow-count={state.follow_count}
     >
-      {state.following ? "עוקב" : "עקוב"}
+      {/* Both genders, the way the rest of the app addresses a reader it has
+          not asked - "עוקב/ת" is already what the profile and the followed-
+          cases dialog say. The unpressed label is the imperative, so it takes
+          the imperative pair rather than the same one. */}
+      {state.following ? "עוקב/ת" : "עקוב/עקבי"}
       {showCount && ` · ${state.follow_count}`}
     </Button>
   );

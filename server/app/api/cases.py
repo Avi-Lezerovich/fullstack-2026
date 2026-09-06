@@ -13,6 +13,8 @@ bp = Blueprint("cases", __name__)
 
 MAX_PAGE_SIZE = 50
 BODY_MAX_LENGTH = 8000
+# Long enough for every status named at once, and no longer.
+STATUS_PARAM_MAX_LENGTH = 128
 
 
 @bp.get("/cases")
@@ -23,12 +25,23 @@ def list_cases():
     limit = positive_int(request.args.get("limit"), 20, maximum=MAX_PAGE_SIZE)
     offset = positive_int(request.args.get("offset"), 0)
     author_id = request.args.get("author_id", type=int)
-    status = clean(request.args.get("status"), 32) or None
+
+    # `status` may name several phases at once, comma separated - the feed's
+    # "decided" tab wants verdict_reached AND closed, which are one thing to a
+    # reader and two rows to the database.
+    status = clean(request.args.get("status"), STATUS_PARAM_MAX_LENGTH)
+    statuses = [value.strip() for value in status.split(",") if value.strip()]
+    unknown = [value for value in statuses if value not in cases_service.CASE_STATUSES]
+    if unknown:
+        # Rejected rather than ignored: a mistyped filter that silently matches
+        # nothing looks exactly like an empty court, and the client would have
+        # no way to tell the two apart.
+        return fail("invalid", "מסנן הסטטוס אינו תקין.")
 
     cases = cases_service.list_cases(
-        viewer_id=g.user_id, author_id=author_id, status=status, limit=limit, offset=offset
+        viewer_id=g.user_id, author_id=author_id, status=statuses, limit=limit, offset=offset
     )
-    total = cases_service.count_cases(author_id=author_id, status=status)
+    total = cases_service.count_cases(author_id=author_id, status=statuses)
     return jsonify({"cases": cases, "total": total, "limit": limit, "offset": offset}), 200
 
 
