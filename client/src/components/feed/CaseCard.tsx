@@ -8,8 +8,6 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
-import FavoriteIcon from "@mui/icons-material/Favorite";
-import BookmarkIcon from "@mui/icons-material/Bookmark";
 import { Link as RouterLink } from "react-router-dom";
 
 import CaseStatusChip from "../case/CaseStatusChip";
@@ -26,7 +24,8 @@ interface Props {
   case: Case;
   /** The personal feed sorts on activity, so it says what the activity was. */
   showActivity?: boolean;
-  /** Signed in: the card gets its action row. Signed out it is counts only. */
+  /** Signed in, so the footer's two buttons work. Signed out they are shown
+   *  disabled rather than hidden, so the public counts they carry survive. */
   canFollow?: boolean;
   /**
    * The viewer liked or followed from here. The card's stat row reads the
@@ -135,61 +134,71 @@ const CaseCard = ({ case: c, showActivity, canFollow, onChange }: Props) => {
             </Stack>
           )}
 
-          <Stack direction="row" spacing={2} sx={{ mt: 1.5 }} color="text.secondary">
-            <Stack direction="row" spacing={0.5} alignItems="center" data-testid="card-like-count">
-              <FavoriteIcon fontSize="small" color={c.viewer_has_liked ? "error" : "inherit"} />
-              <Typography variant="caption">{c.like_count}</Typography>
-            </Stack>
-            <Stack direction="row" spacing={0.5} alignItems="center">
-              <ChatBubbleOutlineIcon fontSize="small" />
-              <Typography variant="caption">{c.comment_count}</Typography>
-            </Stack>
-            {/* Public, so it is here signed out too - where there is no follow
-                button to carry it. */}
-            <Stack
-              direction="row"
-              spacing={0.5}
-              alignItems="center"
-              data-testid="card-follow-count"
+          {showActivity && c.last_activity_at && (
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ mt: 1.5, display: "block" }}
             >
-              <BookmarkIcon fontSize="small" color={c.viewer_is_following ? "primary" : "inherit"} />
-              <Typography variant="caption">{c.follow_count}</Typography>
-            </Stack>
-            {showActivity && c.last_activity_at && (
-              <Typography variant="caption">
-                פעילות אחרונה {relativeTime(c.last_activity_at)}
-              </Typography>
-            )}
-          </Stack>
+              פעילות אחרונה {relativeTime(c.last_activity_at)}
+            </Typography>
+          )}
         </CardContent>
       </CardActionArea>
 
-      {/* Outside the CardActionArea on purpose: these are buttons, and nesting
-          them inside the link would make every tap navigate as well as toggle.
-          The counts they change are printed in the stat row above, which is
-          why neither button repeats one. */}
-      {canFollow && (
-        <Stack direction="row" spacing={1} sx={{ justifyContent: "flex-end", px: 2, pb: 1 }}>
-          <LikeButton
-            caseId={c.id}
-            liked={c.viewer_has_liked}
-            count={c.like_count}
-            showCount={false}
-            onChange={({ liked, like_count }) =>
-              onChange?.({ viewer_has_liked: liked, like_count })
-            }
-          />
-          <FollowButton
-            caseId={c.id}
-            following={c.viewer_is_following}
-            count={c.follow_count}
-            showCount={false}
-            onChange={({ following, follow_count }) =>
-              onChange?.({ viewer_is_following: following, follow_count })
-            }
-          />
+      {/* The card's footer: every count it publishes, and the two things a
+          reader can do about them.
+
+          Outside the CardActionArea on purpose - these are buttons, and
+          nesting them inside the link would make every tap navigate as well as
+          toggle. Each total sits on the button that changes it rather than in
+          a separate strip: one place to read a number and one place to change
+          it are the same place, and the button already holds the server's
+          answer, so it needs nothing to keep the two in step.
+
+          Rendered signed out too, disabled - the counts are public, and taking
+          the row away with the buttons would take them with it. `direction`
+          resolves under RTL, so the first child here is the RIGHTMOST one:
+          liking on the right, following on the left, the discussion between
+          them. */}
+      <Stack
+        direction="row"
+        alignItems="center"
+        sx={{ justifyContent: "space-between", px: 2, pb: 1 }}
+      >
+        <LikeButton
+          caseId={c.id}
+          liked={c.viewer_has_liked}
+          count={c.like_count}
+          disabled={!canFollow}
+          onChange={({ liked, like_count }) =>
+            onChange?.({ viewer_has_liked: liked, like_count })
+          }
+        />
+
+        {/* No button of its own: replying happens on the case page, which is
+            one tap away through the rest of the card. */}
+        <Stack
+          direction="row"
+          spacing={0.5}
+          alignItems="center"
+          color="text.secondary"
+          data-testid="card-comment-count"
+        >
+          <ChatBubbleOutlineIcon fontSize="small" />
+          <Typography variant="caption">{c.comment_count}</Typography>
         </Stack>
-      )}
+
+        <FollowButton
+          caseId={c.id}
+          following={c.viewer_is_following}
+          count={c.follow_count}
+          disabled={!canFollow}
+          onChange={({ following, follow_count }) =>
+            onChange?.({ viewer_is_following: following, follow_count })
+          }
+        />
+      </Stack>
     </Card>
   );
 }; export default CaseCard;

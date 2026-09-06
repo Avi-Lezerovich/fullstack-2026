@@ -10,8 +10,7 @@ interface Props {
   liked: boolean;
   count: number;
   disabled?: boolean;
-  /** The feed card carries the number in its stat row, so the button there is
-   *  the word alone and the count is not printed twice. Mirrors FollowButton. */
+  /** Whether to print the total beside the word. Mirrors FollowButton. */
   showCount?: boolean;
   /** Told the server's answer, so a parent showing the same numbers elsewhere
    *  - the feed card's stat row - can redraw them without a refetch. */
@@ -80,10 +79,8 @@ const LikeButton = ({
       data-liked={state.liked}
       data-like-count={state.like_count}
     >
-      {/* On the case page the number IS the label - it is the only place the
-          like total appears there. On a feed card the stat row above already
-          prints it, so the button says the word instead. */}
-      {showCount ? state.like_count : state.liked ? "אהבתי" : "לייק"}
+      {state.liked ? "אהבתי" : "לייק"}
+      {showCount && ` · ${state.like_count}`}
     </Button>
   );
 }; export default LikeButton;
