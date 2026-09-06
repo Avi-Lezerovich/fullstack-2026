@@ -55,6 +55,7 @@ def shape_case(
     charges: list[str] | None = None,
     like_count: int = 0,
     comment_count: int = 0,
+    follow_count: int = 0,
     viewer_has_liked: bool = False,
     viewer_is_following: bool = False,
     last_activity_at=None,
@@ -96,6 +97,7 @@ def shape_case(
         "created_at": _iso(row["created_at"]),
         "like_count": int(like_count),
         "comment_count": int(comment_count),
+        "follow_count": int(follow_count),
         "viewer_has_liked": bool(viewer_has_liked),
         "viewer_is_following": bool(viewer_is_following),
         # Null until something happens on the case. The feed sorts on this
@@ -137,8 +139,8 @@ def _charges_for(case_ids: list[int], db) -> dict[int, list[str]]:
 def _counts_for(case_ids: list[int], viewer_id: int | None, db) -> dict[int, dict[str, Any]]:
     """Everything a card needs beyond the case row itself, for a whole page.
 
-    Like and comment totals, the two viewer-state flags, and the feed's
-    activity timestamp. The keys are exactly shape_case's keyword arguments, so
+    Like, comment and follower totals, the two viewer-state flags, and the
+    feed's activity timestamp. The keys are exactly shape_case's keyword arguments, so
     every caller splats this straight in.
     """
     if not case_ids:
@@ -147,6 +149,11 @@ def _counts_for(case_ids: list[int], viewer_id: int | None, db) -> dict[int, dic
 
     likes = db.query_all(
         f"SELECT case_id, COUNT(*) AS n FROM likes WHERE case_id IN ({placeholders}) "
+        "GROUP BY case_id",
+        case_ids,
+    )
+    follows = db.query_all(
+        f"SELECT case_id, COUNT(*) AS n FROM case_follows WHERE case_id IN ({placeholders}) "
         "GROUP BY case_id",
         case_ids,
     )
@@ -183,12 +190,14 @@ def _counts_for(case_ids: list[int], viewer_id: int | None, db) -> dict[int, dic
         following_ids = {row["case_id"] for row in rows}
 
     like_map = {row["case_id"]: int(row["n"]) for row in likes}
+    follow_map = {row["case_id"]: int(row["n"]) for row in follows}
     comment_map = {row["case_id"]: int(row["n"]) for row in comments}
     activity_map = {row["case_id"]: row["last_activity_at"] for row in activity}
     return {
         case_id: {
             "like_count": like_map.get(case_id, 0),
             "comment_count": comment_map.get(case_id, 0),
+            "follow_count": follow_map.get(case_id, 0),
             "viewer_has_liked": case_id in liked_ids,
             "viewer_is_following": case_id in following_ids,
             "last_activity_at": activity_map.get(case_id),
@@ -399,35 +408,47 @@ def count_cases(
         )
 
 
-# --- the personal feed ------------------------------------------------------
+# --- followed cases ---------------------------------------------------------
 #
 # One user's followed cases, newest ACTIVITY first - which is a different
 # question from the public feed's newest FILING first, and the reason
 # case_activity exists. The two queries below must agree on their filters or
 # "load more" breaks; see count_cases' docstring for why.
+#
+# `owner_id` is whose follows these are; `viewer_id` is who is looking. They
+# are the same person for /cases/feed, and different when a profile shows what
+# somebody else is tracking - which is why the join and the visibility clause
+# take separate ids rather than one used twice.
 
 _FOLLOWED_JOINS = """
     JOIN case_follows cf ON cf.case_id = c.id AND cf.user_id = %s
 """
 
-# The author of a hidden filing can still see it, exactly as get_case allows.
-# Admins get no special case: this feed is personal, not a moderation queue.
+# The author of a hidden filing can still see it, exactly as get_case allows -
+# and only the author, so a stranger reading a profile never learns that a
+# hidden case exists. Admins get no special case: this list is personal, not a
+# moderation queue.
 _FOLLOWED_VISIBILITY = f"({PUBLIC_VISIBILITY} OR c.author_id = %s)"
 
 
 def list_followed_cases(
-    viewer_id: int,
+    owner_id: int,
     *,
+    viewer_id: int | None = None,
     limit: int = 20,
     offset: int = 0,
     conn: Db | None = None,
 ) -> list[dict[str, Any]]:
-    """The viewer's own feed: cases they follow, most recently active first.
+    """Cases `owner_id` follows, most recently active first, as `viewer_id` sees them.
+
+    `viewer_id` defaults to the owner, which is the /cases/feed case: you are
+    reading your own list.
 
     COALESCE to filed_at so a case whose activity row has not been written yet
     - anything filed before the feature shipped and not yet backfilled - still
     sorts somewhere sensible instead of falling off the end.
     """
+    viewer = owner_id if viewer_id is None else viewer_id
     with owned(conn) as db:
         rows = db.query_all(
             f"SELECT {_CASE_COLUMNS} {_CASE_JOINS} {_FOLLOWED_JOINS} "
@@ -435,11 +456,11 @@ def list_followed_cases(
             f"WHERE {_FOLLOWED_VISIBILITY} "
             "ORDER BY COALESCE(ca.last_activity_at, c.filed_at) DESC, c.id DESC "
             "LIMIT %s OFFSET %s",
-            [viewer_id, viewer_id, int(limit), int(offset)],
+            [owner_id, viewer, int(limit), int(offset)],
         )
         case_ids = [row["id"] for row in rows]
         charges = _charges_for(case_ids, db)
-        counts = _counts_for(case_ids, viewer_id, db)
+        counts = _counts_for(case_ids, viewer, db)
 
     return [
         shape_case(row, charges=charges.get(row["id"], []), **counts[row["id"]])
@@ -447,18 +468,23 @@ def list_followed_cases(
     ]
 
 
-def count_followed_cases(viewer_id: int, *, conn: Db | None = None) -> int:
+def count_followed_cases(
+    owner_id: int, *, viewer_id: int | None = None, conn: Db | None = None
+) -> int:
     """How many cases a matching list_followed_cases() would find.
 
     The same filters, for the same reason count_cases gives: a total counted
     over a wider set leaves a "load more" button that can never load anything.
+    This is also the "tracking N cases" on a profile, so that number and the
+    list behind it cannot disagree.
     """
+    viewer = owner_id if viewer_id is None else viewer_id
     with owned(conn) as db:
         return int(
             db.query_value(
                 f"SELECT COUNT(*) FROM cases c {_FOLLOWED_JOINS} "
                 f"WHERE {_FOLLOWED_VISIBILITY}",
-                [viewer_id, viewer_id],
+                [owner_id, viewer],
                 default=0,
             )
         )

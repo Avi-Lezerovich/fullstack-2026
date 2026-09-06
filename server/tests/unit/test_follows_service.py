@@ -8,6 +8,10 @@ without a separate SELECT that another request could invalidate between the two.
 `follow` is the automatic path - you filed it, you were named its defendant, you
 testified in it - and has to be safe on a retried worker tick.
 
+`follower_count` and `followers` are the read side: the number on a case and
+the list behind it, shaped exactly like `likes_service`' pair so one dialog
+can serve both.
+
 No database: the fake keeps a set of follows and answers from it.
 """
 
@@ -34,6 +38,7 @@ class _FakeDb:
         self.case_exists = case_exists
         self.rows: list[dict] = []
         self.writes: list[tuple[str, tuple]] = []
+        self.selects: list[tuple[str, tuple]] = []
         self.commits = 0
 
     def query_one(self, sql, params=()):
@@ -46,7 +51,14 @@ class _FakeDb:
         return None
 
     def query_all(self, sql, params=()):
+        self.selects.append((sql, tuple(params)))
         return self.rows
+
+    def query_value(self, sql, params=(), default=None):
+        self.selects.append((sql, tuple(params)))
+        if "COUNT(*) FROM case_follows WHERE case_id" in sql:
+            return sum(1 for case_id, _ in self.following if case_id == params[0])
+        return default
 
     def execute(self, sql, params=()):
         self.writes.append((sql, params))
@@ -79,11 +91,11 @@ def test_toggle_follow_round_trips():
     db = _FakeDb()
 
     result, payload = follows_service.toggle_follow(CASE, USER, conn=db)
-    assert (result, payload) == ("ok", {"following": True})
+    assert (result, payload) == ("ok", {"following": True, "follow_count": 1})
     assert (CASE, USER) in db.following
 
     result, payload = follows_service.toggle_follow(CASE, USER, conn=db)
-    assert (result, payload) == ("ok", {"following": False})
+    assert (result, payload) == ("ok", {"following": False, "follow_count": 0})
     assert (CASE, USER) not in db.following
 
 
@@ -169,3 +181,39 @@ def test_followed_case_ids():
     db.rows = [{"case_id": 1}, {"case_id": 2}]
 
     assert follows_service.followed_case_ids(USER, conn=db) == {1, 2}
+
+
+# --- the read side: the number, and the list behind it ----------------------
+
+
+def test_the_toggle_answers_with_the_new_total():
+    """Counted after the write, so the button never has to guess by adding one
+    to a total that may already be stale."""
+    db = _FakeDb()
+    db.following.add((CASE, USER + 1))
+    db.following.add((CASE + 1, USER))
+
+    _, payload = follows_service.toggle_follow(CASE, USER, conn=db)
+
+    # Two on this case; the follow on the OTHER case must not be counted.
+    assert payload == {"following": True, "follow_count": 2}
+
+
+def test_follower_count_counts_one_case():
+    db = _FakeDb()
+    db.following.update({(CASE, USER), (CASE, USER + 1), (CASE + 1, USER)})
+
+    assert follows_service.follower_count(CASE, conn=db) == 2
+
+
+def test_followers_reads_newest_first_and_shapes_like_likers():
+    db = _FakeDb()
+    db.rows = [{"id": USER, "name": "דנה", "avatar_url": None, "is_bot": 0}]
+
+    people = follows_service.followers(CASE, limit=5, conn=db)
+
+    assert people == [{"id": USER, "name": "דנה", "avatar_url": None, "is_bot": False}]
+    sql, params = db.selects[-1]
+    assert "JOIN users u ON u.id = f.user_id" in sql
+    assert "ORDER BY f.created_at DESC" in sql
+    assert params == (CASE, 5)

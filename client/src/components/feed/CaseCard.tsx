@@ -9,6 +9,7 @@ import Typography from "@mui/material/Typography";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import FavoriteIcon from "@mui/icons-material/Favorite";
+import BookmarkIcon from "@mui/icons-material/Bookmark";
 import { Link as RouterLink } from "react-router-dom";
 
 import CaseStatusChip from "../case/CaseStatusChip";
@@ -94,6 +95,17 @@ const CaseCard = ({ case: c, showActivity, canFollow }: Props) => {
               <ChatBubbleOutlineIcon fontSize="small" />
               <Typography variant="caption">{c.comment_count}</Typography>
             </Stack>
+            {/* Public, so it is here signed out too - where there is no follow
+                button to carry it. */}
+            <Stack
+              direction="row"
+              spacing={0.5}
+              alignItems="center"
+              data-testid="card-follow-count"
+            >
+              <BookmarkIcon fontSize="small" color={c.viewer_is_following ? "primary" : "inherit"} />
+              <Typography variant="caption">{c.follow_count}</Typography>
+            </Stack>
             {showActivity && c.last_activity_at && (
               <Typography variant="caption">
                 פעילות אחרונה {relativeTime(c.last_activity_at)}
@@ -107,7 +119,12 @@ const CaseCard = ({ case: c, showActivity, canFollow }: Props) => {
           inside the link would make every tap navigate as well as toggle. */}
       {canFollow && (
         <Box sx={{ display: "flex", justifyContent: "flex-end", px: 2, pb: 1 }}>
-          <FollowButton caseId={c.id} following={c.viewer_is_following} />
+          <FollowButton
+            caseId={c.id}
+            following={c.viewer_is_following}
+            count={c.follow_count}
+            showCount={false}
+          />
         </Box>
       )}
     </Card>

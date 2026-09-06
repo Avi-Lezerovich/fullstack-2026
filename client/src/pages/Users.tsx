@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardActionArea from "@mui/material/CardActionArea";
 import Chip from "@mui/material/Chip";
@@ -13,6 +12,7 @@ import { Link as RouterLink } from "react-router-dom";
 
 import * as api from "../api";
 import { EmptyState, ErrorNote, Loading } from "../components/common/StateViews";
+import InfiniteScroll from "../components/common/InfiniteScroll";
 import { usePagedList } from "../hooks/usePagedList";
 import { initials } from "../utils/format";
 
@@ -95,13 +95,15 @@ const Users = () => {
         ))}
       </Stack>
 
-      {hasMore && (
-        <Box sx={{ textAlign: "center", mt: 2 }}>
-          <Button onClick={loadMore} disabled={loading} data-testid="users-load-more">
-            {loading ? "טוען…" : "טען עוד"}
-          </Button>
-        </Box>
-      )}
+      {/* The same sentinel the feed uses: the directory is the other long
+          list in the app, and two lists that page differently is a worse
+          answer than one that does not. */}
+      <InfiniteScroll
+        hasMore={hasMore}
+        loading={loading}
+        onLoadMore={loadMore}
+        testId="users-load-more"
+      />
     </Box>
   );
 }; export default Users;

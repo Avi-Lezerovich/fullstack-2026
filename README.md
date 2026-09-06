@@ -161,20 +161,31 @@ docker compose down -v && docker compose up --build
 cd server && python -m pytest -v
 ```
 
-> **Note — the backend suite does not currently run.** Five of its six modules fail at
-> collection with `ModuleNotFoundError: No module named 'app.utils'`: the tests are
-> pre-MySQL-migration leftovers that still import `app/utils.py` and `app/models.py`,
-> and `conftest.py` still injects a SQLite database through a `services.get_db` seam
-> that no longer exists. Four tests collect; the rest error out. Repairing them is
-> separate work and was not part of the Docker task.
+> **Note — five modules still fail at collection, and a bare `pytest` stops there.**
+> All five are pre-MySQL-migration leftovers importing `app/utils.py`, which is gone.
+> Skip them and 330 tests collect; 326 pass, and the four that remain are
+> `tests/integration/test_post_delete_flow.py`, which reaches for a
+> `services.get_db` seam `conftest.py` can no longer patch:
+>
+> ```bash
+> cd server && python -m pytest -v \
+>   --ignore=tests/unit/test_password_hashing.py \
+>   --ignore=tests/unit/test_post_deletion.py \
+>   --ignore=tests/unit/test_session_cookie.py \
+>   --ignore=tests/unit/test_session_token.py \
+>   --ignore=tests/integration/test_auth_flow.py
+> ```
+>
+> Repairing them is separate work.
 
 ```bash
 cd client && npm test
 ```
 
-> **Note — there are no frontend test files.** Vitest is configured and installed, but
-> the suite exits with "No test files found". `vite.config.ts` also points
-> `setupFiles` at `./src/test/setup.ts`, which does not exist.
+> **Note — the frontend suite is one file deep.** `src/test/setup.ts` now exists (it
+> was named by `vite.config.ts` and never created, so the suite used to fail before
+> running anything), and `InfiniteScroll.test.tsx` covers the scroll sentinel. The
+> rest of the components have no tests yet.
 
 ---
 

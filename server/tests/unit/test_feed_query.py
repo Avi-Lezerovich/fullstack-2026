@@ -130,7 +130,7 @@ def test_count_followed_cases_filters_exactly_as_the_list_does():
 def test_the_batch_answers_following_and_activity_for_a_whole_page():
     db = _RecordingDb(
         {
-            "FROM case_follows": [{"case_id": 1}],
+            "FROM case_follows WHERE user_id": [{"case_id": 1}],
             "FROM case_activity": [{"case_id": 1, "last_activity_at": WHEN}],
         }
     )
@@ -143,12 +143,34 @@ def test_the_batch_answers_following_and_activity_for_a_whole_page():
 
 
 def test_an_anonymous_viewer_costs_no_follows_query():
-    """Same short circuit the likes lookup has: nobody to ask about."""
+    """Same short circuit the likes lookup has: nobody to ask about.
+
+    The follower TOTAL is still counted - that is public, and the card shows it
+    signed out. What is skipped is "does this viewer follow it", which has no
+    viewer to ask about.
+    """
     db = _RecordingDb()
     meta = cases_service._counts_for([1], None, db)
 
-    assert not any("FROM case_follows" in sql for sql, _ in db.selects)
+    assert not any("FROM case_follows WHERE user_id" in sql for sql, _ in db.selects)
     assert meta[1]["viewer_is_following"] is False
+
+
+def test_the_batch_counts_followers_for_a_whole_page_in_one_query():
+    """The count that puts "N users tracking this" on a card. One GROUP BY for
+    the page, not one query per case."""
+    db = _RecordingDb(
+        {"COUNT(*) AS n FROM case_follows": [{"case_id": 1, "n": 3}]}
+    )
+    meta = cases_service._counts_for([1, 2], VIEWER, db)
+
+    assert meta[1]["follow_count"] == 3
+    assert meta[2]["follow_count"] == 0
+
+    grouped = [
+        sql for sql, _ in db.selects if "COUNT(*) AS n FROM case_follows" in sql
+    ]
+    assert len(grouped) == 1
 
 
 # --- shaping ----------------------------------------------------------------
@@ -175,8 +197,53 @@ def test_shape_case_exposes_the_two_new_fields():
     assert shaped["last_activity_at"] == "2026-03-01T12:30:45"
 
 
+def test_shape_case_carries_the_follower_total():
+    assert cases_service.shape_case(_row(), follow_count=4)["follow_count"] == 4
+
+
 def test_shape_case_defaults_are_the_signed_out_answer():
     shaped = cases_service.shape_case(_row())
 
     assert shaped["viewer_is_following"] is False
     assert shaped["last_activity_at"] is None
+    assert shaped["follow_count"] == 0
+
+
+# --- somebody else's list ---------------------------------------------------
+#
+# The same query serves /cases/feed and the "tracking N cases" list on a
+# profile. The difference is entirely in the ids: whose follows are joined, and
+# whose hidden filings stay visible.
+
+
+def test_reading_someone_elses_follows_binds_the_owner_then_the_viewer():
+    db = _RecordingDb()
+    cases_service.list_followed_cases(VIEWER, viewer_id=VIEWER + 1, limit=20, offset=0, conn=db)
+
+    _, params = _select_naming(db, "JOIN case_follows")
+    assert params == [VIEWER, VIEWER + 1, 20, 0]
+
+
+def test_a_strangers_hidden_filing_stays_hidden_in_someone_elses_list():
+    """The visibility carve-out binds the VIEWER, so following a hidden case
+    does not put it on a profile a stranger is reading."""
+    db = _RecordingDb()
+    cases_service.list_followed_cases(VIEWER, viewer_id=VIEWER + 1, limit=20, offset=0, conn=db)
+
+    sql, params = _select_naming(db, "JOIN case_follows")
+    assert "(c.moderation_status IN ('published', 'flagged') OR c.author_id = %s)" in sql
+    assert params[1] == VIEWER + 1
+
+
+def test_the_profile_count_and_its_list_agree_on_the_ids_they_bind():
+    """The profile shows this count beside that list. Different ids here would
+    show "tracking 5" above three rows."""
+    list_db = _RecordingDb()
+    cases_service.list_followed_cases(VIEWER, viewer_id=VIEWER + 1, limit=20, offset=0, conn=list_db)
+    _, list_params = _select_naming(list_db, "JOIN case_follows")
+
+    count_db = _RecordingDb()
+    cases_service.count_followed_cases(VIEWER, viewer_id=VIEWER + 1, conn=count_db)
+    _, count_params = _select_naming(count_db, "COUNT(*)")
+
+    assert count_params == list_params[:2] == [VIEWER, VIEWER + 1]

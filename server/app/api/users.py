@@ -13,6 +13,10 @@ bp = Blueprint("users", __name__)
 
 BIO_MAX_LENGTH = 500
 
+# The same cap /cases uses. Duplicated as a name rather than imported from the
+# cases blueprint, which would make two route modules depend on each other.
+MAX_PAGE_SIZE = 50
+
 # How much of a court personality's record its profile shows.
 #
 # Five, and the number is doing editorial work rather than saving bytes. The
@@ -53,7 +57,37 @@ def get_user(user_id: int):
 
     profile = users_service.public_user(row)
     profile["case_count"] = cases_service.count_cases(author_id=user_id)
+    # "tracking N cases", counted with the SAME visibility rules the list
+    # below applies, so the number on the profile and the length of the list
+    # behind it cannot disagree.
+    profile["following_count"] = cases_service.count_followed_cases(
+        user_id, viewer_id=g.user_id
+    )
     return jsonify({"user": profile}), 200
+
+
+@bp.get("/users/<int:user_id>/follows")
+@security.optional_auth
+def list_follows(user_id: int):
+    """The cases this user tracks - the list behind "tracking N cases".
+
+    Public, and paginated with the same envelope as /cases so the client pages
+    it with the same hook. `viewer_id` is who is asking, not whose list it is:
+    a hidden filing stays visible to its own author and to nobody else, so
+    reading a stranger's profile never reveals that one exists.
+    """
+    row = users_service.get_by_id(user_id)
+    if row is None or row["status"] == "banned":
+        return fail("not_found", "המשתמש/ת  המבוקש לא נמצא.")
+
+    limit = positive_int(request.args.get("limit"), 20, maximum=MAX_PAGE_SIZE)
+    offset = positive_int(request.args.get("offset"), 0)
+
+    cases = cases_service.list_followed_cases(
+        user_id, viewer_id=g.user_id, limit=limit, offset=offset
+    )
+    total = cases_service.count_followed_cases(user_id, viewer_id=g.user_id)
+    return jsonify({"cases": cases, "total": total, "limit": limit, "offset": offset}), 200
 
 
 @bp.get("/users/<int:user_id>/record")
