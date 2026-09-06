@@ -1,90 +1,157 @@
-# Testing — User Authentication & Post Deletion
+# Testing
 
-Automated tests for the auth feature (sign-up, login, logout, password hashing)
-and the delete-post feature (owner-only post deletion), organised as a
-**test pyramid** and following **AAA** (Arrange → Act → Assert).
+Automated tests for LolSuit, organised as a **test pyramid** and following
+**AAA** (Arrange → Act → Assert) — though the assertions are grouped by blank
+lines rather than by comment, which is what the suite settled on.
 
-| Layer | Count | Tool | What it checks |
-|-------|-------|------|----------------|
-| **Unit** | 20 | pytest | `hash_password` / `verify_password` / `session_cookie_flags` / `get_session_token` in isolation (no DB, no network); `delete_post`'s ok/forbidden/not_found/cascade branches against an in-memory SQLite connection |
-| **Integration** | 16 | pytest + Flask test client | sign-up / login / logout / `require_auth` through the real endpoints; `DELETE /api/posts/<id>` ownership (owner/forbidden/not-found/unauthenticated) |
-| **E2E** | 2 | Cypress | sign up → log out → log in → view profile; sign up → create post → delete post, both in a real browser |
+| Layer | Marker | Count | Needs | What it checks |
+|-------|--------|-------|-------|----------------|
+| **Unit** | `unit` | 486 | nothing | Pure logic in isolation — password hashing and the length rule bcrypt 5 enforces, cookie flags, the sentiment lexicon, jury selection and tallying, trial-clock arithmetic, the SQL a service sends and the parameters bound to it, and the layering rules the other layers rely on. |
+| **Integration** | `integration` | 461 | MySQL | The real Flask endpoints and the real service layer against a real MySQL schema built from `database/init.sql` — sessions, password resets, the four moderation statuses, content visibility, messages, witnesses, uploads, and the permission matrix on every endpoint. |
+| **Worker** | `worker` | 69 | MySQL | The trial state machine end to end, the three moderator bots, the social bots, and the idempotency guarantee: a tick run twice reaches the same state as a tick run once. Also carry `integration`, so they are counted in the row above. |
+| **Frontend** | — | 120 | nothing | vitest + @testing-library/react over the client's hooks, context and the components with real logic. |
 
-Coverage on the authentication code (`app/utils.py`, `app/services.py`, `app/routes.py`): **100%** (gate: 85%).
+947 backend tests in total. Every one carries a layer marker — the worker tests
+carry both `worker` and `integration`, which is why the three counts add to more
+than 947 — so `-m unit` and `-m "integration or worker"` between them run the
+whole suite and nothing twice.
+
+Backend coverage: **95.5%** across `app` and `worker` (gate: 85%, enforced by
+`server/.coveragerc`).
 
 ---
 
 ## Prerequisites
 
-- **Python** — on this Windows box use the `py` launcher (the bare `python` command is
-  shadowed by the Windows Store alias stub).
-- **Docker Desktop** — only needed for the E2E (it runs MySQL).
-
-Install test dependencies once:
+- **Python** — on this Windows box use the `py` launcher; the bare `python`
+  command is shadowed by the Windows Store alias stub.
+- **Docker Desktop** — for MySQL. The unit layer runs without it.
 
 ```powershell
-py -m pip install -r server/requirements-dev.txt   # pytest, pytest-cov
-npm --prefix client install                        # includes Cypress
+py -m pip install -r server/requirements-dev.txt
+npm --prefix client install
 ```
 
 ---
 
-## Unit + integration (pytest)
+## Backend
 
-Run from the `server/` directory so `pytest.ini` and `.coveragerc` are picked up:
+```powershell
+docker compose up -d db
+```
 
 ```powershell
 cd server
-py -m pytest -v                                    # all 36 backend tests
-py -m pytest -m unit                               # just the unit layer
-py -m pytest -m integration                        # just the integration layer
-py -m pytest --cov=app --cov-report=term-missing   # with the coverage report
+py -m pytest
 ```
 
-These need **no database** — `tests/conftest.py` injects a throwaway SQLite DB into
-the app (via `services.get_db`) and drives the real Flask endpoints with the test
-client. Fast, hermetic, repeatable.
-
-**Known SQLite/MySQL parity limits** (deliberate, and covered by the E2E, which
-runs against real MySQL): the literal `ON DUPLICATE KEY UPDATE` upsert in
-`create_session` and the production `?` → `%s` placeholder rewrite
-(`app/models.py`) never execute under pytest — the SQLite adapter substitutes
-equivalents. FK enforcement is switched ON in the fixture to match InnoDB.
-
-**Coverage is scoped to the auth code.** `server/.coveragerc` reports only the three
-auth-bearing files and uses `exclude_also` to drop the non-auth functions (posts,
-follows, profiles, uploads) from the denominator, so the 85% gate measures
-authentication specifically — not a whole-repo average. `fail_under = 85` enforces it.
-
-## End-to-end (Cypress)
-
-The E2E drives the real stack, so start all three services first:
+`.coveragerc` applies `--cov` and the 85% gate on its own, so there is nothing to
+add to the command. To see where the coverage is:
 
 ```powershell
-# 1) MySQL
-docker compose up -d db
-
-# 2) Flask API on :5001 (point it at the local MySQL)
-$env:DB_HOST="localhost"; $env:DB_PORT="3306"; $env:DB_USER="root"
-$env:DB_PASSWORD="change-me-in-production"; $env:DB_NAME="lolsuit"
-py server/run.py
-
-# 3) Vite client on :5173 (in another shell)
-npm --prefix client run dev
-
-# 4) Run the spec (in another shell)
-npm --prefix client run cypress:run     # headless
-npm --prefix client run cypress:open    # interactive runner
+cd server
+py -m pytest --cov-report=term-missing
 ```
 
-Notes:
-- The client uses **HashRouter**, so routes live under the URL fragment (`#/signup`,
-  `#/user-posts/:id`); the spec navigates by hash / through the UI accordingly.
-- Each spec uses a **unique email/post title per run**, so it stays repeatable against
-  the persistent MySQL database (each run leaves one throwaway user, and the delete-post
-  spec cleans up its own post — harmless either way).
-- Selectors use `data-testid` attributes added to the auth form fields and nav, plus the
-  new-post form and the post card's delete button/confirm dialog.
+One layer at a time:
 
-Tear down when done: `docker compose stop db` (keep data) or `docker compose down -v`
-(wipe the DB volume).
+```powershell
+cd server
+py -m pytest -m unit
+py -m pytest -m integration
+py -m pytest -m worker
+```
+
+### How the harness works
+
+`tests/conftest.py` builds the schema itself rather than mirroring it:
+
+1. connects to the dev MySQL as root and creates a throwaway `lolsuit_test`
+   database — **your `lolsuit` database is never touched**;
+2. reads `database/init.sql`, strips comments, splits on `;` and executes each
+   statement. That is only possible while the file stays free of triggers,
+   stored procedures and `DELIMITER` blocks, which
+   `tests/integration/test_schema_is_executable.py` asserts;
+3. sets the environment before any application import — `BCRYPT_ROUNDS=4`,
+   `MAIL_BACKEND=console` (the repo's real `.env` carries live SMTP
+   credentials), `BRAIN_FORCE_OFFLINE=1`, and a one-minute trial "day";
+4. runs `app.seed` once, because the worker tasks need the thirty-one court
+   personalities to do anything at all;
+5. deletes everything but the cast before each test.
+
+No monkeypatching is involved. `app/config.py` re-reads the environment on every
+`get_settings()` call, so pointing `DB_NAME` at the test database redirects the
+services, the API *and* the worker's own `connect()` at once.
+
+**Without MySQL running**, everything marked `integration` or `worker` skips with
+a reason naming `docker compose up -d db`, and the unit layer still runs. The
+95.5% figure assumes the database is up.
+
+Overridable: `TEST_DB_HOST`, `TEST_DB_PORT`, `TEST_DB_ROOT_USER`,
+`TEST_DB_ROOT_PASSWORD`, `TEST_DB_NAME`.
+
+### Why real MySQL and not SQLite
+
+The previous harness mirrored the schema by hand in SQLite and rewrote the
+application's SQL on the way through. `app/db.py` opens with what that cost:
+
+> Placeholders are MySQL's own `%s`. There is no `?` translation layer. The
+> previous generation of this project had one, and it was exactly what made
+> running the test suite against SQLite look reasonable — which in turn meant
+> the tests never exercised the dialect the application actually speaks.
+
+Most of what this application guarantees is enforced by the database rather than
+by Python: the four moderation statuses are an `ENUM`, one-like-per-user is a
+composite `PRIMARY KEY`, one-report-per-person is a `UNIQUE` index, the trial
+engine's idempotency is `FOR UPDATE SKIP LOCKED` plus a `UNIQUE` index over a
+nullable column, and every deadline is written and compared with
+`UTC_TIMESTAMP()` so two processes cannot disagree. A mirror can only agree with
+those; it cannot check them.
+
+---
+
+## Frontend
+
+```powershell
+npm --prefix client test
+npm --prefix client run lint
+npm --prefix client run test:coverage
+```
+
+`lint` is `tsc --noEmit`; there is no ESLint in this project. `tsconfig.json` sets
+`noUnusedLocals`, so an unused import in a test file fails the typecheck.
+
+Tests aim at the pieces with real logic rather than at markup:
+
+- **`usePagedList`** — offset accumulation, the stale-response token, the
+  empty-later-page rule, and `patchItems`;
+- **`useAsync`** — the same stale guard in its other shape;
+- **`AuthContext`** — `loading` until `/auth/me` settles, a failed probe meaning
+  anonymous, and `signOut` clearing the user even when the request throws;
+- **`useNotificationStream`** — one failure reconnects, two inside thirty seconds
+  fall back to polling permanently, and both transports share one cursor;
+- **`LikeButton` / `FollowButton`** — the guarded prop-sync, including the round
+  trip where the parent hands the server's answer straight back as props;
+- **`CommentThread`**, **`CaseCard`**, **`InfiniteScroll`**, **`ProtectedRoute`**
+  and **`utils/format`**.
+
+There is no coverage gate on the client. The page components are deliberately
+untested: they are markup over the hooks above, and asserting on their DOM would
+add numbers rather than confidence.
+
+---
+
+## Known gaps
+
+- **`app/brain/llm.py`** sits at 81%, and is the only file materially below the
+  rest. The remainder is live-network provider code, which the suite never
+  calls: `BRAIN_FORCE_OFFLINE=1` throughout, so no test reaches a model backend.
+- **`worker/social_tasks.py`** sits at 84%. What is left is the branches where a
+  model writes a filing — the offline generator takes a different path through
+  `_lawsuit_target`, so those lines need a configured provider to reach.
+- **`cases.defendant_user_id` has no foreign key.** `database/init.sql` documents
+  an `ON DELETE SET NULL` constraint on it at length and never declares it, so
+  deleting a user leaves the filing pointing at an id that is gone. Latent —
+  nothing in the application deletes a user — and recorded as a strict `xfail` in
+  `tests/integration/test_case_withdrawal.py`, which will start failing the day
+  the constraint is added.

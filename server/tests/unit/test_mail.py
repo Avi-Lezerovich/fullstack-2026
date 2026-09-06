@@ -286,7 +286,39 @@ def test_every_hebrew_cell_declares_its_own_direction():
     # And the same holds for what Gmail keeps: the body's contents alone.
     inner = re.search(r"<body[^>]*>(.*)</body>", html, re.S).group(1)
     assert 'dir="rtl"' in inner
-    assert "text-align:right" in inner
+
+
+@pytest.mark.unit
+def test_no_cell_disagrees_with_itself_about_alignment():
+    """Regression (#43): `align="center"` beside an inline `text-align:right`.
+
+    #42 flipped the legacy `align` attribute on the expiry paragraph and left
+    the inline CSS saying the opposite. Gmail keeps inline CSS and ignores the
+    attribute when the two disagree, so the change was invisible where it was
+    meant to apply and visible everywhere it was not.
+
+    This replaces an assertion that simply looked for `text-align:right`
+    somewhere in the body. That was never the rule - it was one true fact about
+    the layout at the time, and #42/#43 deliberately made it false. Pinning the
+    two declarations *to each other* pins the thing that was actually wrong,
+    and keeps holding whichever direction a future redesign picks.
+    """
+    import re
+
+    html = mail.password_reset_html("Avi", "https://x.test/r?token=t", 30)
+
+    checked = 0
+    for cell in re.finditer(r"<td[^>]*>", html):
+        tag = cell.group(0)
+        attribute = re.search(r'align="(\w+)"', tag)
+        css = re.search(r"text-align:\s*(\w+)", tag)
+        if not attribute or not css:
+            continue
+        checked += 1
+        assert attribute.group(1) == css.group(1), tag
+
+    # The loop passing vacuously would say nothing at all.
+    assert checked >= 5
 
 
 @pytest.mark.unit

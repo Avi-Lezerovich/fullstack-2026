@@ -21,6 +21,10 @@ from app import brain
 from app.brain import llm
 from worker import social_tasks
 
+# These live in tests/unit and are hermetic - no database, no network - but
+# carried no marker, so `pytest -m unit` silently ran a fraction of the layer.
+pytestmark = pytest.mark.unit
+
 PERSONALITY = "[tone:deadpan] שופט קפדן שסופר פסיקים."
 
 

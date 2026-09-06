@@ -36,10 +36,8 @@ server/uploads/
 .coverage.*
 htmlcov/
 coverage.xml
-# Cypress run output (screenshots on failure, videos)
-client/cypress/screenshots/
-client/cypress/videos/
-client/cypress/downloads/
+# vitest --coverage writes here
+client/coverage/
 
 # Editor directories and files
 .vscode

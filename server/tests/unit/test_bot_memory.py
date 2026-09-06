@@ -22,6 +22,10 @@ from app import brain
 from app.brain import llm
 from app.services import memory_service
 
+# These live in tests/unit and are hermetic - no database, no network - but
+# carried no marker, so `pytest -m unit` silently ran a fraction of the layer.
+pytestmark = pytest.mark.unit
+
 BOT = 7
 HUMAN = 9
 PERSONALITY = "[tone:deadpan] שופט קפדן שסופר פסיקים."

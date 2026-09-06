@@ -26,6 +26,10 @@ import pytest
 from app import brain
 from worker import social_tasks
 
+# These live in tests/unit and are hermetic - no database, no network - but
+# carried no marker, so `pytest -m unit` silently ran a fraction of the layer.
+pytestmark = pytest.mark.unit
+
 BOT = 7
 HUMAN = 9
 CASE = 3

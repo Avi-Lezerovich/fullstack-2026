@@ -22,6 +22,10 @@ from app import brain, create_app
 from app.api import assist
 from app.brain import llm, offline
 
+# These live in tests/unit and are hermetic - no database, no network - but
+# carried no marker, so `pytest -m unit` silently ran a fraction of the layer.
+pytestmark = pytest.mark.unit
+
 FILING = "מוגשת בזאת תביעה נגד השכן מלמעלה.\n\nהוא מזיז רהיטים ב03:00 בלילה.\n\nמתבקש סעד."
 
 

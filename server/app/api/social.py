@@ -66,6 +66,27 @@ def list_followers(case_id: int):
 @bp.get("/cases/<int:case_id>/comments")
 @security.optional_auth
 def list_comments(case_id: int):
+    """The thread, behind the same visibility rule as the case itself.
+
+    The guard is not redundant with `shape_comment`'s redaction, because the
+    two answer different questions. Hiding a case does not cascade to its
+    comments - the case row becomes 'hidden' and every comment on it stays
+    'published' - and `shape_comment` decides redaction from the *comment's*
+    own status, which is right for a hidden reply on a public case and says
+    nothing at all about a public reply on a hidden one.
+
+    Without this, a filing hidden for harassment kept the entire argument on it
+    readable to anybody holding the case id, while `/likes` and `/followers`,
+    which leak considerably less, were both closed.
+    """
+    case = cases_service.get_case(
+        case_id,
+        viewer_id=g.user_id,
+        viewer_is_admin=bool(g.user and g.user.get("is_admin")),
+    )
+    if case is None:
+        return fail("not_found", "התיק המבוקש לא נמצא.")
+
     comments = comments_service.list_for_case(
         case_id,
         viewer_id=g.user_id,
