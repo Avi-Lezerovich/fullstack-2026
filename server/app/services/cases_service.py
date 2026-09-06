@@ -463,25 +463,39 @@ _FOLLOWED_JOINS = """
 # moderation queue.
 _FOLLOWED_VISIBILITY = f"({PUBLIC_VISIBILITY} OR c.author_id = %s)"
 
+#: "the caller did not say", which is not the same thing as "nobody is asking".
+#
+# `viewer_id=None` used to mean both, and the two want opposite answers.
+# /cases/feed omits the argument because you are reading your own list, so
+# falling back to the owner is right there. The profile routes pass
+# `g.user_id` explicitly, which is None for an anonymous reader - and that
+# fallback then made every anonymous visitor the profile's owner, handing them
+# the owner's hidden and rejected filings, title and body, on a public page.
+#
+# A sentinel keeps the convenient default and makes an explicit None mean what
+# it says: nobody, who is the author of nothing.
+_OWNER = object()
+
 
 def list_followed_cases(
     owner_id: int,
     *,
-    viewer_id: int | None = None,
+    viewer_id: Any = _OWNER,
     limit: int = 20,
     offset: int = 0,
     conn: Db | None = None,
 ) -> list[dict[str, Any]]:
     """Cases `owner_id` follows, most recently active first, as `viewer_id` sees them.
 
-    `viewer_id` defaults to the owner, which is the /cases/feed case: you are
-    reading your own list.
+    `viewer_id` omitted means the owner, which is the /cases/feed case: you
+    are reading your own list. An explicit None means an anonymous reader, who
+    is the author of nothing and therefore sees only what is public.
 
     COALESCE to filed_at so a case whose activity row has not been written yet
     - anything filed before the feature shipped and not yet backfilled - still
     sorts somewhere sensible instead of falling off the end.
     """
-    viewer = owner_id if viewer_id is None else viewer_id
+    viewer = owner_id if viewer_id is _OWNER else viewer_id
     with owned(conn) as db:
         rows = db.query_all(
             f"SELECT {_CASE_COLUMNS} {_CASE_JOINS} {_FOLLOWED_JOINS} "
@@ -502,7 +516,7 @@ def list_followed_cases(
 
 
 def count_followed_cases(
-    owner_id: int, *, viewer_id: int | None = None, conn: Db | None = None
+    owner_id: int, *, viewer_id: Any = _OWNER, conn: Db | None = None
 ) -> int:
     """How many cases a matching list_followed_cases() would find.
 
@@ -511,7 +525,7 @@ def count_followed_cases(
     This is also the "tracking N cases" on a profile, so that number and the
     list behind it cannot disagree.
     """
-    viewer = owner_id if viewer_id is None else viewer_id
+    viewer = owner_id if viewer_id is _OWNER else viewer_id
     with owned(conn) as db:
         return int(
             db.query_value(
