@@ -403,6 +403,28 @@ def target_case_id(target_type: str, target_id: int, conn: Db | None = None) -> 
         return int(row["case_id"]) if row else None
 
 
+def count_reports(status: str | None = None, conn: Db | None = None) -> int:
+    """How many reports are in a given state, for the site overview tile.
+
+    Mirrors `list_reports`'s own status handling ('resolved' as a prefix
+    match, anything else as an exact one) so the count agrees with what the
+    queue for that status would actually list - plus 'pending' as the
+    negation of that same prefix, for "how many still need a human" without
+    the caller having to know both remaining statuses ('open' and 'claimed').
+    """
+    where = ""
+    params: list[Any] = []
+    if status == "resolved":
+        where = "WHERE status LIKE 'resolved%%'"
+    elif status == "pending":
+        where = "WHERE status NOT LIKE 'resolved%%'"
+    elif status:
+        where = "WHERE status = %s"
+        params.append(status)
+    with owned(conn) as db:
+        return int(db.query_value(f"SELECT COUNT(*) FROM reports {where}", params, default=0))
+
+
 def list_reports(
     status: str | None = None, limit: int = 50, conn: Db | None = None
 ) -> list[dict[str, Any]]:

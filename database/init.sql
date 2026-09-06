@@ -630,3 +630,37 @@ CREATE TABLE IF NOT EXISTS case_activity (
   CONSTRAINT fk_activity_case FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE,
   KEY idx_activity_recent (last_activity_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 24. brain_calls - one row per brain.generate() / deliberate() /
+--     invent_lawsuit() / remember() outcome. The only history of what the LLM
+--     backend has actually done: LAST_CALL in brain/__init__.py answers "is it
+--     working right now" from memory, for /api/health, and does not survive a
+--     restart or add up across gunicorn's several workers. This does both,
+--     which is what lets the admin usage dashboard show calls-per-day and lets
+--     it check Gemini's 20-requests/day free tier before the app finds out by
+--     getting rate limited.
+--
+--     `provider` is the backend actually attempted this call ('bedrock',
+--     'anthropic', 'gemini', 'gateway') - or literally 'offline' when nothing
+--     was configured to try at all. That is different from `backend`='offline'
+--     with a real provider name, which means that provider WAS tried and the
+--     call still ended up offline, either because a capability was missing
+--     (`fallback_reason` names it) or because the call failed outright
+--     (`fallback_reason` is the exception's type and message).
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS brain_calls (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  task            VARCHAR(32)  NOT NULL,
+  provider        VARCHAR(16)  NOT NULL,
+  backend         ENUM('llm','offline') NOT NULL,
+  success         TINYINT(1)   NOT NULL,
+  fallback_reason VARCHAR(300) NULL,
+  input_tokens    INT NOT NULL DEFAULT 0,
+  output_tokens   INT NOT NULL DEFAULT 0,
+  cache_read      INT NOT NULL DEFAULT 0,
+  cache_write     INT NOT NULL DEFAULT 0,
+  created_at      DATETIME NOT NULL,
+  KEY idx_brain_calls_provider_day (provider, created_at),
+  KEY idx_brain_calls_task (task, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -460,3 +460,135 @@ def test_a_juror_line_is_not_cut_either(capable):
     )
 
     assert len(spoken["line"]) > offline.DEFAULT_MAX_CHARS
+
+
+# --- every call is logged, alongside LAST_CALL, not instead of it ------------
+#
+# brain_calls is what the admin dashboard's AI Usage tab and its Gemini quota
+# tile read. It has to agree with LAST_CALL on every outcome without ever
+# being able to break one: `_log_call` opens its own connection and swallows
+# whatever goes wrong, which is what the last test in this section pins.
+
+
+class _FakeUsageDb:
+    def __init__(self):
+        self.inserted: list[tuple] = []
+
+    def execute(self, sql, params=()):
+        self.inserted.append(tuple(params))
+        return SimpleNamespace(rowcount=1, lastrowid=1)
+
+    def commit(self):
+        pass
+
+    def close(self):
+        pass
+
+
+@pytest.fixture
+def usage_db(monkeypatch):
+    fake = _FakeUsageDb()
+    monkeypatch.setattr("app.db.connect", lambda **kwargs: fake)
+    return fake
+
+
+def _last_row(fake: _FakeUsageDb) -> dict:
+    task, provider, backend, success, reason, in_tok, out_tok, cache_r, cache_w = fake.inserted[-1]
+    return {
+        "task": task,
+        "provider": provider,
+        "backend": backend,
+        "success": success,
+        "fallback_reason": reason,
+        "input_tokens": in_tok,
+        "output_tokens": out_tok,
+        "cache_read": cache_r,
+        "cache_write": cache_w,
+    }
+
+
+def test_a_successful_call_is_logged_with_its_provider_and_tokens(capable, usage_db):
+    capable(_FakeProvider("נרשם."))
+
+    brain.generate(PERSONALITY, "bot_comment", CASE)
+
+    row = _last_row(usage_db)
+    assert row["task"] == "bot_comment"
+    assert row["provider"] == "anthropic"
+    assert row["backend"] == "llm"
+    assert row["success"] is True
+    assert row["fallback_reason"] is None
+    assert row["cache_read"] == 7 and row["cache_write"] == 3
+
+
+def test_a_failed_call_is_logged_as_a_fallback_with_its_reason(capable, usage_db):
+    capable(_FakeProvider("", boom=ValueError("timed out")))
+
+    brain.generate(PERSONALITY, "bot_comment", CASE)
+
+    row = _last_row(usage_db)
+    assert row["provider"] == "anthropic"
+    assert row["backend"] == "offline"
+    assert row["success"] is False
+    assert "ValueError" in row["fallback_reason"] and "timed out" in row["fallback_reason"]
+
+
+def test_a_call_with_nothing_configured_is_logged_as_intentionally_offline(
+    monkeypatch, usage_db
+):
+    monkeypatch.setenv("BRAIN_FORCE_OFFLINE", "1")
+
+    brain.generate(PERSONALITY, "bot_comment", CASE)
+
+    row = _last_row(usage_db)
+    assert row["provider"] == "offline"
+    assert row["backend"] == "offline"
+    assert row["success"] is True
+
+
+def test_a_deliberation_is_logged_under_its_own_task_name(capable, usage_db):
+    capable(_FakeProvider(json.dumps({"vote": "guilty", "line": "אשם."})))
+
+    brain.deliberate(PERSONALITY, CASE, guilt_bias=0.5, case_id=1, juror_user_id=2)
+
+    assert _last_row(usage_db)["task"] == "jury_deliberation"
+
+
+def test_a_filing_is_logged_under_its_own_task_name(capable, usage_db):
+    capable(
+        _FakeProvider(
+            json.dumps(
+                {
+                    "title": "תביעה",
+                    "defendant": "השכן",
+                    "body": "הפריע.",
+                    "charges": ["רעש"],
+                }
+            )
+        )
+    )
+
+    brain.invent_lawsuit(PERSONALITY)
+
+    assert _last_row(usage_db)["task"] == "invent_lawsuit"
+
+
+def test_a_memory_rewrite_is_logged_under_its_own_task_name(capable, usage_db):
+    capable(_FakeProvider(json.dumps({"summary": "זוכר.", "facts": []})))
+
+    brain.remember(PERSONALITY, {"you_remember": "משהו"})
+
+    assert _last_row(usage_db)["task"] == "remember"
+
+
+def test_a_usage_log_that_cannot_write_does_not_break_the_call_it_logs(
+    monkeypatch, capable
+):
+    """The one promise generate() makes that nothing here may cost it."""
+    capable(_FakeProvider("נרשם."))
+    monkeypatch.setattr(
+        "app.db.connect",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("db unreachable")),
+    )
+
+    assert brain.generate(PERSONALITY, "bot_comment", CASE) == "נרשם."

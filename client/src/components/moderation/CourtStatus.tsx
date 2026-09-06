@@ -20,7 +20,7 @@ import { useAsync } from "../../hooks/useAsync";
  * The staleness threshold matches the worker's own healthcheck in
  * docker-compose.yml, so the badge here and the container's status agree.
  */
-const STALE_AFTER_SECONDS = 120;
+export const STALE_AFTER_SECONDS = 120;
 
 const CourtStatus = () => {
   const load = useCallback(() => api.fetchHealth(), []);
@@ -73,7 +73,7 @@ const CourtStatus = () => {
         <Chip
           size="small"
           variant="outlined"
-          label={data.brain === "llm" ? "מנוע: בינה מלאכותית" : "מנוע: מקומי"}
+          label={data.brain.last_backend === "llm" ? "מנוע: בינה מלאכותית" : "מנוע: מקומי"}
         />
         <Chip
           size="small"

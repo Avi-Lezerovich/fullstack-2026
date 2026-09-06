@@ -167,6 +167,61 @@ class _LastCall:
 LAST_CALL = _LastCall()
 
 
+def _err_str(exc: BaseException) -> str:
+    return f"{type(exc).__name__}: {exc}"[:300]
+
+
+def _log_call(
+    task: str,
+    *,
+    backend: str,
+    success: bool,
+    fallback_reason: str | None = None,
+    usage: Any = None,
+) -> None:
+    """Append one row to brain_calls: LAST_CALL's persisted, slower sibling.
+
+    Called right alongside every `LAST_CALL.record_*` above, never instead of
+    it - LAST_CALL stays the fast in-memory answer for /api/health, this is
+    the history that survives a restart and adds up across gunicorn's workers.
+
+    `generate()` promises never to raise (see the module docstring - a juror
+    is mid-transaction when this runs), and a usage-log write is not worth
+    breaking that promise over. So this opens its own short-lived connection
+    and swallows anything that goes wrong, on the same reasoning as everything
+    else in this module: better an unlogged call than a failed trial.
+    """
+    settings = get_settings()
+    provider = settings.llm_provider if settings.use_llm else "offline"
+    try:
+        from .. import db as db_module
+
+        conn = db_module.connect()
+        try:
+            conn.execute(
+                "INSERT INTO brain_calls "
+                "(task, provider, backend, success, fallback_reason, "
+                "input_tokens, output_tokens, cache_read, cache_write, created_at) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, UTC_TIMESTAMP())",
+                (
+                    task,
+                    provider,
+                    backend,
+                    success,
+                    fallback_reason,
+                    int(getattr(usage, "input_tokens", 0) or 0),
+                    int(getattr(usage, "output_tokens", 0) or 0),
+                    int(getattr(usage, "cache_read", 0) or 0),
+                    int(getattr(usage, "cache_write", 0) or 0),
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        log.warning("failed to persist a brain usage row", exc_info=True)
+
+
 def status() -> dict[str, Any]:
     """What /api/health reports about the brain.
 
@@ -216,6 +271,7 @@ def generate(
                 personality_prompt, task, context, max_chars=max_chars, history=history
             )
             LAST_CALL.record_llm_ok(completion)
+            _log_call(task, backend="llm", success=True, usage=completion)
             # Not trimmed to `max_chars`: how long this is belongs to the
             # character and the angle it drew, not to the caller's token budget.
             if task in VERBATIM_TASKS:
@@ -226,9 +282,11 @@ def generate(
             # empty completion, network down - all the same from here: use the
             # offline brain. Recorded so it is not also *invisible* from here.
             LAST_CALL.record_llm_failure(exc)
+            _log_call(task, backend="offline", success=False, fallback_reason=_err_str(exc))
             log.warning("LLM backend failed; using the offline generator", exc_info=True)
     else:
         LAST_CALL.record_offline()
+        _log_call(task, backend="offline", success=True)
 
     return offline.generate(
         personality_prompt,
@@ -282,10 +340,15 @@ def invent_lawsuit(
     if settings.use_llm and llm.capabilities().structured_output:
         try:
             filing = llm.invent_lawsuit(personality_prompt, seed_extra, target)
-            LAST_CALL.record_llm_ok(filing.pop("usage", None))
+            usage = filing.pop("usage", None)
+            LAST_CALL.record_llm_ok(usage)
+            _log_call("invent_lawsuit", backend="llm", success=True, usage=usage)
             return filing
         except Exception as exc:
             LAST_CALL.record_llm_failure(exc)
+            _log_call(
+                "invent_lawsuit", backend="offline", success=False, fallback_reason=_err_str(exc)
+            )
             if require_llm:
                 log.warning("LLM filing failed; no case filed", exc_info=True)
                 return None
@@ -295,6 +358,7 @@ def invent_lawsuit(
         # application is designed to run with nothing configured.
         missing = "structured_output" if settings.use_llm else None
         LAST_CALL.record_offline(missing)
+        _log_call("invent_lawsuit", backend="offline", success=True, fallback_reason=missing)
         log.info("no filing: %s", missing or "no LLM backend configured")
         return None
 
@@ -321,15 +385,20 @@ def remember(personality_prompt: str, context: dict[str, Any]) -> dict[str, Any]
     from . import llm
 
     if not settings.use_llm or not llm.capabilities().structured_output:
-        LAST_CALL.record_offline("structured_output" if settings.use_llm else None)
+        missing = "structured_output" if settings.use_llm else None
+        LAST_CALL.record_offline(missing)
+        _log_call("remember", backend="offline", success=True, fallback_reason=missing)
         return None
 
     try:
         memory = llm.remember(personality_prompt, context)
-        LAST_CALL.record_llm_ok(memory.pop("usage", None))
+        usage = memory.pop("usage", None)
+        LAST_CALL.record_llm_ok(usage)
+        _log_call("remember", backend="llm", success=True, usage=usage)
         return memory
     except Exception as exc:
         LAST_CALL.record_llm_failure(exc)
+        _log_call("remember", backend="offline", success=False, fallback_reason=_err_str(exc))
         log.warning("memory rewrite failed; the old memory stands", exc_info=True)
         return None
 
@@ -370,13 +439,18 @@ def deliberate(
     if settings.use_llm and llm.capabilities().structured_output:
         try:
             spoken = llm.deliberate(personality_prompt, context, guilt_bias=guilt_bias)
-            LAST_CALL.record_llm_ok(spoken.pop("usage", None))
+            usage = spoken.pop("usage", None)
+            LAST_CALL.record_llm_ok(usage)
+            _log_call("jury_deliberation", backend="llm", success=True, usage=usage)
             return {
                 "vote": spoken["vote"],
                 "line": offline.tidy(spoken["line"]),
             }
         except Exception as exc:
             LAST_CALL.record_llm_failure(exc)
+            _log_call(
+                "jury_deliberation", backend="offline", success=False, fallback_reason=_err_str(exc)
+            )
             log.warning("deliberation failed; falling back to the dial", exc_info=True)
 
     vote = decide_vote(

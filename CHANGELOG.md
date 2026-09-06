@@ -5,6 +5,54 @@ major number moves when an upgrade needs a step other than pulling the image.
 
 ---
 
+## 4.0.0
+
+**The admin dashboard grew past the moderation queue: a real AI usage history,
+a Gemini quota gauge, and live system health.**
+
+Upgrades need a step beyond pulling the image: a new table. On the instance,
+before `deploy.sh`:
+
+```bash
+cd /opt/lolsuit && git pull && cd prod && ./init-rds.sh
+```
+
+`init-rds.sh` only ever adds a missing table, so this is safe to run against a
+database that already has everything else.
+
+### Added
+
+- **`brain_calls`, and a real usage history.** `LAST_CALL` in
+  `brain/__init__.py` has always answered "is the backend working *right
+  now*" from memory — true for one gunicorn worker, gone on restart, and never
+  summed across workers. Every `generate()`/`deliberate()`/`invent_lawsuit()`/
+  `remember()` outcome is now also written to this table — task, provider,
+  success or fallback and why, and token counts (Gemini's own token usage
+  included, which nothing previously read) — alongside the existing in-memory
+  recording, never instead of it.
+- **`GET /api/admin/brain/usage`** — calls per provider today and this week,
+  success/failure/fallback-to-offline counts, token totals, and Gemini's call
+  count today against its 20-requests/day free-tier cap.
+- **`GET /api/admin/overview`** — active users, open cases, pending reports,
+  banned users, reusing the same counts the rest of the dashboard already
+  shows rather than a second set of queries that could disagree with them.
+- **Three new admin dashboard tabs**: System Health (DB, worker heartbeat,
+  and the brain's configured-vs-actual backend — the exact mismatch
+  `brain/__init__.py`'s own docstring warns about, surfaced rather than only
+  documented), AI Usage (the numbers above, with a Gemini quota bar), and Site
+  Overview. Health and usage poll in the background so a stalled worker or a
+  near-exhausted quota shows up without a manual reload.
+
+### Fixed
+
+- **The admin dashboard's "engine" chip has been comparing an object to a
+  string since brain's status shape changed**, so it always read "מקומי"
+  regardless of what actually answered. `HealthResponse.brain` was typed
+  `string`; it has been an object since `/api/health` started reporting
+  `configured` alongside `last_backend`.
+
+---
+
 ## 3.4.0
 
 **Errors look like the rest of the court now, and a dead reset link says so

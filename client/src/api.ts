@@ -402,11 +402,26 @@ export const unbanUser = (userId: number) =>
 
 // --- diagnostics ------------------------------------------------------------
 
+export interface BrainStatus {
+  // What settings say we will try ("llm" or "offline") vs what actually
+  // answered last ("llm", "offline", or "unknown" before any call has been
+  // made in this process). The two disagreeing is the failure mode this
+  // whole shape exists to surface - see app/brain/__init__.py's docstring.
+  configured: "llm" | "offline";
+  last_backend: "llm" | "offline" | "unknown";
+  last_error: string | null;
+  llm_calls: number;
+  llm_failures: number;
+  cache_reads: number;
+  cache_writes: number;
+  missing_capability: string | null;
+}
+
 export interface HealthResponse {
   status: string;
   database: string;
   phase_minutes: number;
-  brain: string;
+  brain: BrainStatus;
   worker: {
     tick_count: number;
     last_tick_at: string | null;
@@ -416,6 +431,43 @@ export interface HealthResponse {
 }
 
 export const fetchHealth = () => request<HealthResponse>("/health");
+
+// --- the ops dashboard --------------------------------------------------
+
+export interface SiteOverview {
+  total_users: number;
+  open_cases: number;
+  pending_reports: number;
+  banned_users: number;
+}
+
+export const fetchSiteOverview = () => request<SiteOverview>("/admin/overview");
+
+export interface ProviderUsage {
+  provider: string;
+  calls: number;
+  successes: number;
+  failures: number;
+  fallback_to_offline: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read: number;
+  cache_write: number;
+}
+
+export interface GeminiQuota {
+  used: number;
+  cap: number;
+  remaining: number;
+}
+
+export interface BrainUsageResponse {
+  today: ProviderUsage[];
+  week: ProviderUsage[];
+  gemini_quota: GeminiQuota;
+}
+
+export const fetchBrainUsage = () => request<BrainUsageResponse>("/admin/brain/usage");
 
 // --- what a court personality has done --------------------------------------
 //
