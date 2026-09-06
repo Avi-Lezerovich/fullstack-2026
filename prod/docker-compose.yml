@@ -90,7 +90,7 @@ x-brain-env: &brain-env
 services:
   # ---------------------------------------------------------------------------
   # One-shot, runs to completion, exits 0. Idempotent (keyed on email), so it is
-  # safe on every deploy and is what guarantees the 19 court bots exist before
+  # safe on every deploy and is what guarantees the 31 court bots exist before
   # the API serves its first request.
   #
   # With RDS there is no `db` container to gate on, so this job is now the FIRST

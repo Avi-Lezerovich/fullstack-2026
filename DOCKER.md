@@ -93,9 +93,18 @@ cp .env.example .env
 
 The default is `BRAIN_FORCE_OFFLINE=1`: a deterministic offline generator, fully
 functional, no credentials, no network. To use a real model set
-`BRAIN_FORCE_OFFLINE=0` and pick `LLM_PROVIDER=bedrock` (credentials come from the
-standard AWS chain — an instance role in production, never pasted keys) or
-`LLM_PROVIDER=anthropic` with `LLM_API_KEY`.
+`BRAIN_FORCE_OFFLINE=0` and pick one of:
+
+* `LLM_PROVIDER=bedrock` with `AWS_REGION` — credentials come from the standard AWS
+  chain (an instance role in production, never pasted keys);
+* `LLM_PROVIDER=anthropic` with `LLM_API_KEY` — the direct API;
+* `LLM_PROVIDER=gemini` with `LLM_API_KEY` — one key, no region, and a free tier of
+  roughly 1,500 requests a day.
+
+`LLM_MODEL` is optional; empty means the provider's own default. There is a fourth
+provider, `gateway`, for a box with no AWS identity — it needs `LLM_ENDPOINT`, which
+this compose file does not forward, so it is a production concern; see
+`prod/.env.example`.
 
 ### Secrets
 
@@ -147,8 +156,11 @@ docker compose down                # stop, keep the database
 ```
 
 ```bash
-docker compose down -v             # stop and WIPE the database volume
+docker compose down -v             # stop and WIPE both volumes
 ```
+
+`-v` removes `uploads` as well as `db-data` — every avatar and every piece of
+evidence on your local site goes with the database.
 
 ### Resetting the database
 
@@ -160,10 +172,12 @@ docker compose down -v && docker compose up --build
 ```
 
 A wipe is the blunt answer, and it costs you every account and case you have
-locally. Every `CREATE TABLE` in `init.sql` is `IF NOT EXISTS`, so when the
-change is a **new table** you can apply just that one against the running
-database instead — this is what to do for `bot_memories`, which is what the
-bots remember about the people they talk to:
+locally. Every one of the 23 `CREATE TABLE` statements in `init.sql` is
+`IF NOT EXISTS`, so when the change is a **new table** you can apply just that one
+against the running database instead — this is what to do for `agent_events` and
+`agent_memories`, which are what the bots remember about the people they talk to.
+(They supersede the older `bot_memories`: `init.sql` still creates it, the
+application no longer reads it.)
 
 ```bash
 docker compose exec -T db mysql -ulolsuit -plolsuit-dev lolsuit < database/init.sql
@@ -201,13 +215,33 @@ A healthy stack answers `200` with `"database": "up"` and a `worker` block whose
 
 ```json
 {
-    "brain": "offline",
+    "brain": {
+        "configured": "offline",
+        "last_backend": "unknown",
+        "last_error": null,
+        "llm_calls": 0,
+        "llm_failures": 0,
+        "cache_reads": 0,
+        "cache_writes": 0,
+        "missing_capability": null
+    },
     "database": "up",
     "phase_minutes": 1440,
+    "server_time": "2026-09-06T15:32:44",
     "status": "ok",
-    "worker": { "tick_count": 2, "seconds_since_tick": 12.6, "last_error": null }
+    "worker": {
+        "tick_count": 2418,
+        "last_tick_at": "2026-09-06T15:32:37",
+        "seconds_since_tick": 7.6,
+        "last_error": null
+    }
 }
 ```
+
+`brain` reports intent and outcome separately, and that is the point of it:
+`configured` is what the settings say will be tried, `last_backend` is what actually
+answered last. They disagreeing is how a broken model backend looks — the court
+quietly falls back to the offline generator and nothing else goes wrong.
 
 The endpoint answers **503** while MySQL is unreachable, which is exactly what the
 container healthcheck keys on.
@@ -225,8 +259,8 @@ are safe to ignore. LolSuit's own four services should log nothing above INFO.
 
 | Image | Size | Notes |
 |---|---|---|
-| `lolsuit/server` | ~256 MB | `python:3.12-slim`. Dependencies built into a venv in a `deps` stage; pip and its cache stay behind. |
-| `lolsuit/web` | ~78 MB | `node:22-alpine` builds the bundle, `nginx:1.27-alpine` serves it. No Node, no `node_modules`, no source in the final image. |
+| `lolsuit/server` | ~340 MB | `python:3.12-slim`. Dependencies built into a venv in a `deps` stage; pip and its cache stay behind. |
+| `lolsuit/web` | ~75 MB | `node:22-alpine` builds the bundle, `nginx:1.27-alpine` serves it. No Node, no `node_modules`, no source in the final image. |
 
 **Nothing runs as root.** `server`/`worker`/`seed` run as `lolsuit` (uid 1001); `web`
 runs as `nginx` (uid 101) and therefore listens on 8080 rather than 80 — ports below
@@ -248,10 +282,13 @@ docker compose up -d db            # just MySQL, on 127.0.0.1:3307
 ```
 
 ```bash
-cd server && .venv/bin/python -m app.seed && .venv/bin/python run.py
+cd server && python -m app.seed && python run.py
 ```
 
-The API listens on `5002`; `client/vite.config.ts` proxies `/api` there.
+The API listens on `5002`; `client/vite.config.ts` proxies `/api` there. Creating the
+virtualenv and installing `requirements.txt` first is in
+[README.md](README.md#running-locally-without-docker); on Windows the interpreter is
+the `py` launcher, not `python`.
 
 ```bash
 cd client && npm run dev           # http://localhost:5174

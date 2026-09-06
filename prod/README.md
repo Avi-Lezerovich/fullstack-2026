@@ -120,6 +120,14 @@ lolsuit.abc123xyz.eu-central-1.rds.amazonaws.com
 > appears to succeed and then every subsequent request is anonymous. Flip it to `1` the
 > moment TLS is in front.
 
+> **`MAIL_BACKEND` defaults to `console`, which is wrong for a live site.** On
+> `console` a password-reset link is only written to `docker compose logs server`,
+> where the person who asked for it will never see it — the flow appears to work,
+> because the endpoint answers identically either way. Set `MAIL_BACKEND=smtp` and
+> fill in the relay before you tell anyone the reset flow works; `prod/.env.example`
+> has a Brevo block ready to uncomment. Note that AWS throttles outbound port 25 on
+> EC2 by default, which is why every relay there is configured on 587.
+
 ### 4. Bootstrapping the RDS schema
 
 **This is the step that has no equivalent in the dev stack, and skipping it is the most
@@ -139,7 +147,7 @@ instance. Check connectivity without changing anything:
 cd /opt/lolsuit/prod && ./init-rds.sh --check
 ```
 
-It is **safe to re-run**: all 18 `CREATE TABLE` statements are `IF NOT EXISTS`.
+It is **safe to re-run**: all 23 `CREATE TABLE` statements are `IF NOT EXISTS`.
 
 For exactly that reason it is **not a migration tool** — `IF NOT EXISTS` can only ever
 *add* a table, never add a column to an existing one. See "Schema changes" below.
@@ -150,7 +158,7 @@ For exactly that reason it is **not a migration tool** — `IF NOT EXISTS` can o
 cd /opt/lolsuit/prod && ./deploy.sh v1.0.1
 ```
 
-The seed job runs automatically and creates the 19 court bots, the demo accounts and the
+The seed job runs automatically and creates the 31 court bots, the demo accounts and the
 opening case. It is idempotent, so it runs safely on every deploy.
 
 ---

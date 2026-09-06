@@ -5,7 +5,7 @@
 #
 #  Five containers, four distinct roles:
 #    db     - MySQL 8, schema applied from database/init.sql on first boot
-#    seed   - one-shot; populates the nineteen court bots and the demo accounts
+#    seed   - one-shot; populates the thirty-one court bots and the demo accounts
 #    server - the Flask API under gunicorn
 #    worker - the scheduler that advances trials (a SEPARATE process by design)
 #    web    - nginx serving the built bundle and reverse-proxying /api
