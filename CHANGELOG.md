@@ -5,7 +5,7 @@ major number moves when an upgrade needs a step other than pulling the image.
 
 ---
 
-## Unreleased
+## 3.1.0
 
 **Following a case is now a number you can see, and long lists load as you
 scroll.**
