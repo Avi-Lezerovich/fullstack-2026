@@ -46,7 +46,12 @@ export function usePagedList<T>(
     try {
       const page = await loader.current(offset, pageSize);
       if (id !== token.current) return;
-      setTotal(page.total);
+      // A later page that comes back empty ends the list, whatever `total`
+      // claims. The two can disagree honestly - rows withdrawn or hidden
+      // between one request and the next - and believing `total` over an
+      // empty page leaves `hasMore` true forever. With a button that is a
+      // dead click; with the scroll sentinel it is a request loop.
+      setTotal(offset > 0 && page.items.length === 0 ? offset : page.total);
       setItems((current) => (offset === 0 ? page.items : [...current, ...page.items]));
     } catch (err) {
       if (id !== token.current) return;

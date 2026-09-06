@@ -5,6 +5,58 @@ major number moves when an upgrade needs a step other than pulling the image.
 
 ---
 
+## Unreleased
+
+**Following a case is now a number you can see, and long lists load as you
+scroll.**
+
+Upgrades by pulling the image: no schema change, and no endpoint changed shape.
+
+### Added
+
+- **A follower count everywhere a case appears, and the list behind it.**
+  `follow_count` rides the same per-page batch that already answered
+  `like_count` and `viewer_is_following` — one `GROUP BY` for a page of twenty
+  cases, not one query per card — so a feed card shows it signed out, where
+  there is no follow button to carry it, and the case page shows it on the
+  button itself. `POST /api/cases/<id>/follow` now answers with the new total
+  as well as the new state, counted inside the same transaction as the write,
+  so the button never has to guess a total by adding one to a stale one.
+- **`GET /api/cases/<id>/followers`** — who tracks a case, behind exactly the
+  visibility rule the likers list already had: a hidden filing must not leak
+  its audience either. The dialog behind it is the one the likers list uses;
+  that list moved into a shared `UserListDialog` rather than being written
+  twice.
+- **"Tracking N cases" on a profile, and `GET /api/users/<id>/follows`.** The
+  count and the list come from the same query, so they cannot disagree — which
+  is the whole reason the count is not a cheap `COUNT(*)` over `case_follows`.
+  The list is the personal-feed query with the ids separated: whose follows are
+  joined, and whose hidden filings stay visible. Reading a stranger's profile
+  therefore never reveals that a hidden case exists.
+- **The first frontend test.** `vite.config.ts` had always named a setup file
+  that was never created, so `npm test` failed before running anything. The file
+  exists now, and the scroll sentinel — the one piece of this that a browser
+  cannot demonstrate on its own — is covered by it.
+
+### Changed
+
+- **The feed and the directory load as you scroll.** An IntersectionObserver
+  watches an empty sentinel below the last row and fetches the next page a
+  screen early. It watches a sentinel rather than the scroll position because
+  that costs nothing while the reader is elsewhere on the page: no handler
+  firing every frame, no layout read per scroll event. The `טען עוד` button
+  stays — it is the keyboard and screen-reader route to the next page, the
+  fallback where the observer is missing, and the only way to advance the list
+  in an automated browser, where a headless tab reports itself hidden and the
+  observer never fires. Both routes call the same loader.
+- **A short page ends the list, whatever `total` says.** `usePagedList` used to
+  believe the server's total over the page in front of it; when rows were
+  withdrawn or hidden between one request and the next the two disagreed
+  honestly and `hasMore` stayed true forever. With a button that was a dead
+  click. With a scroll sentinel it would have been a request loop.
+
+---
+
 ## 3.0.0
 
 **You can follow a lawsuit, and the feed you get back is sorted by what

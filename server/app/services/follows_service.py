@@ -15,7 +15,12 @@ An explicit unfollow deletes the row outright. A later auto-trigger re-follows,
 which is the simple behaviour and the intended one: there is no "muted" state
 to keep in step.
 
-No notification is sent. A follow is a private bookmark, unlike a like.
+No notification is sent. Following is quieter than liking - nobody is told
+you did it - but it is not secret: `followers` and `follower_count` put the
+audience of a case on the case, exactly as `likes_service` does. The other
+direction - "tracking N cases" on a profile - is counted by
+`cases_service.count_followed_cases`, so that number and the list beside it
+apply the same visibility rules and cannot disagree.
 """
 
 from __future__ import annotations
@@ -26,8 +31,12 @@ from ..db import Db, owned
 def toggle_follow(case_id: int, user_id: int, *, conn: Db | None = None) -> tuple[str, dict]:
     """Follow if not following, unfollow if following.
 
-    Returns ("ok", {"following": bool}), or ("not_found", {}) for a case that
-    does not exist or is not visible.
+    Returns ("ok", {"following": bool, "follow_count": int}), or ("not_found",
+    {}) for a case that does not exist or is not visible.
+
+    The count is read back inside the same transaction as the write, so the
+    number the button shows is the number the database holds - the client
+    never has to guess a new total by adding one to a stale one.
     """
     with owned(conn) as db:
         case = db.query_one(
@@ -49,8 +58,13 @@ def toggle_follow(case_id: int, user_id: int, *, conn: Db | None = None) -> tupl
                 (case_id, user_id),
             )
 
+        total = int(
+            db.query_value(
+                "SELECT COUNT(*) FROM case_follows WHERE case_id = %s", (case_id,), default=0
+            )
+        )
         db.commit_if_owned()
-        return "ok", {"following": following}
+        return "ok", {"following": following, "follow_count": total}
 
 
 def follow(
@@ -91,3 +105,34 @@ def followed_case_ids(user_id: int, *, conn: Db | None = None) -> set[int]:
             "SELECT case_id FROM case_follows WHERE user_id = %s", (user_id,)
         )
     return {row["case_id"] for row in rows}
+
+
+def follower_count(case_id: int, *, conn: Db | None = None) -> int:
+    """How many people track this case."""
+    with owned(conn) as db:
+        return int(
+            db.query_value(
+                "SELECT COUNT(*) FROM case_follows WHERE case_id = %s", (case_id,), default=0
+            )
+        )
+
+
+def followers(case_id: int, *, limit: int = 20, conn: Db | None = None) -> list[dict]:
+    """Who tracks this case, newest first. Shaped like `likes_service.likers`,
+    because the dialog behind the number is the same one."""
+    with owned(conn) as db:
+        rows = db.query_all(
+            "SELECT u.id, u.name, u.avatar_url, u.is_bot "
+            "FROM case_follows f JOIN users u ON u.id = f.user_id "
+            "WHERE f.case_id = %s ORDER BY f.created_at DESC LIMIT %s",
+            (case_id, int(limit)),
+        )
+    return [
+        {
+            "id": row["id"],
+            "name": row["name"],
+            "avatar_url": row["avatar_url"],
+            "is_bot": bool(row["is_bot"]),
+        }
+        for row in rows
+    ]

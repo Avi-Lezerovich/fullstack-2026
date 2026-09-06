@@ -146,12 +146,19 @@ export const deleteCase = (caseId: number) =>
 export const toggleLike = (caseId: number) =>
   request<{ liked: boolean; like_count: number }>(`/cases/${caseId}/like`, json("POST"));
 
-/** Same deal as toggleLike: one endpoint, the server owns the state. */
+/** Same deal as toggleLike: one endpoint, the server owns the state and the count. */
 export const toggleFollow = (caseId: number) =>
-  request<{ following: boolean }>(`/cases/${caseId}/follow`, json("POST"));
+  request<{ following: boolean; follow_count: number }>(
+    `/cases/${caseId}/follow`,
+    json("POST"),
+  );
 
 export const fetchLikers = (caseId: number) =>
   request<{ users: UserRef[] }>(`/cases/${caseId}/likes`).then((r) => r.users);
+
+/** Who tracks a case — the list behind the follower count. */
+export const fetchFollowers = (caseId: number) =>
+  request<{ users: UserRef[] }>(`/cases/${caseId}/followers`).then((r) => r.users);
 
 export const fetchComments = (caseId: number) =>
   request<{ comments: Comment[] }>(`/cases/${caseId}/comments`).then((r) => r.comments);
@@ -199,6 +206,16 @@ export const fetchUser = (userId: number) =>
 
 export const updateMyProfile = (patch: { name?: string; bio?: string; avatar_url?: string }) =>
   request<AuthResponse>("/users/me", json("PATCH", patch));
+
+/**
+ * The cases a person tracks — the list behind a profile's "tracking N cases".
+ *
+ * Same envelope as /cases, so `usePagedList` pages it unchanged.
+ */
+export const fetchUserFollows = (
+  userId: number,
+  params: { limit?: number; offset?: number } = {},
+) => request<CaseListResponse>(`/users/${userId}/follows${query(params)}`);
 
 // --- direct messages --------------------------------------------------------
 

@@ -17,6 +17,7 @@ import CourtSeal from "../components/case/CourtSeal";
 import FollowButton from "../components/case/FollowButton";
 import LikeButton from "../components/case/LikeButton";
 import LikersDialog from "../components/case/LikersDialog";
+import FollowersDialog from "../components/case/FollowersDialog";
 import PhaseTimeline from "../components/case/PhaseTimeline";
 import VerdictBanner from "../components/case/VerdictBanner";
 import CommentComposer from "../components/comments/CommentComposer";
@@ -54,6 +55,7 @@ const CasePage = () => {
 
   const [summonOpen, setSummonOpen] = useState(false);
   const [likersOpen, setLikersOpen] = useState(false);
+  const [followersOpen, setFollowersOpen] = useState(false);
 
   // All three reloads are `useCallback`s from useAsync, stable for as long as
   // their own deps are, so naming them here is honest rather than a lie the
@@ -216,8 +218,19 @@ const CasePage = () => {
             <FollowButton
               caseId={c.id}
               following={c.viewer_is_following}
+              count={c.follow_count}
               disabled={!user}
             />
+            {c.follow_count > 0 && (
+              <Button
+                size="small"
+                color="inherit"
+                onClick={() => setFollowersOpen(true)}
+                data-testid="show-followers"
+              >
+                מי עוקב?
+              </Button>
+            )}
           </Stack>
           <Stack direction="row" spacing={1}>
             {user && <ReportButton targetType="case" targetId={c.id} />}
@@ -287,6 +300,11 @@ const CasePage = () => {
       </Paper>
 
       <LikersDialog open={likersOpen} caseId={c.id} onClose={() => setLikersOpen(false)} />
+      <FollowersDialog
+        open={followersOpen}
+        caseId={c.id}
+        onClose={() => setFollowersOpen(false)}
+      />
 
       <SummonWitnessDialog
         open={summonOpen}

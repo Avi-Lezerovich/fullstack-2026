@@ -10,6 +10,7 @@ import * as api from "../api";
 import CaseCard from "../components/feed/CaseCard";
 import MySummonsPanel from "../components/trial/MySummonsPanel";
 import { EmptyState, ErrorNote, Loading } from "../components/common/StateViews";
+import InfiniteScroll from "../components/common/InfiniteScroll";
 import { usePagedList } from "../hooks/usePagedList";
 import { useAuth } from "../context/AuthContext";
 import type { CaseStatus } from "../types";
@@ -153,13 +154,13 @@ const Feed = () => {
         <CaseCard key={c.id} case={c} showActivity={active.mine} canFollow={Boolean(user)} />
       ))}
 
-      {hasMore && (
-        <Box sx={{ textAlign: "center", mt: 2 }}>
-          <Button onClick={loadMore} disabled={loading}>
-            {loading ? "טוען…" : "טען עוד תיקים"}
-          </Button>
-        </Box>
-      )}
+      <InfiniteScroll
+        hasMore={hasMore}
+        loading={loading}
+        onLoadMore={loadMore}
+        label="טען עוד תיקים"
+        testId="feed-load-more"
+      />
     </Box>
   );
 }; export default Feed;

@@ -31,6 +31,13 @@ export interface CurrentUser extends User {
 
 export interface UserProfile extends User {
   case_count: number;
+  /**
+   * How many cases this person tracks — the profile's "tracking N cases".
+   *
+   * Counted with the same visibility rules `GET /users/:id/follows` applies,
+   * so the number and the list behind it cannot disagree.
+   */
+  following_count: number;
 }
 
 // --- the trial --------------------------------------------------------------
@@ -84,6 +91,8 @@ export interface Case {
   created_at: string | null;
   like_count: number;
   comment_count: number;
+  /** How many people track this case. Public, so it is present signed out. */
+  follow_count: number;
   viewer_has_liked: boolean;
   viewer_is_following: boolean;
   /** What the personal feed sorts on. Null until something happens on the case. */

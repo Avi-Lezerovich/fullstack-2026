@@ -17,6 +17,7 @@ import { Link as RouterLink, useParams } from "react-router-dom";
 
 import * as api from "../api";
 import CaseCard from "../components/feed/CaseCard";
+import FollowedCasesDialog from "../components/case/FollowedCasesDialog";
 import { CourtRecord } from "../components/common/CourtRecord";
 import ImageUploadField from "../components/common/ImageUploadField";
 import { EmptyState, ErrorNote, Loading } from "../components/common/StateViews";
@@ -41,6 +42,7 @@ const Profile = () => {
   const [avatarUrl, setAvatarUrl] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [followsOpen, setFollowsOpen] = useState(false);
 
   if (profile.loading) return <Loading />;
   if (profile.error) return <ErrorNote message={profile.error} />;
@@ -112,9 +114,34 @@ const Profile = () => {
                 {person.bio}
               </Typography>
             )}
-            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
-              {person.case_count} תביעות · הצטרף/ה {formatDate(person.created_at)}
-            </Typography>
+            {/* "Tracking N" is a button rather than text: there is a list
+                behind it, and the count comes from the same query that list
+                pages, so the two always agree. */}
+            <Stack
+              direction="row"
+              spacing={0.5}
+              alignItems="center"
+              justifyContent={{ xs: "center", sm: "flex-start" }}
+              sx={{ mt: 0.5 }}
+              flexWrap="wrap"
+            >
+              <Typography variant="caption" color="text.secondary">
+                {person.case_count} תביעות ·
+              </Typography>
+              <Button
+                size="small"
+                color="inherit"
+                onClick={() => setFollowsOpen(true)}
+                disabled={person.following_count === 0}
+                sx={{ minWidth: 0, p: 0, typography: "caption" }}
+                data-testid="show-followed-cases"
+              >
+                עוקב/ת אחרי {person.following_count} תיקים
+              </Button>
+              <Typography variant="caption" color="text.secondary">
+                · הצטרף/ה {formatDate(person.created_at)}
+              </Typography>
+            </Stack>
           </Box>
 
           {isMe ? (
@@ -152,6 +179,13 @@ const Profile = () => {
       {cases.data?.cases.map((c) => (
         <CaseCard key={c.id} case={c} />
       ))}
+
+      <FollowedCasesDialog
+        open={followsOpen}
+        userId={person.id}
+        name={person.name}
+        onClose={() => setFollowsOpen(false)}
+      />
 
       <Dialog open={editing} onClose={() => setEditing(false)} fullWidth maxWidth="sm">
         <DialogTitle>עריכת פרופיל</DialogTitle>

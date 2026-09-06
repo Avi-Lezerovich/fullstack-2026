@@ -48,6 +48,21 @@ def list_likers(case_id: int):
     return jsonify({"users": likes_service.likers(case_id)}), 200
 
 
+@bp.get("/cases/<int:case_id>/followers")
+@security.optional_auth
+def list_followers(case_id: int):
+    """Who tracks a case. Behind the same visibility rule as the likers list -
+    a hidden filing must not leak its audience either."""
+    case = cases_service.get_case(
+        case_id,
+        viewer_id=g.user_id,
+        viewer_is_admin=bool(g.user and g.user.get("is_admin")),
+    )
+    if case is None:
+        return fail("not_found", "התיק המבוקש לא נמצא.")
+    return jsonify({"users": follows_service.followers(case_id)}), 200
+
+
 @bp.get("/cases/<int:case_id>/comments")
 @security.optional_auth
 def list_comments(case_id: int):
