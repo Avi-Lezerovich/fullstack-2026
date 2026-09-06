@@ -71,7 +71,11 @@ const FollowButton = ({
       data-following={state.following}
       data-follow-count={state.follow_count}
     >
-      {state.following ? "עוקב" : "עקוב"}
+      {/* Both genders, the way the rest of the app addresses a reader it has
+          not asked - "עוקב/ת" is already what the profile and the followed-
+          cases dialog say. The unpressed label is the imperative, so it takes
+          the imperative pair rather than the same one. */}
+      {state.following ? "עוקב/ת" : "עקוב/עקבי"}
       {showCount && ` · ${state.follow_count}`}
     </Button>
   );
