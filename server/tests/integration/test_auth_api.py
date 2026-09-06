@@ -530,3 +530,106 @@ def test_the_confirm_endpoint_validates_before_it_touches_the_token(client, payl
     link and then refuse them, with nothing left to retry with.
     """
     assert client.post("/api/auth/password-reset/confirm", json=payload).status_code == 400, why
+
+
+# --- checking a link without spending it ------------------------------------
+#
+# The page behind a reset link asks this on load so it can show the form or the
+# expired notice. Everything below is one property in four parts: it must
+# answer, it must not spend, and it must not say more than the confirm endpoint
+# already says.
+
+
+def _link_for(client, outbox, user) -> str:
+    """Request a reset for this user and pull the raw token out of the email."""
+    client.post("/api/auth/password-reset/request", json={"email": user["email"]})
+    return outbox[-1]["body"].split("token=")[1].split()[0].strip()
+
+
+def test_validating_a_link_does_not_spend_it(client, db, make_user, outbox):
+    """The reason the endpoint is a GET and not a second confirm.
+
+    A check that consumed the token would mean the reset page destroyed the
+    very link it was opened with, and the form it then rendered could never
+    succeed. Looked at twice, and still spendable afterwards.
+    """
+    user = make_user("רשומה", "known@lolsuit.test")
+    raw_token = _link_for(client, outbox, user)
+
+    first = client.get(f"/api/auth/password-reset/validate?token={raw_token}")
+    second = client.get(f"/api/auth/password-reset/validate?token={raw_token}")
+
+    assert first.status_code == second.status_code == 200
+    assert db.query_value("SELECT used_at FROM password_resets") is None
+
+    spent = client.post(
+        "/api/auth/password-reset/confirm",
+        json={"token": raw_token, "password": "new-passphrase"},
+    )
+
+    assert spent.status_code == 200
+    assert db.query_value("SELECT used_at FROM password_resets") is not None
+
+
+def test_an_expired_link_does_not_validate(client, db, make_user, outbox):
+    """The bug this whole endpoint exists for: 30 minutes later, no form."""
+    user = make_user("רשומה", "known@lolsuit.test")
+    raw_token = _link_for(client, outbox, user)
+
+    db.execute(
+        "UPDATE password_resets SET expires_at = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 MINUTE)"
+    )
+    db.commit()
+
+    assert client.get(f"/api/auth/password-reset/validate?token={raw_token}").status_code == 400
+
+
+def test_a_spent_link_does_not_validate(client, make_user, outbox):
+    """Single use is single use, including for the check.
+
+    Someone who resets their password and then reopens the email must be told
+    the link is gone rather than shown a form that will refuse them.
+    """
+    user = make_user("רשומה", "known@lolsuit.test")
+    raw_token = _link_for(client, outbox, user)
+
+    client.post(
+        "/api/auth/password-reset/confirm",
+        json={"token": raw_token, "password": "new-passphrase"},
+    )
+
+    assert client.get(f"/api/auth/password-reset/validate?token={raw_token}").status_code == 400
+
+
+def test_validate_answers_alike_for_expired_forged_and_missing(
+    client, db, make_user, outbox
+):
+    """Four refusals compared to each other rather than to a literal.
+
+    A check endpoint is a cheaper oracle than confirm - no password needed - so
+    it has to be at least as silent. Expired, spent, invented and absent are one
+    answer, and the answer to a live link carries nothing about whose it is.
+    """
+    user = make_user("רשומה", "known@lolsuit.test")
+    expired_token = _link_for(client, outbox, user)
+    db.execute(
+        "UPDATE password_resets SET expires_at = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 MINUTE)"
+    )
+    db.commit()
+
+    refusals = [
+        client.get(f"/api/auth/password-reset/validate?token={expired_token}"),
+        client.get("/api/auth/password-reset/validate?token=never-existed"),
+        client.get("/api/auth/password-reset/validate?token="),
+        client.get("/api/auth/password-reset/validate"),
+    ]
+
+    first = refusals[0]
+    for refusal in refusals[1:]:
+        assert refusal.status_code == first.status_code == 400
+        assert refusal.get_json() == first.get_json()
+
+    live = make_user("שנייה", "second@lolsuit.test")
+    accepted = client.get(f"/api/auth/password-reset/validate?token={_link_for(client, outbox, live)}")
+
+    assert accepted.get_json() == {"ok": True}

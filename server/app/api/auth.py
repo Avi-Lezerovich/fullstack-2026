@@ -125,6 +125,27 @@ def request_password_reset():
     return generic
 
 
+@bp.get("/auth/password-reset/validate")
+def validate_password_reset():
+    """Is this link still worth showing a form for?
+
+    The page behind a reset link used to render the form for anything with a
+    `token=` in the URL, so an expired or already-spent link only failed after
+    the user had typed a new password twice. This answers before that.
+
+    It spends nothing - `consume_password_reset` remains the only thing that
+    does - and it says nothing the confirm endpoint does not already say:
+    missing, forged, expired and spent all get one identical refusal, in the
+    same words, and success carries no account details at all.
+    """
+    token = clean(request.args.get("token"), 200)
+
+    if not token or not auth_service.password_reset_is_valid(token):
+        return fail("invalid", "קישור האיפוס אינו תקף או שכבר נעשה בו שימוש.")
+
+    return jsonify({"ok": True}), 200
+
+
 @bp.post("/auth/password-reset/confirm")
 def confirm_password_reset():
     data = body_of(request)
