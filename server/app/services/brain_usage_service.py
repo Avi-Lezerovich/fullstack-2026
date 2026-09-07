@@ -9,12 +9,42 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..config import get_settings
 from ..db import Db, owned
 
-# Gemini's free tier on the newest models: 20 requests/day. Not read from
-# config because it is not ours to configure - it is Google's limit, and
-# raising a setting here would not raise it there.
-GEMINI_FREE_TIER_DAILY_CAP = 20
+# Google's free-tier daily request allowance, per model. Not read from config
+# because it is not ours to configure - it is Google's limit, and raising a
+# setting here would not raise it there.
+#
+# Per MODEL, because that is the thing it actually varies with, and pinning it
+# to the provider was a real bug rather than a simplification: the gauge read
+# "20" while the configured model was a current-generation Flash whose
+# allowance Google does not publish at all, and would have read "20" again
+# after the default moved to a model allowed a thousand. A gauge that is wrong
+# by fifty times is worse than no gauge, because it is believed.
+#
+# Prefix-matched, longest first, so a pinned point release inherits its
+# family's number rather than falling through to the floor.
+_GEMINI_FREE_TIER_BY_MODEL = {
+    "gemini-2.5-flash-lite": 1000,
+    "gemini-2.5-flash": 250,
+    "gemini-3.5-flash-lite": 1000,
+    "gemini-3-flash": 1500,
+}
+
+# What an unrecognised model is assumed to get. Deliberately the smallest
+# number seen in the wild rather than an average: the failure mode of guessing
+# high is spending a day's allowance before breakfast and not knowing why,
+# which is the exact incident this constant exists because of.
+GEMINI_UNKNOWN_MODEL_DAILY_CAP = 20
+
+
+def gemini_daily_cap(model: str) -> int:
+    """The free-tier allowance for `model`, or the cautious floor."""
+    for known in sorted(_GEMINI_FREE_TIER_BY_MODEL, key=len, reverse=True):
+        if model.startswith(known):
+            return _GEMINI_FREE_TIER_BY_MODEL[known]
+    return GEMINI_UNKNOWN_MODEL_DAILY_CAP
 
 
 _USAGE_COLUMNS = (
@@ -113,12 +143,21 @@ def recent_failures(
 
 
 def gemini_quota_today(conn: Db | None = None) -> dict[str, Any]:
-    """Gemini's call count today against its 20/day free-tier cap.
+    """Gemini's call count today against the configured model's free tier.
 
     Counts every attempt, successful or not - a call that failed still spent
-    one of Google's 20 requests, so a run of failures burning the quota is
+    one of Google's requests, so a run of failures burning the quota is
     exactly the thing this exists to surface.
+
+    The cap follows the configured model, and the model is reported alongside
+    it so a reader can see which allowance they are being measured against
+    rather than having to trust the bar.
     """
+    from ..brain import llm
+
+    settings = get_settings()
+    model = settings.llm_model or llm.PROVIDERS["gemini"].default_model
+    cap = gemini_daily_cap(model)
     with owned(conn) as db:
         used = int(
             db.query_value(
@@ -129,6 +168,7 @@ def gemini_quota_today(conn: Db | None = None) -> dict[str, Any]:
         )
     return {
         "used": used,
-        "cap": GEMINI_FREE_TIER_DAILY_CAP,
-        "remaining": max(0, GEMINI_FREE_TIER_DAILY_CAP - used),
+        "cap": cap,
+        "model": model,
+        "remaining": max(0, cap - used),
     }

@@ -165,7 +165,19 @@ def get_settings() -> Settings:
         phase_minutes=_int("PHASE_MINUTES", 1440),
         tick_seconds=_int("TICK_SECONDS", 15),
         sweep_every_ticks=_int("SWEEP_EVERY_TICKS", 4),
-        social_every_ticks=_int("SOCIAL_EVERY_TICKS", 4),
+        # Every 20th tick - five minutes at the default TICK_SECONDS=15 - and
+        # not every 4th. This is a spend dial before it is a pacing one. Each
+        # social pass costs one model call for the bot whose turn it is, plus
+        # one per pending reply, so a 60-second cadence sets a floor near 1,440
+        # calls a day before a single juror deliberates. That is already past
+        # the most generous free tier Google publishes for any model, which
+        # means a free-tier deployment ran out mid-morning every morning and
+        # spent the rest of the day on the offline generator with nothing
+        # saying so. Five minutes is roughly 290 a day, which fits inside one
+        # free key with room for the trials, and the feed does not read
+        # noticeably quieter - the bots are on a 30-minute cooldown each
+        # anyway, so the faster tick was mostly re-asking who was available.
+        social_every_ticks=_int("SOCIAL_EVERY_TICKS", 20),
         # 240 ticks is an hour at the default TICK_SECONDS=15.
         housekeeping_every_ticks=_int("HOUSEKEEPING_EVERY_TICKS", 240),
         bot_cooldown_minutes=_int("BOT_COOLDOWN_MINUTES", 30),

@@ -68,7 +68,7 @@ def _complete(captured, reply, messages=None, system=None, **kwargs):
     return llm._complete_gemini(
         system or [{"type": "text", "text": "SYSTEM-MARKER"}],
         messages or [{"role": "user", "content": "PROMPT-MARKER"}],
-        model=kwargs.pop("model", "gemini-3.7-flash"),
+        model=kwargs.pop("model", "gemini-3.5-flash"),
         max_tokens=kwargs.pop("max_tokens", 512),
         effort=kwargs.pop("effort", "low"),
         **kwargs,
@@ -627,3 +627,42 @@ def test_a_body_that_is_not_googles_shape_is_kept_verbatim(monkeypatch, no_sleep
         _complete({}, None)
 
     assert "upstream connect error" in str(caught.value)
+
+
+# --- the thinking field is a 3.x field ---------------------------------------
+
+
+def test_a_2x_model_is_not_sent_a_thinking_config(captured):
+    """`thinkingLevel` on a 2.x model is a 400, and 400 is not retried.
+
+    So configuring the model with the most generous free tier in the family
+    would, without this gate, fail fast on every single call and look exactly
+    like a revoked key.
+    """
+    _complete(captured, _reply("שלום"), model="gemini-2.5-flash-lite", max_tokens=512)
+
+    config = captured["body"]["generationConfig"]
+    assert "thinkingConfig" not in config
+    # No thinking means no thinking headroom: the budget is the answer's alone.
+    assert config["maxOutputTokens"] == 512
+
+
+def test_a_3x_model_still_gets_the_thinking_dial(captured):
+    _complete(
+        captured, _reply("שלום"), model="gemini-3.5-flash", effort="medium", max_tokens=512
+    )
+
+    config = captured["body"]["generationConfig"]
+    assert config["thinkingConfig"] == {"thinkingLevel": "medium"}
+    assert config["maxOutputTokens"] == 512 + llm._GEMINI_THINKING_HEADROOM["medium"]
+
+
+def test_the_default_model_has_a_free_tier_worth_having(monkeypatch):
+    """A regression guard on the number, not on taste.
+
+    The previous default was a current-generation Flash whose free allowance
+    is roughly twenty calls a day - less than this site spends in a quarter of
+    an hour - chosen against a published figure belonging to another model.
+    """
+    assert llm.PROVIDERS["gemini"].default_model == "gemini-2.5-flash-lite"
+    assert not llm._gemini_thinks(llm.PROVIDERS["gemini"].default_model)

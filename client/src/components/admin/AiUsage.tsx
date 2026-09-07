@@ -124,7 +124,7 @@ const AiUsage = () => {
       )}
 
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }} data-testid="gemini-quota">
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
           <Typography variant="subtitle2">מכסת Gemini היומית</Typography>
           <Chip
             size="small"
@@ -132,6 +132,13 @@ const AiUsage = () => {
             label={`${quota.used.toLocaleString("he-IL")}/${quota.cap.toLocaleString("he-IL")} נוצלו`}
             data-testid="gemini-quota-chip"
           />
+          {/* The allowance belongs to the model, not to Gemini: naming it here
+              is what stops the bar being read as a fact about the provider. */}
+          {quota.model && (
+            <Typography variant="caption" color="text.secondary" dir="ltr" sx={{ fontFamily: "monospace" }}>
+              {quota.model}
+            </Typography>
+          )}
         </Stack>
         <LinearProgress
           variant="determinate"

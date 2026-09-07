@@ -458,6 +458,8 @@ export interface ProviderUsage {
 export interface GeminiQuota {
   used: number;
   cap: number;
+  /** The model the cap belongs to — the allowance is per model, not per provider. */
+  model: string;
   remaining: number;
 }
 

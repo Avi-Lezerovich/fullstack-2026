@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import pytest
 
+from app.services import brain_usage_service
+
 pytestmark = pytest.mark.integration
 
 ADMIN_OPS_ENDPOINTS = [
@@ -226,7 +228,38 @@ def test_geminis_quota_counts_only_todays_calls_against_the_cap(
 
     quota = as_admin.get("/api/admin/brain/usage").get_json()["gemini_quota"]
 
-    assert quota == {"used": 3, "cap": 20, "remaining": 17}
+    assert quota == {
+        "used": 3,
+        "cap": 1000,
+        "model": "gemini-2.5-flash-lite",
+        "remaining": 997,
+    }
+
+
+def test_the_quota_cap_follows_the_configured_model(as_admin, monkeypatch):
+    """The allowance is Google's, and it is a property of the model.
+
+    Reporting one provider-wide number was wrong by fifty times the moment the
+    configured model changed, and a gauge wrong by that much is worse than
+    none because it gets believed.
+    """
+    monkeypatch.setenv("LLM_MODEL", "gemini-2.5-flash")
+
+    quota = as_admin.get("/api/admin/brain/usage").get_json()["gemini_quota"]
+
+    assert quota["cap"] == 250
+    assert quota["model"] == "gemini-2.5-flash"
+
+
+def test_an_unrecognised_model_is_assumed_to_have_the_smallest_allowance(
+    as_admin, monkeypatch
+):
+    """Guessing high spends the day's quota before anyone is awake."""
+    monkeypatch.setenv("LLM_MODEL", "gemini-9.9-flash-experimental")
+
+    quota = as_admin.get("/api/admin/brain/usage").get_json()["gemini_quota"]
+
+    assert quota["cap"] == brain_usage_service.GEMINI_UNKNOWN_MODEL_DAILY_CAP
 
 
 def test_a_failed_gemini_call_still_spends_a_slot_in_the_quota(as_admin, log_call):

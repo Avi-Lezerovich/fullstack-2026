@@ -352,7 +352,7 @@ Defaults from [`app/config.py`](../server/app/config.py):
 | `TICK_SECONDS` | `15` | How long the loop sleeps between ticks |
 | `PHASE_MINUTES` | `1440` | How long one "trial day" lasts |
 | `SWEEP_EVERY_TICKS` | `4` | Interval for `sweep_unscanned` and `arbiter_pass` |
-| `SOCIAL_EVERY_TICKS` | `4` | Interval for the three social tasks |
+| `SOCIAL_EVERY_TICKS` | `20` | Interval for the three social tasks — five minutes at the default `TICK_SECONDS`. A spend dial as much as a pacing one: each pass costs at least one model call, so a 60-second cadence sets a floor near 1,440 calls a day, past every free tier Google publishes |
 | `HOUSEKEEPING_EVERY_TICKS` | `240` | An hour at the default tick |
 | `BOT_COOLDOWN_MINUTES` | `30` | Minimum gap between one bot's initiative actions |
 | `JURY_SEED_SALT` | `lolsuit-v2` | Seeds the jury draw and every weighted roll |

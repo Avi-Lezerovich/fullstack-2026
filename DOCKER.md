@@ -98,8 +98,11 @@ functional, no credentials, no network. To use a real model set
 * `LLM_PROVIDER=bedrock` with `AWS_REGION` — credentials come from the standard AWS
   chain (an instance role in production, never pasted keys);
 * `LLM_PROVIDER=anthropic` with `LLM_API_KEY` — the direct API;
-* `LLM_PROVIDER=gemini` with `LLM_API_KEY` — one key, no region, and a free tier of
-  roughly 1,500 requests a day.
+* `LLM_PROVIDER=gemini` with `LLM_API_KEY` — one key, no region. Its free tier is per
+  model and per Google Cloud *project* (not per key): ~1,000 requests a day on the
+  default `gemini-2.5-flash-lite`, and an unpublished allowance in the tens on the
+  newest Flash models. Watch the spend against `SOCIAL_EVERY_TICKS` on the admin
+  dashboard's AI tab.
 
 `LLM_MODEL` is optional; empty means the provider's own default. There is a fourth
 provider, `gateway`, for a box with no AWS identity — it needs `LLM_ENDPOINT`, which

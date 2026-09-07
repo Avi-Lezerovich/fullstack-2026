@@ -879,6 +879,20 @@ _GEMINI_DEFAULT_THINKING = "low"
 _GEMINI_THINKING_HEADROOM = {"minimal": 0, "low": 512, "medium": 8192, "high": 12288}
 
 
+def _gemini_thinks(model: str) -> bool:
+    """Whether `thinkingConfig.thinkingLevel` is a field this model has.
+
+    It is a 3.x field. A 2.x model answers it with a 400 naming the unknown
+    field - and 400 is deliberately not retried, so it fails fast, once per
+    call, on every call, which is indistinguishable on a dashboard from a
+    dead key. That is not hypothetical: the comment above predicted it, and
+    the 2.5 Flash-Lite line is the one worth configuring here, because it is
+    the model whose free tier is measured in thousands of requests a day
+    rather than tens.
+    """
+    return model.startswith("gemini-3")
+
+
 # How much of Google's error body to keep. Long enough for the sentence that
 # names the model or the quota metric, short enough to survive the VARCHAR(300)
 # that `fallback_reason` is stored in.
@@ -1034,11 +1048,15 @@ def _complete_gemini(
             }
             for message in messages
         ],
-        "generationConfig": {
-            "maxOutputTokens": max_tokens + _GEMINI_THINKING_HEADROOM[level],
-            "thinkingConfig": {"thinkingLevel": level},
-        },
+        "generationConfig": {"maxOutputTokens": max_tokens},
     }
+    if _gemini_thinks(model):
+        # The headroom is added only alongside the dial that makes it
+        # necessary: without thinking, `max_tokens` is spent on the answer
+        # alone and the extra budget would only raise the ceiling on a
+        # runaway generation.
+        body["generationConfig"]["maxOutputTokens"] += _GEMINI_THINKING_HEADROOM[level]
+        body["generationConfig"]["thinkingConfig"] = {"thinkingLevel": level}
     if output_format is not None:
         body["generationConfig"]["responseMimeType"] = "application/json"
         body["generationConfig"]["responseSchema"] = _gemini_schema(
@@ -1179,10 +1197,22 @@ PROVIDERS: dict[str, Provider] = {
         complete=_complete_gemini,
         # One key, one host - Google needs no region and no endpoint of its own.
         is_configured=lambda settings: bool(settings.llm_api_key),
-        # Flash is the point of this provider: a real schema on a free tier
-        # that allows roughly 1,500 requests a day, which is several times what
-        # this site actually spends.
-        default_model="gemini-3.7-flash",
+        # Flash-Lite, not the newest Flash. The point of this provider is a
+        # real schema on a free tier, and the free tier is not uniform across
+        # models: Google publishes ~1,000 requests a day for 2.5 Flash-Lite
+        # and publishes nothing at all for the current-generation Flash
+        # models, whose measured allowance is around twenty. This provider was
+        # previously defaulted to `gemini-3.7-flash` on the strength of a
+        # "roughly 1,500 a day" figure that belongs to a different model, and
+        # the court spent its whole daily allowance before anyone was awake.
+        #
+        # Flash-Lite is also the right answer on the merits and not only on
+        # price: the tasks routed here are a juror's one-line vote, a filing
+        # and a memory rewrite, none of which is reasoning-heavy, and it is
+        # the fastest model in the family. Should this ever move to a paid
+        # tier it is $0.10/$0.40 per million tokens - a rounding error at this
+        # site's volume.
+        default_model="gemini-2.5-flash-lite",
         capabilities=SDK_CAPABILITIES,
     ),
     "gateway": Provider(

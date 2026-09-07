@@ -204,7 +204,7 @@ capabilities)`. `capabilities()` never raises — an unknown `LLM_PROVIDER` can 
 |---|---|---|---|
 | `bedrock` | the AWS credential chain; gated on `AWS_REGION` | `anthropic.claude-opus-5` | yes |
 | `anthropic` | `LLM_API_KEY` | `claude-opus-5` | yes |
-| `gemini` | `LLM_API_KEY` | `gemini-3.7-flash` | yes |
+| `gemini` | `LLM_API_KEY` | `gemini-2.5-flash-lite` | yes |
 | `gateway` | `LLM_API_KEY` **and** `LLM_ENDPOINT` | chosen by the far side | **no** |
 
 `bedrock` and `anthropic` share `_complete_sdk`, which differs only in client

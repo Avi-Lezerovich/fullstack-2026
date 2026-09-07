@@ -25,7 +25,26 @@ existed, and was readable nowhere.
 - Failure reasons are redacted of Google, Anthropic and AWS key shapes before they are
   stored, since this is the release that puts them on a screen.
 
-No schema change; no upgrade step beyond pulling the image.
+**And the reason it was failing at all: the Gemini defaults did not fit any free tier.**
+
+- The `gemini` provider's default model moves from `gemini-3.7-flash` to
+  `gemini-2.5-flash-lite`. The old default was chosen against a "roughly 1,500 requests
+  a day" figure belonging to a different model; Google publishes no free allowance for
+  the newest Flash models and the measured one is around twenty. Flash-Lite is also the
+  better fit on the merits — a one-line juror vote and a filing are not reasoning-heavy.
+- `thinkingConfig` is now sent only to 3.x models. It is a 3.x field, a 2.x model answers
+  it with a 400, and 400 is deliberately not retried — so without this, configuring the
+  model with the best free tier in the family would have failed on every single call.
+- The quota gauge's cap follows the **configured model** instead of one provider-wide
+  `20`, and the tile names the model it is measuring against. One number for "Gemini" was
+  wrong by fifty times the moment the model changed.
+- `SOCIAL_EVERY_TICKS` defaults to `20` (five minutes) rather than `4` (one minute). Each
+  social pass costs at least one model call, so the old cadence set a floor near 1,440
+  calls a day — past every free tier Google publishes — and a free-tier deployment ran
+  out mid-morning every morning.
+
+No schema change; no upgrade step beyond pulling the image. Deployments that pin
+`LLM_MODEL` or `SOCIAL_EVERY_TICKS` are unaffected.
 
 ---
 
