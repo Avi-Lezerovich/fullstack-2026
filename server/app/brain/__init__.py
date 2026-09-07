@@ -41,6 +41,7 @@ model having a bad day.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from typing import Any, Literal
 
@@ -167,8 +168,32 @@ class _LastCall:
 LAST_CALL = _LastCall()
 
 
+# Credentials that a provider's own error message can echo back at us. Google
+# in particular repeats the offending request in some 400 bodies, and since
+# `_gemini_http_error` now keeps that body, whatever it contains is on its way
+# to `fallback_reason` and from there to an admin's screen. Redacting at the
+# only place that writes that column is the one spot where it cannot be
+# forgotten.
+_SECRET_PATTERNS = (
+    re.compile(r"AIza[0-9A-Za-z_\-]{30,}"),
+    re.compile(r"sk-ant-[0-9A-Za-z_\-]{20,}"),
+    re.compile(r"ASIA[0-9A-Z]{16}|AKIA[0-9A-Z]{16}"),
+)
+
+
+def _redact(text: str) -> str:
+    for pattern in _SECRET_PATTERNS:
+        text = pattern.sub("***", text)
+    endpoint = get_settings().llm_endpoint
+    # A private gateway URL is not a password, but it is not ours to publish on
+    # a page that a site admin - who is not necessarily the operator - can read.
+    if endpoint:
+        text = text.replace(endpoint, "***")
+    return text
+
+
 def _err_str(exc: BaseException) -> str:
-    return f"{type(exc).__name__}: {exc}"[:300]
+    return _redact(f"{type(exc).__name__}: {exc}")[:300]
 
 
 def _log_call(

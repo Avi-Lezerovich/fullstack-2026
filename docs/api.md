@@ -228,8 +228,15 @@ human's judgment" but "is the machinery healthy".
 
 | Method | Path | Auth |
 |---|---|---|
-| GET | `/admin/brain/usage` | admin — `today`, `this_week`, and the Gemini quota tile |
+| GET | `/admin/brain/usage` | admin — `today`, `week`, the Gemini quota tile, and `failures` |
 | GET | `/admin/overview` | admin — site tiles |
+
+`failures` groups the last 24 hours of `brain_calls.fallback_reason` by provider and by
+the reason's first 80 characters, most common first. It exists because the quota gauge
+alone cannot tell "near the cap" apart from "every call is erroring" — both are a
+climbing number — and the sentence that distinguishes them had been written to the
+database on every failed call since the table existed without ever being readable.
+Reasons are redacted of API keys on the way in (`brain/__init__.py`'s `_redact`).
 
 System health itself is deliberately not duplicated here: `/api/health` already answers
 it and is already unauthenticated, so the admin UI calls that endpoint directly.

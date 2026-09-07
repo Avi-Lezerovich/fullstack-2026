@@ -879,12 +879,71 @@ _GEMINI_DEFAULT_THINKING = "low"
 _GEMINI_THINKING_HEADROOM = {"minimal": 0, "low": 512, "medium": 8192, "high": 12288}
 
 
+# How much of Google's error body to keep. Long enough for the sentence that
+# names the model or the quota metric, short enough to survive the VARCHAR(300)
+# that `fallback_reason` is stored in.
+_GEMINI_ERROR_BODY_CHARS = 400
+
+
+class GeminiHttpError(Exception):
+    """An HTTP error from Google, WITH the body that says what went wrong.
+
+    `urllib.error.HTTPError` stringifies to "HTTP Error 404: Not Found" and
+    nothing else. The sentence that actually identifies the fault - "models/
+    gemini-3.7-flash is not found for API version v1beta", or the name of the
+    exhausted quota metric - is in the response body, which is readable exactly
+    once and is otherwise dropped on the floor. That loss is not academic: it
+    is the difference between an operator reading their dashboard and knowing
+    the model id is wrong, and reading "HTTP Error 404" and guessing.
+
+    `.code` is kept as an attribute rather than only in the message so callers
+    can branch on it without parsing prose.
+    """
+
+    def __init__(self, code: int, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def _gemini_http_error(exc: urllib.error.HTTPError) -> GeminiHttpError:
+    """Read the body while it is still readable, and name the fault with it.
+
+    Google answers with `{"error": {"code", "message", "status"}}`, and only
+    `message` says anything a person can act on. Unwrapping it rather than
+    keeping the raw JSON is not tidiness: the message is stored in a bounded
+    column and grouped, on the dashboard, by its first 80 characters - and the
+    envelope alone is 45 of them, so a raw body would spend the whole budget on
+    punctuation and truncate immediately before the model id that identifies
+    the fault. The envelope is kept only when it is not the shape we expect.
+    """
+    try:
+        raw = exc.read().decode("utf-8", "replace").strip()
+    except Exception:  # pragma: no cover - a body that cannot be read at all
+        raw = ""
+
+    detail = ""
+    try:
+        error = json.loads(raw).get("error") or {}
+        detail = " ".join(
+            str(part) for part in (error.get("status"), error.get("message")) if part
+        )
+    except (ValueError, AttributeError):
+        detail = raw
+
+    detail = " ".join(detail.split())[:_GEMINI_ERROR_BODY_CHARS]
+    return GeminiHttpError(exc.code, f"gemini HTTP {exc.code}: {detail or exc.reason}")
+
+
 def _gemini_post(request: urllib.request.Request, timeout: float) -> dict[str, Any]:
     """POST with backoff on the failures that are Google being busy.
 
     The jitter is not decoration. Every bot on this site shares one API key and
     the worker fires them on a fixed tick, so a fixed backoff would line the
     retries up into exactly the thundering herd the retry is meant to survive.
+
+    Every HTTPError is converted to a `GeminiHttpError` at the point it is
+    caught, because `exc.read()` works once and only before the exception has
+    been passed around - so it has to happen here or not at all.
     """
     last: Exception | None = None
     for attempt in range(_GEMINI_ATTEMPTS):
@@ -895,9 +954,10 @@ def _gemini_post(request: urllib.request.Request, timeout: float) -> dict[str, A
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
+            error = _gemini_http_error(exc)
             if exc.code not in _GEMINI_RETRY_STATUS:
-                raise
-            last = exc
+                raise error from None
+            last = error
         except (TimeoutError, urllib.error.URLError) as exc:
             last = exc
     assert last is not None

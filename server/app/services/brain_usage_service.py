@@ -73,6 +73,45 @@ def usage_this_week(conn: Db | None = None) -> list[dict[str, Any]]:
     return _shape(rows)
 
 
+def recent_failures(
+    conn: Db | None = None, *, hours: int = 24, limit: int = 8
+) -> list[dict[str, Any]]:
+    """Why the backend has been falling back, most common first.
+
+    `fallback_reason` has been written on every failed call since the table
+    existed and has never been readable anywhere - so a deployment where every
+    single call fails looks, on the dashboard, exactly like a deployment that
+    is merely near its quota. This is the query that tells those two apart.
+
+    Grouped on `LEFT(fallback_reason, 80)` rather than the whole string on
+    purpose: several of the messages interpolate live numbers - the output
+    budget and the thinking spend, in `llm.py`'s MAX_TOKENS branch - so
+    grouping on the full text would return one row per call and hide exactly
+    the "these 57 are all the same fault" shape this exists to show.
+    """
+    with owned(conn) as db:
+        rows = db.query_all(
+            "SELECT provider, LEFT(fallback_reason, 80) AS reason, "
+            "COUNT(*) AS calls, MAX(created_at) AS last_seen "
+            "FROM brain_calls "
+            "WHERE success = 0 AND fallback_reason IS NOT NULL "
+            "AND created_at >= UTC_TIMESTAMP() - INTERVAL %s HOUR "
+            "GROUP BY provider, reason "
+            "ORDER BY calls DESC, last_seen DESC "
+            "LIMIT %s",
+            (int(hours), int(limit)),
+        )
+    return [
+        {
+            "provider": row["provider"],
+            "reason": row["reason"],
+            "calls": int(row["calls"]),
+            "last_seen": row["last_seen"].isoformat(timespec="seconds"),
+        }
+        for row in rows
+    ]
+
+
 def gemini_quota_today(conn: Db | None = None) -> dict[str, Any]:
     """Gemini's call count today against its 20/day free-tier cap.
 

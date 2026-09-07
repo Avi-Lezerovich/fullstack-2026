@@ -461,10 +461,18 @@ export interface GeminiQuota {
   remaining: number;
 }
 
+export interface BrainFailure {
+  provider: string;
+  reason: string;
+  calls: number;
+  last_seen: string;
+}
+
 export interface BrainUsageResponse {
   today: ProviderUsage[];
   week: ProviderUsage[];
   gemini_quota: GeminiQuota;
+  failures: BrainFailure[];
 }
 
 export const fetchBrainUsage = () => request<BrainUsageResponse>("/admin/brain/usage");

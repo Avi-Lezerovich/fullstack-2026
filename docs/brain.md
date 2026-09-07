@@ -230,6 +230,15 @@ things worth knowing:
 - `_gemini_schema` drops the keywords Gemini's OpenAPI-subset validator rejects
   (`_GEMINI_SCHEMA_DROP`: `additionalProperties`, `$schema`, `definitions`, `$defs`).
   `LAWSUIT_SCHEMA` sets `additionalProperties`, so without this every filing would 400.
+- Every `HTTPError` is converted to a **`GeminiHttpError`** at the point it is caught,
+  because `exc.read()` works once and only there. `urllib`'s own exception stringifies to
+  `"HTTP Error 404: Not Found"` and nothing else, while the sentence that names the fault
+  — `models/gemini-3.7-flash is not found for API version v1beta`, or the exhausted quota
+  metric — is in the body. `_gemini_http_error` unwraps Google's `{"error": {...}}`
+  envelope down to `status` + `message`: the envelope alone is 45 characters, and the
+  admin dashboard groups failures on the first 80, so keeping it raw would spend the whole
+  budget on punctuation and truncate before the model id. `.code` is kept as an attribute
+  so callers can branch without parsing prose.
 - `_gemini_post` retries `_GEMINI_RETRY_STATUS` (408/429/500/502/503/504) three times
   with jittered exponential backoff. 503 is the one that matters: the free tier is shared
   with everyone else on it. The jitter is not decoration — every bot shares one key and

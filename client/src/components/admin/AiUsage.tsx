@@ -11,7 +11,7 @@ import Typography from "@mui/material/Typography";
 import RefreshIcon from "@mui/icons-material/Refresh";
 
 import * as api from "../../api";
-import type { ProviderUsage } from "../../api";
+import type { BrainFailure, ProviderUsage } from "../../api";
 import { EmptyState, ErrorNote, Loading } from "../common/StateViews";
 import { useAsync } from "../../hooks/useAsync";
 import { geminiQuotaSeverity } from "../../utils/adminOps";
@@ -54,9 +54,34 @@ const ProviderRow = ({ row }: { row: ProviderUsage }) => (
 );
 
 /**
- * Calls per provider, success vs. fallback, token totals, and how close
- * Gemini is to its 20-requests/day free tier - the one number this whole tab
- * exists to make visible before the app finds out by getting rate limited.
+ * One failed call's reason, verbatim.
+ *
+ * `dir="ltr"` and a monospace face are not styling. The page is RTL, and the
+ * reason is an English exception string that regularly carries a model id or a
+ * URL; rendered in the surrounding direction the browser reorders it and a
+ * reader ends up debugging a model name that is not the one that failed.
+ */
+const FailureRow = ({ row }: { row: BrainFailure }) => (
+  <Stack direction="row" spacing={1} alignItems="baseline" flexWrap="wrap" useFlexGap>
+    <Chip size="small" color="error" variant="outlined" label={`${row.calls.toLocaleString("he-IL")}×`} />
+    <Typography
+      variant="caption"
+      dir="ltr"
+      sx={{ fontFamily: "monospace", wordBreak: "break-word", flex: 1, minWidth: 0 }}
+    >
+      {row.provider}: {row.reason}
+    </Typography>
+  </Stack>
+);
+
+/**
+ * Calls per provider, success vs. fallback, token totals, how close Gemini is
+ * to its free tier, and - when calls are failing - why.
+ *
+ * The quota gauge alone was not enough to run on: a backend where every call
+ * errors and a backend that is merely near its cap produce the same climbing
+ * number, and the difference between them was sitting unread in
+ * `brain_calls.fallback_reason` the whole time.
  */
 const AiUsage = () => {
   const load = useCallback(() => api.fetchBrainUsage(), []);
@@ -67,6 +92,7 @@ const AiUsage = () => {
   if (error || !data) return <ErrorNote message={error ?? "לא ניתן לטעון את נתוני השימוש."} />;
 
   const rows = data[range];
+  const failures = data.failures ?? [];
   const quota = data.gemini_quota;
   const severity = geminiQuotaSeverity(quota.used, quota.cap);
   const quotaColor = severity === "error" ? "error" : severity === "warning" ? "warning" : "success";
@@ -79,6 +105,23 @@ const AiUsage = () => {
           <RefreshIcon fontSize="small" />
         </IconButton>
       </Stack>
+
+      {failures.length > 0 && (
+        <Paper
+          variant="outlined"
+          sx={{ p: 2, mb: 2, borderColor: "error.main" }}
+          data-testid="brain-failures"
+        >
+          <Typography variant="subtitle2" color="error" sx={{ mb: 1 }}>
+            כשלים אחרונים (24 שעות)
+          </Typography>
+          <Stack spacing={0.75}>
+            {failures.map((row) => (
+              <FailureRow key={`${row.provider}:${row.reason}`} row={row} />
+            ))}
+          </Stack>
+        </Paper>
+      )}
 
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }} data-testid="gemini-quota">
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>

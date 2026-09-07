@@ -30,6 +30,10 @@ def admin_brain_usage():
             "today": brain_usage_service.usage_today(),
             "week": brain_usage_service.usage_this_week(),
             "gemini_quota": brain_usage_service.gemini_quota_today(),
+            # Why calls are failing, not just how many. Without this the tab
+            # cannot tell "near the quota" apart from "every call is erroring",
+            # which are the same picture and completely different problems.
+            "failures": brain_usage_service.recent_failures(),
         }
     ), 200
 

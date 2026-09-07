@@ -5,6 +5,30 @@ major number moves when an upgrade needs a step other than pulling the image.
 
 ---
 
+## Unreleased
+
+**The AI tab now says *why* calls are failing, not just how many.**
+
+A deployment where every Gemini call errors and one that is merely near its quota
+produced the same climbing number on the dashboard. The sentence that told them apart
+had been written to `brain_calls.fallback_reason` on every failed call since the table
+existed, and was readable nowhere.
+
+- `GET /api/admin/brain/usage` gains `failures`: the last 24 hours of failure reasons,
+  grouped by provider and by the reason's first 80 characters, most common first.
+- The admin AI tab renders them above the quota gauge, LTR and monospace inside the RTL
+  page so model ids and URLs are not reordered by the surrounding direction.
+- Gemini HTTP errors now carry Google's own explanation. `urllib.error.HTTPError`
+  stringifies to `"HTTP Error 404: Not Found"`; the body that names the model or the
+  quota metric was read nowhere and dropped. `GeminiHttpError` keeps it, unwrapped from
+  the `{"error": {...}}` envelope, and carries `.code`.
+- Failure reasons are redacted of Google, Anthropic and AWS key shapes before they are
+  stored, since this is the release that puts them on a screen.
+
+No schema change; no upgrade step beyond pulling the image.
+
+---
+
 ## 4.0.0
 
 **The admin dashboard grew past the moderation queue: a real AI usage history,

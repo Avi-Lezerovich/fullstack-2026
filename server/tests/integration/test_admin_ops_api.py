@@ -238,3 +238,44 @@ def test_a_failed_gemini_call_still_spends_a_slot_in_the_quota(as_admin, log_cal
     quota = as_admin.get("/api/admin/brain/usage").get_json()["gemini_quota"]
 
     assert quota["used"] == 1
+
+
+def test_failures_group_identical_reasons_into_one_row(as_admin, log_call):
+    """57 calls failing the same way is one fact, not 57.
+
+    The grouping is what makes the panel readable at all: an operator wants to
+    see "everything is failing with THIS", and a list of 57 near-identical
+    lines buries exactly that.
+    """
+    for _ in range(3):
+        log_call(
+            provider="gemini",
+            backend="offline",
+            success=False,
+            fallback_reason="GeminiHttpError: gemini HTTP 404: model not found",
+        )
+
+    failures = as_admin.get("/api/admin/brain/usage").get_json()["failures"]
+
+    assert len(failures) == 1
+    assert failures[0]["calls"] == 3
+    assert failures[0]["provider"] == "gemini"
+    assert "404" in failures[0]["reason"]
+
+
+def test_failures_ignore_successful_calls(as_admin, log_call):
+    log_call(provider="gemini")
+
+    assert as_admin.get("/api/admin/brain/usage").get_json()["failures"] == []
+
+
+def test_failures_do_not_reach_back_beyond_the_window(as_admin, log_call, backdate):
+    stale = log_call(
+        provider="gemini",
+        backend="offline",
+        success=False,
+        fallback_reason="GeminiHttpError: gemini HTTP 429: quota exhausted",
+    )
+    backdate(stale, days=2)
+
+    assert as_admin.get("/api/admin/brain/usage").get_json()["failures"] == []

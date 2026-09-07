@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import io
 import json
+import urllib.error
 
 import pytest
 
@@ -421,7 +422,7 @@ def test_a_bad_request_is_not_retried(monkeypatch, no_sleep):
         "urlopen",
         _urlopen_raising([_http_error(400)], _reply("שלום")),
     )
-    with pytest.raises(llm.urllib.error.HTTPError):
+    with pytest.raises(llm.GeminiHttpError):
         _complete({}, None)
     assert no_sleep == []
 
@@ -432,7 +433,7 @@ def test_an_unauthorised_key_is_not_retried(monkeypatch, no_sleep):
         "urlopen",
         _urlopen_raising([_http_error(403)], _reply("שלום")),
     )
-    with pytest.raises(llm.urllib.error.HTTPError):
+    with pytest.raises(llm.GeminiHttpError):
         _complete({}, None)
     assert no_sleep == []
 
@@ -443,7 +444,7 @@ def test_it_gives_up_and_reports_the_last_failure(monkeypatch, no_sleep):
     monkeypatch.setattr(
         llm.urllib.request, "urlopen", _urlopen_raising(errors, _reply("שלום"))
     )
-    with pytest.raises(llm.urllib.error.HTTPError) as caught:
+    with pytest.raises(llm.GeminiHttpError) as caught:
         _complete({}, None)
     assert caught.value.code == 503
     assert len(no_sleep) == llm._GEMINI_ATTEMPTS - 1
@@ -467,7 +468,7 @@ def test_the_backoff_is_jittered(monkeypatch, no_sleep):
             ),
         )
         no_sleep.clear()
-        with pytest.raises(llm.urllib.error.HTTPError):
+        with pytest.raises(llm.GeminiHttpError):
             _complete({}, None)
         runs.append(tuple(no_sleep))
     assert len(set(runs)) > 1
@@ -521,3 +522,108 @@ def test_every_effort_the_task_table_can_produce_is_valid():
     efforts = {*llm._EFFORT_BY_TASK.values(), llm._DEFAULT_EFFORT}
     for effort in efforts:
         assert effort in llm._GEMINI_THINKING_LEVELS, effort
+
+
+def test_an_http_error_keeps_googles_own_explanation(monkeypatch):
+    """The body is the whole point: "HTTP Error 404" names no culprit.
+
+    This is the failure that motivated reading it - a wrong model id fails
+    exactly this way, once per call, and is indistinguishable on a dashboard
+    from a quota wall until somebody can read the sentence Google sent back.
+    """
+    body = b'{"error":{"message":"models/gemini-9.9-flash is not found for API version v1beta"}}'
+
+    def _raise(request, timeout):  # noqa: ARG001
+        raise urllib.error.HTTPError(
+            "https://example.invalid", 404, "Not Found", {}, io.BytesIO(body)
+        )
+
+    monkeypatch.setattr(llm.urllib.request, "urlopen", _raise)
+
+    with pytest.raises(llm.GeminiHttpError) as caught:
+        llm._complete_gemini(
+            [{"type": "text", "text": "s"}],
+            [{"role": "user", "content": "u"}],
+            model="gemini-9.9-flash",
+            max_tokens=64,
+            effort="low",
+        )
+
+    assert caught.value.code == 404
+    assert "gemini-9.9-flash is not found" in str(caught.value)
+
+
+def test_a_non_retryable_status_is_not_retried(monkeypatch):
+    """404 is a fault in the request; asking again only repeats it."""
+    calls = []
+
+    def _raise(request, timeout):  # noqa: ARG001
+        calls.append(1)
+        raise urllib.error.HTTPError(
+            "https://example.invalid", 404, "Not Found", {}, io.BytesIO(b"{}")
+        )
+
+    monkeypatch.setattr(llm.urllib.request, "urlopen", _raise)
+
+    with pytest.raises(llm.GeminiHttpError):
+        llm._complete_gemini(
+            [{"type": "text", "text": "s"}],
+            [{"role": "user", "content": "u"}],
+            model="gemini-3.5-flash",
+            max_tokens=64,
+            effort="low",
+        )
+
+    assert len(calls) == 1
+
+
+def test_the_error_envelope_is_unwrapped_to_the_part_that_names_the_fault(monkeypatch):
+    """`{"error": {...}}` costs 45 characters before saying anything.
+
+    The dashboard groups failures on the first 80 characters of the stored
+    reason, so a raw body truncates mid-envelope and every distinct fault
+    collapses into one indistinguishable row of punctuation.
+    """
+    body = json.dumps(
+        {
+            "error": {
+                "code": 404,
+                "message": "models/gemini-9.9-flash is not found for API version v1beta",
+                "status": "NOT_FOUND",
+            }
+        }
+    ).encode("utf-8")
+
+    def _raise(request, timeout):  # noqa: ARG001
+        raise urllib.error.HTTPError(
+            "https://example.invalid", 404, "Not Found", {}, io.BytesIO(body)
+        )
+
+    monkeypatch.setattr(llm.urllib.request, "urlopen", _raise)
+
+    with pytest.raises(llm.GeminiHttpError) as caught:
+        _complete({}, None)
+
+    message = str(caught.value)
+    assert message.startswith("gemini HTTP 404: NOT_FOUND models/gemini-9.9-flash")
+    assert '{"error"' not in message
+
+
+def test_a_body_that_is_not_googles_shape_is_kept_verbatim(monkeypatch, no_sleep):
+    """A proxy or a WAF answers with HTML, and that is still a clue."""
+
+    def _raise(request, timeout):  # noqa: ARG001
+        raise urllib.error.HTTPError(
+            "https://example.invalid",
+            502,
+            "Bad Gateway",
+            {},
+            io.BytesIO(b"<html>upstream connect error</html>"),
+        )
+
+    monkeypatch.setattr(llm.urllib.request, "urlopen", _raise)
+
+    with pytest.raises(llm.GeminiHttpError) as caught:
+        _complete({}, None)
+
+    assert "upstream connect error" in str(caught.value)
