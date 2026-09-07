@@ -17,6 +17,9 @@ Mid-semester project — Full Stack course, Reichman University (RUNI) 2026.
 
 Everything the frontend fetches goes through `/api`.
 
+Deeper architecture notes — the worker's tick loop, the AI "brain", the schema, the API
+and the client — are in **[docs/](docs/README.md)**.
+
 The **worker is its own process, not a thread**. It is a long-running loop, so gunicorn
 has no way to run it, and a background thread inside a web worker would tick once per
 worker process. It is safe to run several: the loop takes a MySQL advisory lock and
