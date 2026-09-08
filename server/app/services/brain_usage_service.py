@@ -103,6 +103,23 @@ def usage_this_week(conn: Db | None = None) -> list[dict[str, Any]]:
     return _shape(rows)
 
 
+def spend_today(conn: Db | None = None) -> dict[str, int]:
+    """Attempts per credential since UTC midnight - the chain's own counter.
+
+    Keyed on the label rather than the provider, and skipping rows that have
+    no label: a row written before credentials existed says nothing about
+    which key spent it, and guessing would retire a live credential on the
+    strength of history that is not its own.
+    """
+    with owned(conn) as db:
+        rows = db.query_all(
+            "SELECT credential, COUNT(*) AS calls FROM brain_calls "
+            "WHERE created_at >= UTC_DATE() AND credential <> '' "
+            "GROUP BY credential"
+        )
+    return {row["credential"]: int(row["calls"]) for row in rows}
+
+
 def recent_failures(
     conn: Db | None = None, *, hours: int = 24, limit: int = 8
 ) -> list[dict[str, Any]]:

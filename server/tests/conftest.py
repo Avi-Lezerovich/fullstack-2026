@@ -221,6 +221,24 @@ def _schema():
 
 
 @pytest.fixture(autouse=True)
+def _fresh_credential_chain():
+    """Forget which credentials are rested or spent, before every test.
+
+    The chain deliberately keeps that in a module-level singleton: a cooldown
+    is a fact about this process and has to outlive the call that discovered
+    it. Across tests, that same persistence is cross-contamination - one test
+    proving a 429 retires a credential for the rest of the UTC day would make
+    every later test in the file run against an empty chain, and they would
+    fail somewhere else entirely.
+    """
+    from app.brain import chain
+
+    chain.CHAIN.reset()
+    yield
+    chain.CHAIN.reset()
+
+
+@pytest.fixture(autouse=True)
 def _clean(request):
     """Return the database to the seeded state before every test that uses one.
 

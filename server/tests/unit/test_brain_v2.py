@@ -158,7 +158,7 @@ def capable(monkeypatch):
                 **llm.PROVIDERS,
                 "anthropic": llm.Provider(
                     complete=fake.complete,
-                    is_configured=lambda settings: True,
+                    is_configured=lambda credential: True,
                     default_model="claude-opus-5",
                     capabilities=llm.SDK_CAPABILITIES,
                 ),
@@ -471,6 +471,14 @@ def test_a_juror_line_is_not_cut_either(capable):
 
 
 class _FakeUsageDb:
+    """Stands in for a connection, for both writers and readers.
+
+    `rollback` and `query_all` are here because the chain reads its spend
+    counts through `db.owned()`, which rolls back on the way out - so a fake
+    that only knew how to be written to would fail on the read side rather
+    than on the behaviour under test.
+    """
+
     def __init__(self):
         self.inserted: list[tuple] = []
 
@@ -478,7 +486,13 @@ class _FakeUsageDb:
         self.inserted.append(tuple(params))
         return SimpleNamespace(rowcount=1, lastrowid=1)
 
+    def query_all(self, sql, params=()):
+        return []
+
     def commit(self):
+        pass
+
+    def rollback(self):
         pass
 
     def close(self):
@@ -492,19 +506,27 @@ def usage_db(monkeypatch):
     return fake
 
 
+# The INSERT's parameter order, named. A positional unpack was fine while the
+# row had nine columns and one writer; it now has twelve and two, and a silent
+# reshuffle would make every assertion below check the wrong field.
+_ROW_FIELDS = (
+    "task",
+    "provider",
+    "credential",
+    "model",
+    "backend",
+    "success",
+    "fallback_reason",
+    "input_tokens",
+    "output_tokens",
+    "cache_read",
+    "cache_write",
+    "latency_ms",
+)
+
+
 def _last_row(fake: _FakeUsageDb) -> dict:
-    task, provider, backend, success, reason, in_tok, out_tok, cache_r, cache_w = fake.inserted[-1]
-    return {
-        "task": task,
-        "provider": provider,
-        "backend": backend,
-        "success": success,
-        "fallback_reason": reason,
-        "input_tokens": in_tok,
-        "output_tokens": out_tok,
-        "cache_read": cache_r,
-        "cache_write": cache_w,
-    }
+    return dict(zip(_ROW_FIELDS, fake.inserted[-1], strict=True))
 
 
 def test_a_successful_call_is_logged_with_its_provider_and_tokens(capable, usage_db):

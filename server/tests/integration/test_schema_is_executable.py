@@ -90,3 +90,99 @@ def test_the_worker_state_row_the_file_inserts_is_there(db):
     tick") stops firing.
     """
     assert db.query_value("SELECT COUNT(*) FROM worker_state WHERE name = 'scheduler'") == 1
+
+
+# --- init.sql and the migrations must describe the same table -----------------
+#
+# Two files declare `brain_calls`: `database/init.sql`, which a fresh database
+# is built from, and `prod/migrations/004-brain-credentials.sql`, which an
+# existing one is upgraded by. They are edited by hand, separately, and
+# nothing made them agree.
+#
+# Drift here is invisible in the worst way. The integration suite builds its
+# schema from init.sql, so a migration that adds the wrong column type - or
+# forgets a column entirely - passes every test in this repository and then
+# fails only in production, as a silently swallowed INSERT in `_log_call` and
+# an AI dashboard that quietly stops recording anything.
+
+
+def _brain_calls_columns(db) -> dict[str, str]:
+    return {
+        row["COLUMN_NAME"]: row["COLUMN_TYPE"]
+        for row in db.query_all(
+            "SELECT COLUMN_NAME, COLUMN_TYPE FROM information_schema.COLUMNS "
+            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'brain_calls'"
+        )
+    }
+
+
+def test_migration_004_lands_on_the_same_brain_calls_that_init_sql_declares(db):
+    """Upgrade a pre-004 table and compare it, column for column, with init.sql.
+
+    The pre-004 shape is spelled out here rather than read from git, so this
+    keeps working after the history is squashed - and so the thing being
+    upgraded is stated, which is the part a reader needs.
+    """
+    from tests.conftest import _REPO_ROOT, statements_in
+
+    expected = _brain_calls_columns(db)
+
+    db.execute("DROP TABLE IF EXISTS brain_calls_migration_check")
+    db.execute(
+        "CREATE TABLE brain_calls_migration_check ("
+        "  id INT AUTO_INCREMENT PRIMARY KEY, task VARCHAR(32) NOT NULL,"
+        "  provider VARCHAR(16) NOT NULL, backend ENUM('llm','offline') NOT NULL,"
+        "  success TINYINT(1) NOT NULL, fallback_reason VARCHAR(300) NULL,"
+        "  input_tokens INT NOT NULL DEFAULT 0, output_tokens INT NOT NULL DEFAULT 0,"
+        "  cache_read INT NOT NULL DEFAULT 0, cache_write INT NOT NULL DEFAULT 0,"
+        "  created_at DATETIME NOT NULL"
+        ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    )
+    # A row from before the upgrade: the ALTERs have to be applicable to a
+    # table with data in it, which is the only kind production has.
+    db.execute(
+        "INSERT INTO brain_calls_migration_check "
+        "(task, provider, backend, success, created_at) "
+        "VALUES ('bot_comment','gemini','llm',1,UTC_TIMESTAMP())"
+    )
+
+    migration = _REPO_ROOT / "prod" / "migrations" / "004-brain-credentials.sql"
+    for statement in statements_in(migration.read_text(encoding="utf-8")):
+        if not statement.upper().startswith("ALTER TABLE"):
+            continue
+        db.execute(statement.replace("brain_calls", "brain_calls_migration_check", 1))
+
+    migrated = {
+        row["COLUMN_NAME"]: row["COLUMN_TYPE"]
+        for row in db.query_all(
+            "SELECT COLUMN_NAME, COLUMN_TYPE FROM information_schema.COLUMNS "
+            "WHERE TABLE_SCHEMA = DATABASE() "
+            "AND TABLE_NAME = 'brain_calls_migration_check'"
+        )
+    }
+    db.execute("DROP TABLE brain_calls_migration_check")
+    db.commit()
+
+    assert migrated == expected
+
+
+def test_a_pre_migration_row_reads_back_under_its_provider(db):
+    """`credential` defaults to '' for history, and must not read as a key.
+
+    The dashboard groups on COALESCE(NULLIF(credential,''), provider), so an
+    old row appears under 'gemini' beside the new 'api1-gemini' rather than
+    being dropped, or worse, charged to a credential that never made it.
+    """
+    db.execute(
+        "INSERT INTO brain_calls (task, provider, backend, success, "
+        "input_tokens, output_tokens, cache_read, cache_write, created_at) "
+        "VALUES ('bot_comment','gemini','llm',1,0,0,0,0,UTC_TIMESTAMP())"
+    )
+    db.commit()
+
+    row = db.query_one(
+        "SELECT credential, COALESCE(NULLIF(credential,''), provider) AS reads_as "
+        "FROM brain_calls ORDER BY id DESC LIMIT 1"
+    )
+    assert row["credential"] == ""
+    assert row["reads_as"] == "gemini"

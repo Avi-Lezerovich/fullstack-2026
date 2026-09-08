@@ -312,3 +312,89 @@ def test_failures_do_not_reach_back_beyond_the_window(as_admin, log_call, backda
     backdate(stale, days=2)
 
     assert as_admin.get("/api/admin/brain/usage").get_json()["failures"] == []
+
+
+# --- the usage log actually reaches the database ------------------------------
+#
+# `_log_call` swallows every exception on purpose - a juror is mid-transaction
+# when it runs, and an unlogged call beats a failed trial. The cost of that is
+# that a schema drift makes the log silently stop rather than fail, and no test
+# that only checks an endpoint's shape would ever notice. These two read the
+# table back.
+
+
+def test_a_logged_call_really_lands_in_the_table(db):
+    """A row written through the real INSERT, against the real schema.
+
+    This is the test that fails when migration 004 has not been applied, which
+    is the whole reason it exists: every other test here inserts through a
+    fixture that names its own columns, so all of them would keep passing
+    against a table the application can no longer write to.
+    """
+    from app.brain import _log_call
+    from app.brain.llm import Completion
+
+    _log_call(
+        "bot_comment",
+        backend="llm",
+        success=True,
+        usage=Completion(
+            text="x", input_tokens=11, output_tokens=22, credential="api1-gemini",
+            model="gemini-2.5-flash-lite", latency_ms=345,
+        ),
+    )
+
+    row = db.query_one(
+        "SELECT credential, model, latency_ms, input_tokens FROM brain_calls "
+        "ORDER BY id DESC LIMIT 1"
+    )
+    assert row["credential"] == "api1-gemini"
+    assert row["model"] == "gemini-2.5-flash-lite"
+    assert row["latency_ms"] == 345
+    assert row["input_tokens"] == 11
+
+
+def test_one_row_per_credential_attempted_not_one_per_call(db):
+    """A 429'd credential spent a request, and the counter is a COUNT(*).
+
+    Logging only the give-up would make three exhausted keys look like one
+    failed call - wrong in the direction that costs money, because the cap
+    that decides whether a key is spent counts exactly these rows.
+    """
+    from app.brain import _log_attempts
+    from app.brain.llm import Attempt
+
+    _log_attempts(
+        "jury_deliberation",
+        (
+            Attempt("api1-gemini", "gemini", "m", ok=False, latency_ms=90, error="429"),
+            Attempt("api2-gemini", "gemini", "m", ok=False, latency_ms=80, error="429"),
+        ),
+    )
+
+    rows = db.query_all(
+        "SELECT credential, backend, success FROM brain_calls "
+        "WHERE task = 'jury_deliberation' ORDER BY id"
+    )
+    assert [r["credential"] for r in rows] == ["api1-gemini", "api2-gemini"]
+    assert all(r["backend"] == "offline" and not r["success"] for r in rows)
+
+
+def test_spend_today_counts_per_credential(db, log_call):
+    """What the chain's cap is measured against."""
+    from app.services.brain_usage_service import spend_today
+
+    db.execute(
+        "INSERT INTO brain_calls (task, provider, credential, model, backend, "
+        "success, input_tokens, output_tokens, cache_read, cache_write, "
+        "latency_ms, created_at) VALUES "
+        "('t','gemini','api1-gemini','m','llm',1,0,0,0,0,0,UTC_TIMESTAMP()),"
+        "('t','gemini','api1-gemini','m','llm',1,0,0,0,0,0,UTC_TIMESTAMP()),"
+        "('t','gemini','api2-gemini','m','llm',1,0,0,0,0,0,UTC_TIMESTAMP())"
+    )
+    # A row from before credentials existed says nothing about which key spent
+    # it, so it must not be attributed to one.
+    log_call(provider="gemini")
+    db.commit()
+
+    assert spend_today(db) == {"api1-gemini": 2, "api2-gemini": 1}

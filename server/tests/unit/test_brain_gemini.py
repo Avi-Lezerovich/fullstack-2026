@@ -20,6 +20,7 @@ import urllib.error
 import pytest
 
 from app.brain import llm
+from app.config import Credential
 
 # These live in tests/unit and are hermetic - no database, no network - but
 # carried no marker, so `pytest -m unit` silently ran a fraction of the layer.
@@ -63,11 +64,20 @@ def _reply(text: str, finish: str = "STOP") -> dict:
     return {"candidates": [{"finishReason": finish, "content": {"parts": [{"text": text}]}}]}
 
 
+def _credential(**overrides) -> Credential:
+    """The key this provider is being handed. A credential is a value now,
+    not a reading of the environment, so the tests pass one explicitly."""
+    return Credential(
+        **{"label": "api1-gemini", "provider": "gemini", "api_key": "test-key", **overrides}
+    )
+
+
 def _complete(captured, reply, messages=None, system=None, **kwargs):
     captured["reply"] = reply
     return llm._complete_gemini(
         system or [{"type": "text", "text": "SYSTEM-MARKER"}],
         messages or [{"role": "user", "content": "PROMPT-MARKER"}],
+        credential=kwargs.pop("credential", None) or _credential(),
         model=kwargs.pop("model", "gemini-3.5-flash"),
         max_tokens=kwargs.pop("max_tokens", 512),
         effort=kwargs.pop("effort", "low"),
@@ -279,16 +289,15 @@ def test_an_empty_answer_names_the_finish_reason(captured):
         _complete(captured, _reply("   "))
 
 
-def test_a_missing_key_is_refused_before_the_network(monkeypatch):
-    monkeypatch.setenv("LLM_API_KEY", "")
-    with pytest.raises(ValueError, match="LLM_API_KEY"):
-        llm._complete_gemini(
-            [{"type": "text", "text": "S"}],
-            [{"role": "user", "content": "P"}],
-            model="gemini-3.7-flash",
-            max_tokens=512,
-            effort="low",
-        )
+def test_a_credential_without_a_key_is_refused_before_the_network():
+    """And the message names the credential, not the variable.
+
+    With a chain, "LLM_API_KEY is missing" is no longer a true sentence -
+    there may be three keys and only the second one absent - so the error has
+    to say which of them.
+    """
+    with pytest.raises(ValueError, match="api2-gemini"):
+        _complete({}, None, credential=_credential(label="api2-gemini", api_key=""))
 
 
 def test_the_parts_of_a_multi_part_answer_are_joined(captured):
@@ -541,13 +550,7 @@ def test_an_http_error_keeps_googles_own_explanation(monkeypatch):
     monkeypatch.setattr(llm.urllib.request, "urlopen", _raise)
 
     with pytest.raises(llm.GeminiHttpError) as caught:
-        llm._complete_gemini(
-            [{"type": "text", "text": "s"}],
-            [{"role": "user", "content": "u"}],
-            model="gemini-9.9-flash",
-            max_tokens=64,
-            effort="low",
-        )
+        _complete({}, None, model="gemini-9.9-flash")
 
     assert caught.value.code == 404
     assert "gemini-9.9-flash is not found" in str(caught.value)
@@ -566,13 +569,7 @@ def test_a_non_retryable_status_is_not_retried(monkeypatch):
     monkeypatch.setattr(llm.urllib.request, "urlopen", _raise)
 
     with pytest.raises(llm.GeminiHttpError):
-        llm._complete_gemini(
-            [{"type": "text", "text": "s"}],
-            [{"role": "user", "content": "u"}],
-            model="gemini-3.5-flash",
-            max_tokens=64,
-            effort="low",
-        )
+        _complete({}, None)
 
     assert len(calls) == 1
 

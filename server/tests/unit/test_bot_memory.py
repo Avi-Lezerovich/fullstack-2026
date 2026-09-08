@@ -165,6 +165,7 @@ class _FakeProvider:
         system,
         messages,
         *,
+        credential,
         model,
         max_tokens,
         effort,
@@ -195,7 +196,7 @@ def provider(monkeypatch):
             **llm.PROVIDERS,
             "anthropic": llm.Provider(
                 complete=fake.complete,
-                is_configured=lambda settings: True,
+                is_configured=lambda credential: True,
                 default_model="claude-opus-5",
                 capabilities=llm.SDK_CAPABILITIES,
             ),
