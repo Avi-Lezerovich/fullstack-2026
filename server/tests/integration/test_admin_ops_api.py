@@ -218,59 +218,65 @@ def test_a_call_from_over_a_week_ago_is_excluded_entirely(as_admin, log_call, ba
     assert usage["week"] == []
 
 
-def test_geminis_quota_counts_only_todays_calls_against_the_cap(
-    as_admin, log_call, backdate
-):
-    for _ in range(3):
-        log_call(provider="gemini")
-    yesterday = log_call(provider="gemini")
-    backdate(yesterday, days=1)
+def test_a_quota_tile_counts_only_todays_calls(as_admin, db, backdate, monkeypatch):
+    monkeypatch.setenv("LLM_CREDENTIALS", "provider=gemini,label=api1-gemini,key=k1,cap=1000")
+    monkeypatch.setenv("BRAIN_FORCE_OFFLINE", "0")
+    db.execute(
+        "INSERT INTO brain_calls (task, provider, credential, model, backend, "
+        "success, input_tokens, output_tokens, cache_read, cache_write, "
+        "latency_ms, created_at) VALUES "
+        "('t','gemini','api1-gemini','m','llm',1,0,0,0,0,0,UTC_TIMESTAMP()),"
+        "('t','gemini','api1-gemini','m','llm',1,0,0,0,0,0,UTC_TIMESTAMP()),"
+        "('t','gemini','api1-gemini','m','llm',1,0,0,0,0,0,UTC_TIMESTAMP()),"
+        "('t','gemini','api1-gemini','m','llm',1,0,0,0,0,0,"
+        "UTC_TIMESTAMP() - INTERVAL 1 DAY)"
+    )
+    db.commit()
 
-    quota = as_admin.get("/api/admin/brain/usage").get_json()["gemini_quota"]
+    quota = as_admin.get("/api/admin/brain/usage").get_json()["credentials"][0]
 
-    assert quota == {
-        "used": 3,
-        "cap": 1000,
-        "model": "gemini-2.5-flash-lite",
-        "remaining": 997,
-    }
-
-
-def test_the_quota_cap_follows_the_configured_model(as_admin, monkeypatch):
-    """The allowance is Google's, and it is a property of the model.
-
-    Reporting one provider-wide number was wrong by fifty times the moment the
-    configured model changed, and a gauge wrong by that much is worse than
-    none because it gets believed.
-    """
-    monkeypatch.setenv("LLM_MODEL", "gemini-2.5-flash")
-
-    quota = as_admin.get("/api/admin/brain/usage").get_json()["gemini_quota"]
-
-    assert quota["cap"] == 250
-    assert quota["model"] == "gemini-2.5-flash"
+    assert quota["used"] == 3
+    assert quota["remaining"] == 997
 
 
-def test_an_unrecognised_model_is_assumed_to_have_the_smallest_allowance(
-    as_admin, monkeypatch
-):
-    """Guessing high spends the day's quota before anyone is awake."""
-    monkeypatch.setenv("LLM_MODEL", "gemini-9.9-flash-experimental")
-
-    quota = as_admin.get("/api/admin/brain/usage").get_json()["gemini_quota"]
-
-    assert quota["cap"] == brain_usage_service.GEMINI_UNKNOWN_MODEL_DAILY_CAP
-
-
-def test_a_failed_gemini_call_still_spends_a_slot_in_the_quota(as_admin, log_call):
+def test_a_failed_call_still_spends_a_slot_in_the_quota(as_admin, db, monkeypatch):
     """A rate-limited or malformed call still reached Google's API and still
     counted against the free tier there - hiding it here would make the quota
     look safer than it is."""
-    log_call(provider="gemini", backend="offline", success=False, fallback_reason="boom")
+    monkeypatch.setenv("LLM_CREDENTIALS", "provider=gemini,label=api1-gemini,key=k1,cap=1000")
+    monkeypatch.setenv("BRAIN_FORCE_OFFLINE", "0")
+    db.execute(
+        "INSERT INTO brain_calls (task, provider, credential, model, backend, "
+        "success, fallback_reason, input_tokens, output_tokens, cache_read, "
+        "cache_write, latency_ms, created_at) VALUES "
+        "('t','gemini','api1-gemini','m','offline',0,'boom',0,0,0,0,0,UTC_TIMESTAMP())"
+    )
+    db.commit()
 
-    quota = as_admin.get("/api/admin/brain/usage").get_json()["gemini_quota"]
+    quota = as_admin.get("/api/admin/brain/usage").get_json()["credentials"][0]
 
     assert quota["used"] == 1
+
+
+def test_the_published_allowance_is_looked_up_per_model(monkeypatch):
+    """The cap is a property of the model, and the spread is enormous.
+
+    One provider-wide number was wrong by fifty times the moment the model
+    changed, and a gauge wrong by that much is worse than none because it
+    gets believed.
+    """
+    from app.services.brain_usage_service import (
+        GEMINI_UNKNOWN_MODEL_DAILY_CAP,
+        gemini_daily_cap,
+    )
+
+    assert gemini_daily_cap("gemini-2.5-flash-lite") == 1000
+    assert gemini_daily_cap("gemini-2.5-flash") == 250
+    # A pinned point release inherits its family's number rather than falling
+    # through to the floor.
+    assert gemini_daily_cap("gemini-2.5-flash-lite-preview-09-2026") == 1000
+    # Guessing high spends the day's allowance before anyone is awake.
+    assert gemini_daily_cap("gemini-9.9-flash") == GEMINI_UNKNOWN_MODEL_DAILY_CAP
 
 
 def test_failures_group_identical_reasons_into_one_row(as_admin, log_call):
@@ -398,3 +404,110 @@ def test_spend_today_counts_per_credential(db, log_call):
     db.commit()
 
     assert spend_today(db) == {"api1-gemini": 2, "api2-gemini": 1}
+
+
+# --- per-credential accounting ------------------------------------------------
+
+
+def test_usage_is_grouped_by_credential_and_model(as_admin, db):
+    db.execute(
+        "INSERT INTO brain_calls (task, provider, credential, model, backend, "
+        "success, input_tokens, output_tokens, cache_read, cache_write, "
+        "latency_ms, created_at) VALUES "
+        "('t','gemini','api1-gemini','gemini-2.5-flash-lite','llm',1,10,5,0,0,120,UTC_TIMESTAMP()),"
+        "('t','gemini','api1-gemini','gemini-2.5-flash-lite','llm',1,10,5,0,0,180,UTC_TIMESTAMP()),"
+        "('t','gemini','api2-gemini','gemini-2.5-flash-lite','offline',0,0,0,0,0,90,UTC_TIMESTAMP())"
+    )
+    db.commit()
+
+    rows = as_admin.get("/api/admin/brain/usage").get_json()["by_credential"]
+    by_label = {row["credential"]: row for row in rows}
+
+    assert by_label["api1-gemini"]["calls"] == 2
+    assert by_label["api1-gemini"]["input_tokens"] == 20
+    assert by_label["api1-gemini"]["avg_latency_ms"] == 150
+    assert by_label["api2-gemini"]["failures"] == 1
+
+
+def test_a_row_from_before_credentials_reads_under_its_provider(as_admin, log_call):
+    """History must survive the migration without being charged to a key."""
+    log_call(provider="gemini")
+
+    rows = as_admin.get("/api/admin/brain/usage").get_json()["by_credential"]
+
+    assert [row["credential"] for row in rows] == ["gemini"]
+
+
+def test_a_configured_credential_with_no_calls_still_gets_a_tile(as_admin, monkeypatch):
+    """"api3-bedrock has done nothing today" is a fact worth seeing.
+
+    A board built from the table alone would omit exactly the credential
+    somebody is asking about.
+    """
+    monkeypatch.setenv(
+        "LLM_CREDENTIALS",
+        "provider=gemini,label=api1-gemini,key=k1,cap=1000;"
+        "provider=bedrock,label=api3-bedrock,region=eu-central-1,cap=100",
+    )
+    monkeypatch.setenv("BRAIN_FORCE_OFFLINE", "0")
+
+    quotas = as_admin.get("/api/admin/brain/usage").get_json()["credentials"]
+
+    assert [q["credential"] for q in quotas] == ["api1-gemini", "api3-bedrock"]
+    assert all(q["used"] == 0 for q in quotas)
+    assert [q["cap"] for q in quotas] == [1000, 100]
+
+
+def test_a_credential_cap_defaults_to_the_models_published_allowance(
+    as_admin, monkeypatch
+):
+    """An operator who does not set `cap` still gets a real bar."""
+    monkeypatch.setenv(
+        "LLM_CREDENTIALS",
+        "provider=gemini,label=api1-gemini,key=k1,model=gemini-2.5-flash-lite",
+    )
+    monkeypatch.setenv("BRAIN_FORCE_OFFLINE", "0")
+
+    quota = as_admin.get("/api/admin/brain/usage").get_json()["credentials"][0]
+
+    assert quota["cap"] == 1000
+    assert quota["model"] == "gemini-2.5-flash-lite"
+
+
+def test_an_exhausted_credential_is_marked_as_such(as_admin, db, monkeypatch):
+    monkeypatch.setenv("LLM_CREDENTIALS", "provider=gemini,label=api1-gemini,key=k1,cap=2")
+    monkeypatch.setenv("BRAIN_FORCE_OFFLINE", "0")
+    db.execute(
+        "INSERT INTO brain_calls (task, provider, credential, model, backend, "
+        "success, input_tokens, output_tokens, cache_read, cache_write, "
+        "latency_ms, created_at) VALUES "
+        "('t','gemini','api1-gemini','m','llm',1,0,0,0,0,0,UTC_TIMESTAMP()),"
+        "('t','gemini','api1-gemini','m','llm',1,0,0,0,0,0,UTC_TIMESTAMP())"
+    )
+    db.commit()
+
+    quota = as_admin.get("/api/admin/brain/usage").get_json()["credentials"][0]
+
+    assert quota == {
+        "credential": "api1-gemini",
+        "provider": "gemini",
+        "model": "gemini-2.5-flash-lite",
+        "used": 2,
+        "cap": 2,
+        "remaining": 0,
+        "exhausted": True,
+    }
+
+
+def test_an_unknown_cap_is_reported_as_zero_rather_than_guessed(as_admin, monkeypatch):
+    """Honest for a paid account, and the client renders it as "no cap set"
+    rather than a bar that is always full or always empty."""
+    monkeypatch.setenv(
+        "LLM_CREDENTIALS", "provider=bedrock,label=api3-bedrock,region=eu-central-1"
+    )
+    monkeypatch.setenv("BRAIN_FORCE_OFFLINE", "0")
+
+    quota = as_admin.get("/api/admin/brain/usage").get_json()["credentials"][0]
+
+    assert quota["cap"] == 0
+    assert quota["exhausted"] is False

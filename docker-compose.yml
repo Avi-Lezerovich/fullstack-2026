@@ -100,7 +100,19 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_ENDPOINT: ${LLM_ENDPOINT:-}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-}
+      # The credential chain, and the variables it refers its keys to by name.
+      # Every one of these has to be listed here AND in the worker below: this
+      # is an explicit allowlist, so a variable set in .env but missing from
+      # one of these blocks simply does not exist inside that container - and
+      # the symptom is the brain quietly running offline in half the system.
+      LLM_CREDENTIALS: ${LLM_CREDENTIALS:-}
+      GEMINI_KEY_1: ${GEMINI_KEY_1:-}
+      GEMINI_KEY_2: ${GEMINI_KEY_2:-}
+      GEMINI_KEY_3: ${GEMINI_KEY_3:-}
       AWS_REGION: ${AWS_REGION:-}
+      SOCIAL_EVERY_TICKS: ${SOCIAL_EVERY_TICKS:-}
       BRAIN_FORCE_OFFLINE: ${BRAIN_FORCE_OFFLINE:-1}
       # Operator-set list of current subjects the bots may sue. See .env.example.
       TOPICAL_SUBJECTS: ${TOPICAL_SUBJECTS:-}
@@ -153,7 +165,19 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_ENDPOINT: ${LLM_ENDPOINT:-}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-}
+      # The credential chain, and the variables it refers its keys to by name.
+      # Every one of these has to be listed here AND in the worker below: this
+      # is an explicit allowlist, so a variable set in .env but missing from
+      # one of these blocks simply does not exist inside that container - and
+      # the symptom is the brain quietly running offline in half the system.
+      LLM_CREDENTIALS: ${LLM_CREDENTIALS:-}
+      GEMINI_KEY_1: ${GEMINI_KEY_1:-}
+      GEMINI_KEY_2: ${GEMINI_KEY_2:-}
+      GEMINI_KEY_3: ${GEMINI_KEY_3:-}
       AWS_REGION: ${AWS_REGION:-}
+      SOCIAL_EVERY_TICKS: ${SOCIAL_EVERY_TICKS:-}
       BRAIN_FORCE_OFFLINE: ${BRAIN_FORCE_OFFLINE:-1}
       # Operator-set list of current subjects the bots may sue. See .env.example.
       TOPICAL_SUBJECTS: ${TOPICAL_SUBJECTS:-}

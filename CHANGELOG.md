@@ -43,8 +43,38 @@ existed, and was readable nowhere.
   calls a day — past every free tier Google publishes — and a free-tier deployment ran
   out mid-morning every morning.
 
-No schema change; no upgrade step beyond pulling the image. Deployments that pin
-`LLM_MODEL` or `SOCIAL_EVERY_TICKS` are unaffected.
+**And a chain of credentials, with per-key accounting on the admin board.**
+
+`LLM_CREDENTIALS` names several credentials in preference order; a call works down them
+until one answers. Secrets are referenced by name (`key_env=GEMINI_KEY_1`), so the
+variable itself holds no credential and is safe to log and display.
+
+- New module `server/app/brain/chain.py`: selection, daily caps, and cooldowns. A
+  credential is tried at most once per call. A quota answer writes it off until the next
+  UTC reset; any other failure rests it two minutes.
+- Providers no longer read the environment for their own credentials — `is_configured`
+  judges a `Credential`, and each `_complete_*` is handed the one it should use.
+- `capabilities()` is now the union over the chain, so one `gateway` entry can no longer
+  silently disable every filing on the site.
+- `brain_calls` gains `credential`, `model` and `latency_ms`, and `fallback_reason`
+  widens to 500. **One row is one provider attempt**, not one brain call.
+- The AI tab shows a quota tile per key (`api1-gemini`, `api2-gemini`, `api3-bedrock`)
+  naming its model, and usage can be grouped by provider or by key. The single
+  provider-wide Gemini gauge is gone: it and the per-key tiles would have been two
+  different answers to one question.
+- A test asserts the migration and `init.sql` describe the same table. The suite builds
+  its schema from `init.sql` alone, so a drifted migration would have passed everything
+  here and failed only in production, as a silently swallowed INSERT.
+
+**Upgrading needs one step beyond pulling the image** — a migration:
+
+```bash
+cd /opt/lolsuit && git pull
+mysql -h "$DB_HOST" -u "$DB_USER" -p "$DB_NAME" < prod/migrations/004-brain-credentials.sql
+```
+
+Take a snapshot first; unlike 003 it is not idempotent. Deployments that pin `LLM_MODEL`
+or `SOCIAL_EVERY_TICKS`, or that never set `LLM_CREDENTIALS`, behave exactly as before.
 
 ---
 

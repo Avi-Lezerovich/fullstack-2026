@@ -7,6 +7,7 @@ tier" - which needs the persisted history, not one process's memory.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from ..config import get_settings
@@ -81,8 +82,8 @@ def usage_today(conn: Db | None = None) -> list[dict[str, Any]]:
     """One row per provider, for calls made since the start of today (UTC).
 
     `UTC_DATE()`, not "the last 24 hours" - the same calendar boundary
-    `gemini_quota_today` uses, so a provider's row here and the Gemini tile
-    next to it are always talking about the same "today".
+    `credential_quotas` uses, so a provider's row here and the quota tiles
+    above it are always talking about the same "today".
     """
     with owned(conn) as db:
         rows = db.query_all(
@@ -101,6 +102,130 @@ def usage_this_week(conn: Db | None = None) -> list[dict[str, Any]]:
             "GROUP BY provider ORDER BY provider"
         )
     return _shape(rows)
+
+
+# One row is one provider ATTEMPT, not one brain call. When a credential is
+# rate-limited and the next one answers, that is two rows - which is the honest
+# unit, because it is the one that maps 1:1 to a request against somebody's
+# quota. `calls` below therefore counts attempts.
+_CREDENTIAL_COLUMNS = (
+    "COALESCE(NULLIF(credential, ''), provider) AS credential, "
+    "provider, "
+    "COALESCE(NULLIF(model, ''), '-') AS model, "
+    "COUNT(*) AS calls, "
+    "SUM(success) AS successes, "
+    "SUM(NOT success) AS failures, "
+    "SUM(backend = 'offline' AND provider != 'offline') AS fallbacks, "
+    "SUM(input_tokens) AS input_tokens, "
+    "SUM(output_tokens) AS output_tokens, "
+    "SUM(cache_read) AS cache_read, "
+    "SUM(cache_write) AS cache_write, "
+    "ROUND(AVG(NULLIF(latency_ms, 0))) AS avg_latency_ms "
+)
+
+
+def _shape_credential(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "credential": row["credential"],
+            "provider": row["provider"],
+            "model": row["model"],
+            "calls": int(row["calls"]),
+            "successes": int(row["successes"] or 0),
+            "failures": int(row["failures"] or 0),
+            "fallback_to_offline": int(row["fallbacks"] or 0),
+            "input_tokens": int(row["input_tokens"] or 0),
+            "output_tokens": int(row["output_tokens"] or 0),
+            "cache_read": int(row["cache_read"] or 0),
+            "cache_write": int(row["cache_write"] or 0),
+            "avg_latency_ms": int(row["avg_latency_ms"] or 0),
+        }
+        for row in rows
+    ]
+
+
+def usage_by_credential(conn: Db | None = None, *, days: int = 0) -> list[dict[str, Any]]:
+    """One row per (credential, model). `days=0` means today.
+
+    Grouped by model as well as by key, because the same key can be pointed at
+    a different model tomorrow and the two spends are not comparable - the free
+    allowance differs by a factor of fifty between models of one provider.
+
+    `COALESCE(NULLIF(credential, ''), provider)` is what lets history survive
+    the migration: a row written before credentials existed has no label and
+    appears under its provider name, rather than being dropped or charged to a
+    key that never made the call.
+    """
+    window = (
+        "created_at >= UTC_DATE()"
+        if not days
+        else f"created_at >= UTC_TIMESTAMP() - INTERVAL {int(days)} DAY"
+    )
+    with owned(conn) as db:
+        rows = db.query_all(
+            f"SELECT {_CREDENTIAL_COLUMNS} FROM brain_calls WHERE {window} "
+            "GROUP BY 1, 2, 3 ORDER BY 1, 3"
+        )
+    return _shape_credential(rows)
+
+
+def credential_quotas(
+    credentials: Sequence[Any] | None = None, conn: Db | None = None
+) -> list[dict[str, Any]]:
+    """One tile per configured credential: what it has spent against its cap.
+
+    Driven by the CHAIN rather than by the table, so a credential that has made
+    no calls today still gets a tile - "api3-bedrock has done nothing" is a
+    fact worth seeing, and a board built only from rows would omit exactly the
+    credential somebody is wondering about.
+
+    A cap of 0 means the allowance is unknown, which is honest for a paid
+    account. It is reported as 0 rather than guessed at; the client renders
+    that as "no cap set" instead of a bar that is either always full or always
+    empty.
+
+    Deliberately does NOT report the chain's in-memory cooldowns. Those belong
+    to one process, the worker makes most of the calls, and a tile drawn from
+    the API process's memory would be a confident statement about a machine it
+    cannot see. `/api/health` is where "this process, right now" lives.
+    """
+    if credentials is None:
+        credentials = get_settings().llm_chain
+
+    with owned(conn) as db:
+        spent = spend_today(db)
+
+    out = []
+    for credential in credentials:
+        provider, model = _provider_and_model(credential)
+        cap = credential.daily_cap or _default_cap(provider, model)
+        used = spent.get(credential.label, 0)
+        out.append(
+            {
+                "credential": credential.label,
+                "provider": provider,
+                "model": model,
+                "used": used,
+                "cap": cap,
+                "remaining": max(0, cap - used) if cap else 0,
+                "exhausted": bool(cap) and used >= cap,
+            }
+        )
+    return out
+
+
+def _provider_and_model(credential: Any) -> tuple[str, str]:
+    """The credential's provider and the model it will actually ask for."""
+    from ..brain import llm
+
+    provider = llm.PROVIDERS.get(credential.provider)
+    model = credential.model or (provider.default_model if provider else "")
+    return credential.provider, model
+
+
+def _default_cap(provider: str, model: str) -> int:
+    """The published free-tier allowance, where there is one to publish."""
+    return gemini_daily_cap(model) if provider == "gemini" else 0
 
 
 def spend_today(conn: Db | None = None) -> dict[str, int]:
@@ -157,35 +282,3 @@ def recent_failures(
         }
         for row in rows
     ]
-
-
-def gemini_quota_today(conn: Db | None = None) -> dict[str, Any]:
-    """Gemini's call count today against the configured model's free tier.
-
-    Counts every attempt, successful or not - a call that failed still spent
-    one of Google's requests, so a run of failures burning the quota is
-    exactly the thing this exists to surface.
-
-    The cap follows the configured model, and the model is reported alongside
-    it so a reader can see which allowance they are being measured against
-    rather than having to trust the bar.
-    """
-    from ..brain import llm
-
-    settings = get_settings()
-    model = settings.llm_model or llm.PROVIDERS["gemini"].default_model
-    cap = gemini_daily_cap(model)
-    with owned(conn) as db:
-        used = int(
-            db.query_value(
-                "SELECT COUNT(*) FROM brain_calls "
-                "WHERE provider = 'gemini' AND created_at >= UTC_DATE()",
-                default=0,
-            )
-        )
-    return {
-        "used": used,
-        "cap": cap,
-        "model": model,
-        "remaining": max(0, cap - used),
-    }
