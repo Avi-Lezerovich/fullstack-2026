@@ -1207,6 +1207,14 @@ PROVIDERS: dict[str, Provider] = {
         complete=_complete_gemini,
         # One key, one host - Google needs no region and no endpoint of its own.
         is_configured=lambda credential: bool(credential.api_key),
+        # VERIFY THIS AGAINST YOUR OWN KEY BEFORE TRUSTING IT. Google's model
+        # availability differs per account: a measurement taken against this
+        # project on 2026-09-01 had every 2.5-series model answering 404 "no
+        # longer available to new users", while the published free-tier figures
+        # below describe models that account could not reach. The admin AI
+        # tab's failure panel now shows Google's own message, so one call
+        # settles it - and a 404 here is a 100% failure rate, not a slow day.
+        #
         # Flash-Lite, not the newest Flash. The point of this provider is a
         # real schema on a free tier, and the free tier is not uniform across
         # models: Google publishes ~1,000 requests a day for 2.5 Flash-Lite
