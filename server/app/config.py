@@ -75,7 +75,7 @@ def _bool(name: str, default: bool = False) -> bool:
 # Only these are read; anything else in a record is a typo worth reporting
 # rather than silently ignoring.
 _CREDENTIAL_FIELDS = frozenset(
-    {"provider", "label", "key", "key_env", "model", "endpoint", "region", "cap"}
+    {"provider", "label", "key", "key_env", "model", "endpoint", "region", "cap", "rpm"}
 )
 
 _LABEL_MAX = 48  # brain_calls.credential
@@ -93,6 +93,10 @@ class Credential:
     `daily_cap` is a budget this side of the wire, not a limit Google enforces
     on our say-so. Zero means "no cap known", which is honest for a paid
     account and never blocks a call.
+
+    `rpm` is the same idea on a one-minute window rather than a one-day one -
+    see `chain.py`'s module docstring for why a free tier needs both. Zero
+    means unpaced, same convention as `daily_cap`.
     """
 
     label: str
@@ -102,6 +106,7 @@ class Credential:
     endpoint: str = ""
     aws_region: str = ""
     daily_cap: int = 0
+    rpm: int = 0
 
 
 def _credential_record(raw: str, position: int) -> tuple[Credential | None, str]:
@@ -138,6 +143,11 @@ def _credential_record(raw: str, position: int) -> tuple[Credential | None, str]
     except ValueError:
         return None, f"credential {position}: cap {fields.get('cap')!r} is not a number"
 
+    try:
+        rpm = max(0, int(fields.get("rpm") or 0))
+    except ValueError:
+        return None, f"credential {position}: rpm {fields.get('rpm')!r} is not a number"
+
     return (
         Credential(
             label=label,
@@ -147,6 +157,7 @@ def _credential_record(raw: str, position: int) -> tuple[Credential | None, str]
             endpoint=fields.get("endpoint", ""),
             aws_region=fields.get("region", ""),
             daily_cap=cap,
+            rpm=rpm,
         ),
         "",
     )

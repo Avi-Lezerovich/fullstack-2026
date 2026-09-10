@@ -260,13 +260,13 @@ in what order, and when to stop asking one that has said no.
 `LLM_CREDENTIALS` names them, in preference order:
 
 ```
-LLM_CREDENTIALS=provider=gemini,label=api1-gemini,key_env=GEMINI_KEY_1,model=gemini-2.5-flash-lite,cap=1000;\
-                provider=gemini,label=api2-gemini,key_env=GEMINI_KEY_2,cap=1000;\
+LLM_CREDENTIALS=provider=gemini,label=api1-gemini,key_env=GEMINI_KEY_1,model=gemini-2.5-flash-lite,cap=1000,rpm=10;\
+                provider=gemini,label=api2-gemini,key_env=GEMINI_KEY_2,cap=1000,rpm=10;\
                 provider=bedrock,label=api3-bedrock,region=eu-central-1,cap=100
 ```
 
 Fields: `provider` (required), `label` (defaults to `api{n}-{provider}`), `key_env` or
-`key`, `model`, `endpoint`, `region`, `cap`. Secrets are referenced **by name**, so
+`key`, `model`, `endpoint`, `region`, `cap`, `rpm`. Secrets are referenced **by name**, so
 `LLM_CREDENTIALS` itself carries no credential and is safe to log, print and show on an
 admin page. Unset it and the chain is one credential built from `LLM_PROVIDER` /
 `LLM_API_KEY` / `LLM_MODEL` / `AWS_REGION`, labelled with the provider name — every
@@ -284,11 +284,29 @@ answering with the first credential's answer would let one gateway entry anywher
 silently disable every filing on the site.
 
 **Failure.** A credential is tried at most once per call; within-provider retries belong
-to `_gemini_post` and only for the statuses that mean *busy*. On a quota answer (a 429,
-or the prose the SDK providers use) it is written off until the next UTC reset — the
-branch that matters for a free-tier key whose real allowance Google does not publish, so
-the configured `cap` is a guess. On any other failure it rests two minutes, so a DNS blip
-does not pin the site to the last key in the chain.
+to `_gemini_post` and only for the statuses that mean *busy*. A 429 is now split in two:
+`is_rate_limit_error` catches a **per-minute** burst — AWS's throttling exceptions, a
+generic "rate limit"/"too many requests", or a Gemini quota id containing `PerMinute` —
+and rests the credential for one minute, the width of the window it just blew. Everything
+else `is_quota_error` still recognises is treated as the **daily** allowance running out
+and written off until the next UTC reset, the branch that matters for a free-tier key
+whose real allowance Google does not publish, so the configured `cap` is a guess. On any
+other failure it rests two minutes, so a DNS blip does not pin the site to the last key
+in the chain.
+
+**RPM is the same idea, applied before the fact instead of after.** `cap=` is a daily
+budget; `rpm=` is a one-minute one, checked in `candidates()` exactly like `cap` — a
+credential that has already answered `rpm` calls in the trailing 60 seconds is skipped in
+favour of the next one in the chain, tracked per-process as a ring of recent monotonic
+timestamps on the credential's `_State`. This matters because Google's free tier is
+usually two numbers, not one (a generous per-day allowance and a much tighter per-minute
+one), and `worker.trial_tasks.run_due_jurors` can fire up to ten jurors in a handful of
+seconds — comfortably enough to blow a per-minute limit while the day's allowance still
+has thousands of calls left in it. Zero (the default) means unpaced. A rate-limited
+credential is **skipped, never waited on**: sleeping inside `_Chain`'s lock to ride out a
+window would be exactly the serialisation the module's own docstring says this is not,
+and a worker's next tick (15 seconds by default) is already a shorter wait than the
+60-second window would need anyway.
 
 **Caps are a budget, not a lock.** Counts come from `brain_calls`, refreshed once a
 minute per process, with this process's own attempts counted as they happen and the

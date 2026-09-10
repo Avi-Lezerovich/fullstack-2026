@@ -7,6 +7,27 @@ major number moves when an upgrade needs a step other than pulling the image.
 
 ## Unreleased
 
+**A credential can now be paced to a requests-per-minute budget, not just a daily one.**
+
+`worker.trial_tasks.run_due_jurors` can fire up to ten jurors in a handful of seconds. The
+existing `cap=` is a daily budget with thousands of calls to spare when that happens;
+Google's free tier also enforces a much tighter per-minute one that a burst like this can
+blow long before the daily allowance notices.
+
+- New `rpm=` field on a `LLM_CREDENTIALS` record (default 0, meaning unpaced). Checked in
+  `chain.candidates()` exactly like `cap=`: a credential that has already answered `rpm`
+  calls in the trailing 60 seconds is skipped in favour of the next one in the chain, not
+  waited on — see `chain.py`'s module docstring for why this is a skip rather than a
+  sleep.
+- A 429 is now split into two kinds. `chain.is_rate_limit_error` recognises a per-minute
+  burst (AWS throttling exceptions, a generic "rate limit"/"too many requests", or a
+  Gemini quota id containing `PerMinute`) and rests the credential for one minute instead
+  of writing it off until the next UTC reset — the previous behaviour, which cost nearly
+  a full day's real allowance over a four-second burst. A plain daily-quota answer (no
+  `PerMinute` marker) keeps the existing until-midnight cooldown.
+- `.env.example` and `prod/.env.example` document the new field; no new environment
+  variable is needed since `rpm=` rides inside the existing `LLM_CREDENTIALS` string.
+
 **The AI tab now says *why* calls are failing, not just how many.**
 
 A deployment where every Gemini call errors and one that is merely near its quota
