@@ -5,7 +5,17 @@ major number moves when an upgrade needs a step other than pulling the image.
 
 ---
 
-## Unreleased
+## 5.0.0
+
+**Upgrading needs one step beyond pulling the image** — a migration:
+
+```bash
+cd /opt/lolsuit && git pull
+mysql -h "$DB_HOST" -u "$DB_USER" -p "$DB_NAME" < prod/migrations/004-brain-credentials.sql
+```
+
+Take a snapshot first; unlike 003 it is not idempotent. Deployments that pin `LLM_MODEL`
+or `SOCIAL_EVERY_TICKS`, or that never set `LLM_CREDENTIALS`, behave exactly as before.
 
 **A credential can now be paced to a requests-per-minute budget, not just a daily one.**
 
@@ -96,15 +106,14 @@ variable itself holds no credential and is safe to log and display.
   its schema from `init.sql` alone, so a drifted migration would have passed everything
   here and failed only in production, as a silently swallowed INSERT.
 
-**Upgrading needs one step beyond pulling the image** — a migration:
+**The documented chain is now two credentials, not three.**
 
-```bash
-cd /opt/lolsuit && git pull
-mysql -h "$DB_HOST" -u "$DB_USER" -p "$DB_NAME" < prod/migrations/004-brain-credentials.sql
-```
-
-Take a snapshot first; unlike 003 it is not idempotent. Deployments that pin `LLM_MODEL`
-or `SOCIAL_EVERY_TICKS`, or that never set `LLM_CREDENTIALS`, behave exactly as before.
+`.env.example`, `prod/.env.example` and `docs/brain.md` show one free-tier Gemini key
+followed by Bedrock as the paid backstop it falls through to, and spell out why `cap=`
+and `rpm=` are the numbers they are - which a three-key example never had to.
+Configuration and documentation only: `chain.py` has always worked down a list of any
+length, and the AI tab builds one quota tile per configured credential rather than
+assuming a count.
 
 ---
 
