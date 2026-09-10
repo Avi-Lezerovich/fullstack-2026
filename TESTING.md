@@ -159,9 +159,10 @@ is behaviour rather than markup:
 
 ## Known gaps
 
-- **`app/brain/llm.py`** sits at 81%, and is the only file materially below the
-  rest. The remainder is live-network provider code, which the suite never
-  calls: `BRAIN_FORCE_OFFLINE=1` throughout, so no test reaches a model backend.
+- **`app/brain/llm/providers/base.py`** sits around 50%, and is the only file in
+  the `llm/` package materially below the rest. It is the Bedrock and direct-Anthropic
+  SDK client construction, which the suite never calls: `BRAIN_FORCE_OFFLINE=1`
+  throughout, so no test reaches a model backend.
 - **`worker/social_tasks.py`** sits at 84%. What is left is the branches where a
   model writes a filing — the offline generator takes a different path through
   `_lawsuit_target`, so those lines need a configured provider to reach.

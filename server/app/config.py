@@ -372,7 +372,7 @@ def get_settings() -> Settings:
         # The gateway provider's one endpoint, and the only thing it cannot
         # guess. Unused by the other providers, which know their own URLs.
         llm_endpoint=_str("LLM_ENDPOINT", ""),
-        # Empty means "whatever brain/llm.py defaults this provider to".
+        # Empty means "whatever brain/llm/registry.py defaults this provider to".
         llm_model=_str("LLM_MODEL", ""),
         # 60 seconds, not 10.
         #

@@ -51,7 +51,7 @@ HOUSE_VOICE = (
 # jokes ironed out. The two endpoints would have collapsed into one.
 #
 # So correction gets its own character sheet, and the whole of that character
-# is restraint. The task brief in brain/llm.py carries the hard rules; this
+# is restraint. The task brief in brain/llm/prompt.py carries the hard rules; this
 # block is what the model is being, and it is being a person who does not write.
 PROOFREADER_VOICE = (
     "אתה המגיה של בית המשפט. אתה מתקן עברית, אתה לא כותב עברית.\n\n"
