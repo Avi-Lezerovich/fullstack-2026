@@ -270,13 +270,25 @@ things worth knowing:
 `llm/` knows how to talk to one provider with one key. `chain.py` decides *which* key,
 in what order, and when to stop asking one that has said no.
 
-`LLM_CREDENTIALS` names them, in preference order:
+`LLM_CREDENTIALS` names them, in preference order. This deployment runs exactly two — the
+free-tier Gemini key, then Bedrock as the paid backstop it falls through to:
 
 ```
 LLM_CREDENTIALS=provider=gemini,label=api1-gemini,key_env=GEMINI_KEY_1,model=gemini-2.5-flash-lite,cap=1000,rpm=10;\
-                provider=gemini,label=api2-gemini,key_env=GEMINI_KEY_2,cap=1000,rpm=10;\
-                provider=bedrock,label=api3-bedrock,region=eu-central-1,cap=100
+                provider=bedrock,label=api2-bedrock,region=eu-central-1,cap=100
 ```
+
+Why those numbers. `cap=1000` is the published per-day allowance for
+`gemini-2.5-flash-lite`, and it belongs to the Google Cloud **project**, not to the key —
+which is the same fact that makes a second Gemini key pointless here and is why there is
+only one. `rpm=10` sits under that model's per-minute allowance with room to spare,
+because the counters below are kept per process (each gunicorn worker plus the scheduler)
+and the aggregate can overshoot; a juror burst past ten overflows onto Bedrock rather than
+earning a 429. Bedrock carries `cap=100` as a **bill ceiling**, not a quota — it is a paid
+account with no free-tier allowance to run out — and no `rpm`, because AWS answers a burst
+with a `ThrottlingException` that `is_rate_limit_error` already rests the credential for
+one minute over. With two credentials the chain is shorter than `DEFAULT_MAX_ATTEMPTS`,
+which is a ceiling rather than a requirement: `candidates()` simply returns what there is.
 
 Fields: `provider` (required), `label` (defaults to `api{n}-{provider}`), `key_env` or
 `key`, `model`, `endpoint`, `region`, `cap`, `rpm`. Secrets are referenced **by name**, so
