@@ -638,8 +638,8 @@ CREATE TABLE IF NOT EXISTS case_activity (
 --     working right now" from memory, for /api/health, and does not survive a
 --     restart or add up across gunicorn's several workers. This does both,
 --     which is what lets the admin usage dashboard show calls-per-day and lets
---     it check Gemini's 20-requests/day free tier before the app finds out by
---     getting rate limited.
+--     it check the configured model's free-tier allowance before the app
+--     finds out by getting rate limited.
 --
 --     `provider` is the backend actually attempted this call ('bedrock',
 --     'anthropic', 'gemini', 'gateway') - or literally 'offline' when nothing
@@ -648,6 +648,20 @@ CREATE TABLE IF NOT EXISTS case_activity (
 --     call still ended up offline, either because a capability was missing
 --     (`fallback_reason` names it) or because the call failed outright
 --     (`fallback_reason` is the exception's type and message).
+--
+--     `credential` is WHICH KEY answered - 'api1-gemini', not 'gemini' - and
+--     `model` is which model it answered with. Both matter because the thing
+--     being counted is somebody's quota, and quota belongs to a key and a
+--     model rather than to a vendor: Google's free allowance differs by a
+--     factor of fifty between two models of the same provider. Rows written
+--     before those columns existed hold the empty string, and every read uses
+--     COALESCE(NULLIF(credential,''), provider) so history shows up under its
+--     provider name rather than being dropped or mislabelled.
+--
+--     One row is ONE PROVIDER ATTEMPT, not one brain call. When a credential
+--     is rate-limited and the next one answers, that is two rows: the 429'd
+--     attempt really did spend one of Google's requests, and the counter that
+--     decides whether a key is spent is a COUNT(*) over exactly these rows.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS brain_calls (
   id              INT AUTO_INCREMENT PRIMARY KEY,
@@ -655,12 +669,16 @@ CREATE TABLE IF NOT EXISTS brain_calls (
   provider        VARCHAR(16)  NOT NULL,
   backend         ENUM('llm','offline') NOT NULL,
   success         TINYINT(1)   NOT NULL,
-  fallback_reason VARCHAR(300) NULL,
+  fallback_reason VARCHAR(500) NULL,
   input_tokens    INT NOT NULL DEFAULT 0,
   output_tokens   INT NOT NULL DEFAULT 0,
   cache_read      INT NOT NULL DEFAULT 0,
   cache_write     INT NOT NULL DEFAULT 0,
   created_at      DATETIME NOT NULL,
+  credential      VARCHAR(48) NOT NULL DEFAULT '',
+  model           VARCHAR(64) NOT NULL DEFAULT '',
+  latency_ms      INT NOT NULL DEFAULT 0,
   KEY idx_brain_calls_provider_day (provider, created_at),
-  KEY idx_brain_calls_task (task, created_at)
+  KEY idx_brain_calls_task (task, created_at),
+  KEY idx_brain_calls_day_credential (created_at, credential)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

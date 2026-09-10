@@ -5,6 +5,79 @@ major number moves when an upgrade needs a step other than pulling the image.
 
 ---
 
+## Unreleased
+
+**The AI tab now says *why* calls are failing, not just how many.**
+
+A deployment where every Gemini call errors and one that is merely near its quota
+produced the same climbing number on the dashboard. The sentence that told them apart
+had been written to `brain_calls.fallback_reason` on every failed call since the table
+existed, and was readable nowhere.
+
+- `GET /api/admin/brain/usage` gains `failures`: the last 24 hours of failure reasons,
+  grouped by provider and by the reason's first 80 characters, most common first.
+- The admin AI tab renders them above the quota gauge, LTR and monospace inside the RTL
+  page so model ids and URLs are not reordered by the surrounding direction.
+- Gemini HTTP errors now carry Google's own explanation. `urllib.error.HTTPError`
+  stringifies to `"HTTP Error 404: Not Found"`; the body that names the model or the
+  quota metric was read nowhere and dropped. `GeminiHttpError` keeps it, unwrapped from
+  the `{"error": {...}}` envelope, and carries `.code`.
+- Failure reasons are redacted of Google, Anthropic and AWS key shapes before they are
+  stored, since this is the release that puts them on a screen.
+
+**And the reason it was failing at all: the Gemini defaults did not fit any free tier.**
+
+- The `gemini` provider's default model moves from `gemini-3.7-flash` to
+  `gemini-2.5-flash-lite`. The old default was chosen against a "roughly 1,500 requests
+  a day" figure belonging to a different model; Google publishes no free allowance for
+  the newest Flash models and the measured one is around twenty. Flash-Lite is also the
+  better fit on the merits — a one-line juror vote and a filing are not reasoning-heavy.
+- `thinkingConfig` is now sent only to 3.x models. It is a 3.x field, a 2.x model answers
+  it with a 400, and 400 is deliberately not retried — so without this, configuring the
+  model with the best free tier in the family would have failed on every single call.
+- The quota gauge's cap follows the **configured model** instead of one provider-wide
+  `20`, and the tile names the model it is measuring against. One number for "Gemini" was
+  wrong by fifty times the moment the model changed.
+- `SOCIAL_EVERY_TICKS` defaults to `20` (five minutes) rather than `4` (one minute). Each
+  social pass costs at least one model call, so the old cadence set a floor near 1,440
+  calls a day — past every free tier Google publishes — and a free-tier deployment ran
+  out mid-morning every morning.
+
+**And a chain of credentials, with per-key accounting on the admin board.**
+
+`LLM_CREDENTIALS` names several credentials in preference order; a call works down them
+until one answers. Secrets are referenced by name (`key_env=GEMINI_KEY_1`), so the
+variable itself holds no credential and is safe to log and display.
+
+- New module `server/app/brain/chain.py`: selection, daily caps, and cooldowns. A
+  credential is tried at most once per call. A quota answer writes it off until the next
+  UTC reset; any other failure rests it two minutes.
+- Providers no longer read the environment for their own credentials — `is_configured`
+  judges a `Credential`, and each `_complete_*` is handed the one it should use.
+- `capabilities()` is now the union over the chain, so one `gateway` entry can no longer
+  silently disable every filing on the site.
+- `brain_calls` gains `credential`, `model` and `latency_ms`, and `fallback_reason`
+  widens to 500. **One row is one provider attempt**, not one brain call.
+- The AI tab shows a quota tile per key (`api1-gemini`, `api2-gemini`, `api3-bedrock`)
+  naming its model, and usage can be grouped by provider or by key. The single
+  provider-wide Gemini gauge is gone: it and the per-key tiles would have been two
+  different answers to one question.
+- A test asserts the migration and `init.sql` describe the same table. The suite builds
+  its schema from `init.sql` alone, so a drifted migration would have passed everything
+  here and failed only in production, as a silently swallowed INSERT.
+
+**Upgrading needs one step beyond pulling the image** — a migration:
+
+```bash
+cd /opt/lolsuit && git pull
+mysql -h "$DB_HOST" -u "$DB_USER" -p "$DB_NAME" < prod/migrations/004-brain-credentials.sql
+```
+
+Take a snapshot first; unlike 003 it is not idempotent. Deployments that pin `LLM_MODEL`
+or `SOCIAL_EVERY_TICKS`, or that never set `LLM_CREDENTIALS`, behave exactly as before.
+
+---
+
 ## 4.0.0
 
 **The admin dashboard grew past the moderation queue: a real AI usage history,

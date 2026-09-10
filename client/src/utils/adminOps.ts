@@ -22,9 +22,17 @@ export const hasBrainMismatch = (brain: BrainStatus): boolean =>
 
 export type QuotaSeverity = "ok" | "warning" | "error";
 
-/** <60% used reads as fine, <90% as worth watching, the rest as urgent. */
-export const geminiQuotaSeverity = (used: number, cap: number): QuotaSeverity => {
-  if (cap <= 0) return "error";
+/**
+ * <60% used reads as fine, <90% as worth watching, the rest as urgent.
+ *
+ * A cap of 0 means the allowance is not known - a paid account, or a provider
+ * that publishes no number - and reads as "ok" rather than "error". Treating
+ * an unknown cap as an emergency lit every uncapped credential red, which
+ * trains a reader to ignore the colour on the one tile where it means
+ * something.
+ */
+export const quotaSeverity = (used: number, cap: number): QuotaSeverity => {
+  if (cap <= 0) return "ok";
   const ratio = used / cap;
   if (ratio >= 0.9) return "error";
   if (ratio >= 0.6) return "warning";

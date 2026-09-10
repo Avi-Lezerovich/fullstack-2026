@@ -41,6 +41,7 @@ model having a bad day.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from typing import Any, Literal
 
@@ -167,8 +168,125 @@ class _LastCall:
 LAST_CALL = _LastCall()
 
 
+# Credentials that a provider's own error message can echo back at us. Google
+# in particular repeats the offending request in some 400 bodies, and since
+# `_gemini_http_error` now keeps that body, whatever it contains is on its way
+# to `fallback_reason` and from there to an admin's screen. Redacting at the
+# only place that writes that column is the one spot where it cannot be
+# forgotten.
+_SECRET_PATTERNS = (
+    re.compile(r"AIza[0-9A-Za-z_\-]{30,}"),
+    re.compile(r"sk-ant-[0-9A-Za-z_\-]{20,}"),
+    re.compile(r"ASIA[0-9A-Z]{16}|AKIA[0-9A-Z]{16}"),
+)
+
+
+def _redact(text: str) -> str:
+    for pattern in _SECRET_PATTERNS:
+        text = pattern.sub("***", text)
+    endpoint = get_settings().llm_endpoint
+    # A private gateway URL is not a password, but it is not ours to publish on
+    # a page that a site admin - who is not necessarily the operator - can read.
+    if endpoint:
+        text = text.replace(endpoint, "***")
+    return text
+
+
 def _err_str(exc: BaseException) -> str:
-    return f"{type(exc).__name__}: {exc}"[:300]
+    return _redact(f"{type(exc).__name__}: {exc}")[:300]
+
+
+_INSERT_CALL = (
+    "INSERT INTO brain_calls "
+    "(task, provider, credential, model, backend, success, fallback_reason, "
+    "input_tokens, output_tokens, cache_read, cache_write, latency_ms, created_at) "
+    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, UTC_TIMESTAMP())"
+)
+
+
+def _call_row(task, provider, backend, success, fallback_reason, usage) -> tuple:
+    """One row's parameters. `getattr` throughout because `usage` is often None.
+
+    The offline path logs with no usage object at all, and that has to keep
+    working - a usage log is not worth breaking the promise that generate()
+    never raises.
+    """
+    return (
+        task,
+        provider,
+        str(getattr(usage, "credential", "") or "")[:48],
+        str(getattr(usage, "model", "") or "")[:64],
+        backend,
+        success,
+        fallback_reason,
+        int(getattr(usage, "input_tokens", 0) or 0),
+        int(getattr(usage, "output_tokens", 0) or 0),
+        int(getattr(usage, "cache_read", 0) or 0),
+        int(getattr(usage, "cache_write", 0) or 0),
+        int(getattr(usage, "latency_ms", 0) or 0),
+    )
+
+
+def _log_attempts(task: str, attempts) -> None:
+    """One row per credential that was tried, not one per brain call.
+
+    This is the unit that matters and not a bookkeeping preference: a
+    credential that answered 429 really did spend one of somebody's requests,
+    and the counter deciding whether that key is exhausted is a COUNT(*) over
+    exactly these rows. Logging only the final give-up would under-count the
+    calls the cap exists to count, and the cap would then be wrong in the one
+    direction that costs money.
+
+    Swallows everything, for the same reason `_log_call` does: a juror is
+    mid-transaction when this runs.
+    """
+    if not attempts:
+        return
+    try:
+        from .. import db as db_module
+
+        conn = db_module.connect()
+        try:
+            for attempt in attempts:
+                conn.execute(
+                    _INSERT_CALL,
+                    (
+                        task,
+                        attempt.provider,
+                        attempt.credential[:48],
+                        attempt.model[:64],
+                        "llm" if attempt.ok else "offline",
+                        attempt.ok,
+                        _redact(attempt.error)[:500] if attempt.error else None,
+                        int(getattr(attempt.usage, "input_tokens", 0) or 0),
+                        int(getattr(attempt.usage, "output_tokens", 0) or 0),
+                        int(getattr(attempt.usage, "cache_read", 0) or 0),
+                        int(getattr(attempt.usage, "cache_write", 0) or 0),
+                        attempt.latency_ms,
+                    ),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        log.warning("failed to persist brain attempt rows", exc_info=True)
+
+
+def _log_failure(task: str, exc: BaseException) -> None:
+    """Persist a failed brain call - per credential when there were several.
+
+    An `AllCredentialsFailed` carries every attempt it made, and each of those
+    reached a provider and spent a request there. A single summary row would
+    make three exhausted keys look like one failed call, which is precisely
+    backwards for a counter whose job is to notice exhaustion.
+    """
+    from . import llm
+
+    attempts = getattr(exc, "attempts", ()) if isinstance(exc, llm.AllCredentialsFailed) else ()
+    if attempts:
+        _log_attempts(task, attempts)
+    else:
+        _log_call(task, backend="offline", success=False, fallback_reason=_err_str(exc))
 
 
 def _log_call(
@@ -198,23 +316,8 @@ def _log_call(
 
         conn = db_module.connect()
         try:
-            conn.execute(
-                "INSERT INTO brain_calls "
-                "(task, provider, backend, success, fallback_reason, "
-                "input_tokens, output_tokens, cache_read, cache_write, created_at) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, UTC_TIMESTAMP())",
-                (
-                    task,
-                    provider,
-                    backend,
-                    success,
-                    fallback_reason,
-                    int(getattr(usage, "input_tokens", 0) or 0),
-                    int(getattr(usage, "output_tokens", 0) or 0),
-                    int(getattr(usage, "cache_read", 0) or 0),
-                    int(getattr(usage, "cache_write", 0) or 0),
-                ),
-            )
+            conn.execute(_INSERT_CALL, _call_row(task, provider, backend, success,
+                                                 fallback_reason, usage))
             conn.commit()
         finally:
             conn.close()
@@ -282,7 +385,7 @@ def generate(
             # empty completion, network down - all the same from here: use the
             # offline brain. Recorded so it is not also *invisible* from here.
             LAST_CALL.record_llm_failure(exc)
-            _log_call(task, backend="offline", success=False, fallback_reason=_err_str(exc))
+            _log_failure(task, exc)
             log.warning("LLM backend failed; using the offline generator", exc_info=True)
     else:
         LAST_CALL.record_offline()
@@ -346,9 +449,7 @@ def invent_lawsuit(
             return filing
         except Exception as exc:
             LAST_CALL.record_llm_failure(exc)
-            _log_call(
-                "invent_lawsuit", backend="offline", success=False, fallback_reason=_err_str(exc)
-            )
+            _log_failure("invent_lawsuit", exc)
             if require_llm:
                 log.warning("LLM filing failed; no case filed", exc_info=True)
                 return None
@@ -398,7 +499,7 @@ def remember(personality_prompt: str, context: dict[str, Any]) -> dict[str, Any]
         return memory
     except Exception as exc:
         LAST_CALL.record_llm_failure(exc)
-        _log_call("remember", backend="offline", success=False, fallback_reason=_err_str(exc))
+        _log_failure("remember", exc)
         log.warning("memory rewrite failed; the old memory stands", exc_info=True)
         return None
 
@@ -448,9 +549,7 @@ def deliberate(
             }
         except Exception as exc:
             LAST_CALL.record_llm_failure(exc)
-            _log_call(
-                "jury_deliberation", backend="offline", success=False, fallback_reason=_err_str(exc)
-            )
+            _log_failure("jury_deliberation", exc)
             log.warning("deliberation failed; falling back to the dial", exc_info=True)
 
     vote = decide_vote(

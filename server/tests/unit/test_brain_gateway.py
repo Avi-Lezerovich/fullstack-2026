@@ -15,6 +15,7 @@ import json
 import pytest
 
 from app.brain import llm
+from app.config import Credential
 
 # These live in tests/unit and are hermetic - no database, no network - but
 # carried no marker, so `pytest -m unit` silently ran a fraction of the layer.
@@ -55,11 +56,24 @@ def _configured(monkeypatch):
     monkeypatch.setenv("BRAIN_FORCE_OFFLINE", "0")
 
 
+def _credential(**overrides) -> Credential:
+    return Credential(
+        **{
+            "label": "api1-gateway",
+            "provider": "gateway",
+            "api_key": "test-key",
+            "endpoint": "https://example.invalid/prod/suggest",
+            **overrides,
+        }
+    )
+
+
 def _complete(captured, reply, messages=None, system=None, **kwargs):
     captured["reply"] = reply
     return llm._complete_gateway(
         system or [{"type": "text", "text": "SYSTEM-MARKER"}],
         messages or [{"role": "user", "content": "PROMPT-MARKER"}],
+        credential=kwargs.pop("credential", None) or _credential(),
         model="",
         max_tokens=512,
         effort="low",
@@ -111,10 +125,19 @@ def test_needs_both_key_and_endpoint(monkeypatch):
     assert not llm.is_configured(get_settings())
 
 
-def test_missing_endpoint_raises_rather_than_posting_nowhere(monkeypatch, captured):
-    monkeypatch.setenv("LLM_ENDPOINT", "")
-    with pytest.raises(ValueError, match="LLM_ENDPOINT"):
-        _complete(captured, {"text": "unused"})
+def test_a_credential_without_an_endpoint_raises_rather_than_posting_nowhere(captured):
+    """The endpoint belongs to the credential now, not to the environment.
+
+    A chain can hold two gateway entries pointing at different deployments, so
+    "LLM_ENDPOINT is missing" would name a variable that decides nothing; the
+    error names the credential that is short of one.
+    """
+    with pytest.raises(ValueError, match="api2-gateway"):
+        _complete(
+            captured,
+            {"text": "unused"},
+            credential=_credential(label="api2-gateway", endpoint=""),
+        )
 
 
 # --- the request ------------------------------------------------------------

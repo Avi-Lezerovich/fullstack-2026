@@ -228,8 +228,32 @@ human's judgment" but "is the machinery healthy".
 
 | Method | Path | Auth |
 |---|---|---|
-| GET | `/admin/brain/usage` | admin — `today`, `this_week`, and the Gemini quota tile |
+| GET | `/admin/brain/usage` | admin — `today`, `week`, `credentials`, `by_credential`, `by_credential_week`, `failures` |
 | GET | `/admin/overview` | admin — site tiles |
+
+`credentials` is one tile per **configured** credential — driven by the chain rather than
+by the table, so a key that has made no calls today still appears; "api3-bedrock has done
+nothing" is a fact worth seeing, and a board built from rows alone would omit exactly the
+credential somebody is asking about. `cap: 0` means the allowance is not published (a
+paid account, or Bedrock) and is reported as zero rather than guessed at.
+
+`by_credential` groups usage by `(credential, model)`. One row is one provider **attempt**,
+not one brain call: a rate-limited credential and the one that answered after it are two
+rows, which is the unit that maps 1:1 to a request against somebody's quota. Rows written
+before credentials existed appear under their provider name via
+`COALESCE(NULLIF(credential, ''), provider)`.
+
+Deliberately absent: the chain's in-memory cooldowns. Those belong to one process, the
+worker makes most of the calls, and a tile drawn from the API process's memory would be a
+confident statement about a machine it cannot see. `/api/health` is where "this process,
+right now" lives.
+
+`failures` groups the last 24 hours of `brain_calls.fallback_reason` by provider and by
+the reason's first 80 characters, most common first. It exists because the quota gauge
+alone cannot tell "near the cap" apart from "every call is erroring" — both are a
+climbing number — and the sentence that distinguishes them had been written to the
+database on every failed call since the table existed without ever being readable.
+Reasons are redacted of API keys on the way in (`brain/__init__.py`'s `_redact`).
 
 System health itself is deliberately not duplicated here: `/api/health` already answers
 it and is already unauthenticated, so the admin UI calls that endpoint directly.

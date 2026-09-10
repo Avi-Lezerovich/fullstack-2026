@@ -352,9 +352,16 @@ The `provider` / `backend` distinction on `brain_calls` is the point of the tabl
 
 [`brain_usage_service`](../server/app/services/brain_usage_service.py) aggregates it:
 `usage_today()` and `usage_this_week()` group by provider (calls, successes, failures,
-fallbacks, tokens, cache reads/writes), and `gemini_quota_today()` counts today's Gemini
-calls against `GEMINI_FREE_TIER_DAILY_CAP = 20` — every attempt, successful or not,
-because a failed call still spends one of Google's twenty.
+fallbacks, tokens, cache reads/writes), `recent_failures()` groups the last 24 hours of
+`fallback_reason` so a run of identical errors reads as one fact, and
+`usage_by_credential()` groups by `(credential, model)`, and `credential_quotas()` counts
+each configured credential's calls against its allowance — every attempt, successful or
+not, because a failed call still spends one of Google's requests. An unset `cap=` falls
+back to `gemini_daily_cap(model)` rather than to a single provider-wide constant: the
+allowance is ~1,000/day on `gemini-2.5-flash-lite` and an unpublished figure in the tens
+on the newest Flash models, so one number for "Gemini" was wrong by fifty times as soon as
+the model changed. `spend_today()` is the same count, keyed by label, and is what the
+credential chain reads to decide whether a key is spent.
 
 ### The worker
 

@@ -455,16 +455,38 @@ export interface ProviderUsage {
   cache_write: number;
 }
 
-export interface GeminiQuota {
+export interface BrainFailure {
+  provider: string;
+  reason: string;
+  calls: number;
+  last_seen: string;
+}
+
+/** One row per (credential, model). A row is one provider ATTEMPT. */
+export interface CredentialUsage extends ProviderUsage {
+  credential: string;
+  model: string;
+  avg_latency_ms: number;
+}
+
+/** One tile per configured credential. `cap: 0` means the allowance is unknown. */
+export interface CredentialQuota {
+  credential: string;
+  provider: string;
+  model: string;
   used: number;
   cap: number;
   remaining: number;
+  exhausted: boolean;
 }
 
 export interface BrainUsageResponse {
   today: ProviderUsage[];
   week: ProviderUsage[];
-  gemini_quota: GeminiQuota;
+  credentials: CredentialQuota[];
+  by_credential: CredentialUsage[];
+  by_credential_week: CredentialUsage[];
+  failures: BrainFailure[];
 }
 
 export const fetchBrainUsage = () => request<BrainUsageResponse>("/admin/brain/usage");

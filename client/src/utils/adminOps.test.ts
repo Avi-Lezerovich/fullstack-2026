@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { geminiQuotaSeverity, hasBrainMismatch, isWorkerTicking } from "./adminOps";
+import { hasBrainMismatch, isWorkerTicking, quotaSeverity } from "./adminOps";
 import type { BrainStatus } from "../api";
 
 /**
@@ -56,20 +56,25 @@ describe("hasBrainMismatch", () => {
   });
 });
 
-describe("geminiQuotaSeverity", () => {
+describe("quotaSeverity", () => {
   it("reads as fine comfortably under the cap", () => {
-    expect(geminiQuotaSeverity(5, 20)).toBe("ok");
+    expect(quotaSeverity(5, 20)).toBe("ok");
   });
 
   it("turns into a warning once more than half is spent", () => {
-    expect(geminiQuotaSeverity(12, 20)).toBe("warning");
+    expect(quotaSeverity(12, 20)).toBe("warning");
   });
 
   it("turns urgent once the quota is nearly gone", () => {
-    expect(geminiQuotaSeverity(19, 20)).toBe("error");
+    expect(quotaSeverity(19, 20)).toBe("error");
   });
 
-  it("treats a used-up cap as urgent, not as a division by a coincidence", () => {
-    expect(geminiQuotaSeverity(0, 0)).toBe("error");
+  it("treats an unknown cap as fine rather than as an emergency", () => {
+    // A cap of 0 means "allowance not published" - a paid account, or Bedrock
+    // - and is the common case rather than the odd one. Reading it as an
+    // error lit every uncapped credential red, which teaches a reader to
+    // ignore the colour on the one tile where it means something.
+    expect(quotaSeverity(0, 0)).toBe("ok");
+    expect(quotaSeverity(5000, 0)).toBe("ok");
   });
 });

@@ -64,6 +64,16 @@ x-db-env: &db-env
   DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required - refusing to start production with a default}
 
 x-brain-env: &brain-env
+  # The credential chain, if there is one. Set it and LLM_PROVIDER/LLM_MODEL/
+  # LLM_API_KEY below are ignored; leave it empty and they describe the single
+  # credential exactly as they always did. Secrets are referenced by name from
+  # inside it (`key_env=GEMINI_KEY_1`), so this variable holds no credential
+  # and each key stays a first-class variable that SSM or Secrets Manager can
+  # inject on its own.
+  LLM_CREDENTIALS: ${LLM_CREDENTIALS:-}
+  GEMINI_KEY_1: ${GEMINI_KEY_1:-}
+  GEMINI_KEY_2: ${GEMINI_KEY_2:-}
+  GEMINI_KEY_3: ${GEMINI_KEY_3:-}
   LLM_PROVIDER: ${LLM_PROVIDER:-}
   LLM_MODEL: ${LLM_MODEL:-}
   LLM_API_KEY: ${LLM_API_KEY:-}
@@ -86,6 +96,10 @@ x-brain-env: &brain-env
   BRAIN_FORCE_OFFLINE: ${BRAIN_FORCE_OFFLINE:-1}
   # Operator-set list of current subjects the bots may sue. See .env.example.
   TOPICAL_SUBJECTS: ${TOPICAL_SUBJECTS:-}
+  # How often the bots act, and therefore how much quota they spend. Every
+  # social pass costs at least one model call, so this is the first dial to
+  # reach for when a free tier is running out - see docs/brain.md.
+  SOCIAL_EVERY_TICKS: ${SOCIAL_EVERY_TICKS:-}
 
 services:
   # ---------------------------------------------------------------------------

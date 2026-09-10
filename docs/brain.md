@@ -204,7 +204,7 @@ capabilities)`. `capabilities()` never raises — an unknown `LLM_PROVIDER` can 
 |---|---|---|---|
 | `bedrock` | the AWS credential chain; gated on `AWS_REGION` | `anthropic.claude-opus-5` | yes |
 | `anthropic` | `LLM_API_KEY` | `claude-opus-5` | yes |
-| `gemini` | `LLM_API_KEY` | `gemini-3.7-flash` | yes |
+| `gemini` | `LLM_API_KEY` | `gemini-2.5-flash-lite` | yes |
 | `gateway` | `LLM_API_KEY` **and** `LLM_ENDPOINT` | chosen by the far side | **no** |
 
 `bedrock` and `anthropic` share `_complete_sdk`, which differs only in client
@@ -230,6 +230,15 @@ things worth knowing:
 - `_gemini_schema` drops the keywords Gemini's OpenAPI-subset validator rejects
   (`_GEMINI_SCHEMA_DROP`: `additionalProperties`, `$schema`, `definitions`, `$defs`).
   `LAWSUIT_SCHEMA` sets `additionalProperties`, so without this every filing would 400.
+- Every `HTTPError` is converted to a **`GeminiHttpError`** at the point it is caught,
+  because `exc.read()` works once and only there. `urllib`'s own exception stringifies to
+  `"HTTP Error 404: Not Found"` and nothing else, while the sentence that names the fault
+  — `models/gemini-3.7-flash is not found for API version v1beta`, or the exhausted quota
+  metric — is in the body. `_gemini_http_error` unwraps Google's `{"error": {...}}`
+  envelope down to `status` + `message`: the envelope alone is 45 characters, and the
+  admin dashboard groups failures on the first 80, so keeping it raw would spend the whole
+  budget on punctuation and truncate before the model id. `.code` is kept as an attribute
+  so callers can branch without parsing prose.
 - `_gemini_post` retries `_GEMINI_RETRY_STATUS` (408/429/500/502/503/504) three times
   with jittered exponential backoff. 503 is the one that matters: the free tier is shared
   with everyone else on it. The jitter is not decoration — every bot shares one key and
@@ -242,6 +251,67 @@ things worth knowing:
   `MAX_TOKENS` finish with a schema raises a message naming the budget and the thinking
   spend, because the raw `json.loads` failure reads as a model that cannot follow a
   schema — the wrong culprit.
+
+### The credential chain — `chain.py`
+
+`llm.py` knows how to talk to one provider with one key. `chain.py` decides *which* key,
+in what order, and when to stop asking one that has said no.
+
+`LLM_CREDENTIALS` names them, in preference order:
+
+```
+LLM_CREDENTIALS=provider=gemini,label=api1-gemini,key_env=GEMINI_KEY_1,model=gemini-2.5-flash-lite,cap=1000;\
+                provider=gemini,label=api2-gemini,key_env=GEMINI_KEY_2,cap=1000;\
+                provider=bedrock,label=api3-bedrock,region=eu-central-1,cap=100
+```
+
+Fields: `provider` (required), `label` (defaults to `api{n}-{provider}`), `key_env` or
+`key`, `model`, `endpoint`, `region`, `cap`. Secrets are referenced **by name**, so
+`LLM_CREDENTIALS` itself carries no credential and is safe to log, print and show on an
+admin page. Unset it and the chain is one credential built from `LLM_PROVIDER` /
+`LLM_API_KEY` / `LLM_MODEL` / `AWS_REGION`, labelled with the provider name — every
+deployment that changes nothing behaves exactly as it did, and rows written before
+credentials existed (which have no label) read back under that same name.
+
+A record that cannot be parsed is **skipped into `Settings.llm_credential_errors`**, never
+raised: `get_settings()` runs on every database connection, so a typo that raised would
+take the site down rather than the brain.
+
+**Selection.** A credential is a candidate when it names a known provider, has what that
+provider needs, can do the task (a `gateway` entry is never offered a structured one),
+is under its cap, and is not cooling. `capabilities()` is the **union** over the chain —
+answering with the first credential's answer would let one gateway entry anywhere
+silently disable every filing on the site.
+
+**Failure.** A credential is tried at most once per call; within-provider retries belong
+to `_gemini_post` and only for the statuses that mean *busy*. On a quota answer (a 429,
+or the prose the SDK providers use) it is written off until the next UTC reset — the
+branch that matters for a free-tier key whose real allowance Google does not publish, so
+the configured `cap` is a guess. On any other failure it rests two minutes, so a DNS blip
+does not pin the site to the last key in the chain.
+
+**Caps are a budget, not a lock.** Counts come from `brain_calls`, refreshed once a
+minute per process, with this process's own attempts counted as they happen and the
+larger of the two figures used. Gunicorn workers and the scheduler each keep their own
+copy, so the true aggregate can overshoot by roughly (processes × calls per refresh).
+Making it exact would serialise every model call behind one row in MySQL; the 429 handler
+is the real backstop, and over-counting — retiring a credential slightly early — is the
+safe direction.
+
+> **The quota fact that motivates all of this.** Google's free tier is per Google Cloud
+> **project**, not per API key. Three keys minted in one project share one allowance and
+> buy nothing. Distinct projects have distinct allowances, but Google's terms forbid
+> creating or rotating projects to evade a quota — so credentials in this chain should be
+> ones that exist for their own reasons (a different owner, a different vendor, a
+> different billing arrangement), not ones farmed to add up. The allowance also varies by
+> **model** by a factor of fifty: ~1,000/day on `gemini-2.5-flash-lite`, unpublished and
+> measured in tens on the newest Flash models. Set `cap=` from the published RPD of the
+> model that credential names, and name a model you have verified exists.
+
+**One usage row per attempt.** When a credential is rate-limited and the next one
+answers, that is two `brain_calls` rows. This is the honest unit: the 429'd attempt spent
+one of somebody's requests, and the counter deciding whether a key is exhausted is a
+`COUNT(*)` over exactly these rows.
 
 ### The three structured tasks
 
@@ -410,10 +480,12 @@ wrote hands back prose they did not write, with their own jokes ironed out.
 
 | Variable | Default | Notes |
 |---|---|---|
-| `LLM_PROVIDER` | `bedrock` | one of `bedrock`, `anthropic`, `gemini`, `gateway` |
+| `LLM_CREDENTIALS` | *(empty)* | the chain, in order. `;`-separated records of `key=value` fields — see above. Empty means "the single credential the four variables below describe" |
+| `GEMINI_KEY_1` … | *(empty)* | whatever `key_env=` in a record points at. The name is yours; these three are pre-declared in the compose files |
+| `LLM_PROVIDER` | `bedrock` | one of `bedrock`, `anthropic`, `gemini`, `gateway`. Ignored when `LLM_CREDENTIALS` is set |
 | `LLM_API_KEY` | *(empty)* | used by `anthropic`, `gemini`, `gateway`. Bedrock ignores it entirely — a key set alongside `LLM_PROVIDER=bedrock` is a decoy, not a credential |
 | `LLM_ENDPOINT` | *(empty)* | required by, and only by, the `gateway` provider |
-| `LLM_MODEL` | *(empty)* | empty means "this provider's `default_model`" |
+| `LLM_MODEL` | *(empty)* | empty means "this provider's `default_model`". Ignored when `LLM_CREDENTIALS` is set |
 | `LLM_TIMEOUT_SECONDS` | `60` | not 10. Current models think before answering, and every timed-out call used to land silently in the offline generator with `/api/health` still reporting a working backend |
 | `AWS_REGION` / `AWS_DEFAULT_REGION` | *(empty)* | what gates the `bedrock` provider |
 | `BRAIN_FORCE_OFFLINE` | `false` | forces the deterministic path (compose defaults it to `1`) |

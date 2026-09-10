@@ -66,10 +66,11 @@ import random
 import time
 import urllib.error
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable
 
 from ..config import get_settings
+from . import chain
 from . import offline
 
 log = logging.getLogger(__name__)
@@ -570,6 +571,13 @@ class Completion:
     output_tokens: int = 0
     cache_read: int = 0
     cache_write: int = 0
+    # Which credential and model actually answered, stamped by the chain after
+    # the call rather than by the provider - the provider functions stay
+    # ignorant of the chain, which is what keeps adding one a single entry in
+    # PROVIDERS. Defaulted so every existing construction site still compiles.
+    credential: str = ""
+    model: str = ""
+    latency_ms: int = 0
 
 
 def _usage_of(message: Any, text: str) -> Completion:
@@ -621,33 +629,31 @@ def _complete_sdk(
     return _usage_of(message, _text_of(message))
 
 
-def _complete_bedrock(system, messages, **kwargs: Any) -> Completion:
+def _complete_bedrock(system, messages, *, credential, **kwargs: Any) -> Completion:
     """Claude on Amazon Bedrock, via the SDK's Mantle (Messages API) client.
 
     Credentials come from the standard AWS chain - AWS_ACCESS_KEY_ID and
     friends, a shared profile named by AWS_PROFILE, or the EC2/ECS role - and
-    never from LLM_API_KEY. Region is the one thing the client will not infer,
-    which is why AWS_REGION is what gates this provider.
+    never from an API key. Region is the one thing the client will not infer,
+    which is why the region is what gates this provider.
     """
     from anthropic import AnthropicBedrockMantle
 
-    settings = get_settings()
     client = AnthropicBedrockMantle(
-        aws_region=settings.aws_region,
-        timeout=settings.llm_timeout_seconds,
+        aws_region=credential.aws_region,
+        timeout=get_settings().llm_timeout_seconds,
         max_retries=1,
     )
     return _complete_sdk(client, system, messages, **kwargs)
 
 
-def _complete_anthropic(system, messages, **kwargs: Any) -> Completion:
-    """Claude on the direct Anthropic API, keyed by LLM_API_KEY."""
+def _complete_anthropic(system, messages, *, credential, **kwargs: Any) -> Completion:
+    """Claude on the direct Anthropic API, keyed by this credential's key."""
     import anthropic
 
-    settings = get_settings()
     client = anthropic.Anthropic(
-        api_key=settings.llm_api_key,
-        timeout=settings.llm_timeout_seconds,
+        api_key=credential.api_key,
+        timeout=get_settings().llm_timeout_seconds,
         max_retries=1,
     )
     return _complete_sdk(client, system, messages, **kwargs)
@@ -710,6 +716,7 @@ def _complete_gateway(
     system: list[dict[str, Any]],
     messages: list[dict[str, str]],
     *,
+    credential,
     model: str,
     max_tokens: int,
     effort: str,
@@ -759,9 +766,10 @@ def _complete_gateway(
 
     Usage counters come back empty, which is honest: there is nothing to count.
     """
-    settings = get_settings()
-    if not settings.llm_endpoint:
-        raise ValueError("LLM_ENDPOINT is required by the gateway provider")
+    if not credential.endpoint:
+        raise ValueError(
+            f"credential {credential.label!r} has no endpoint, which the gateway needs"
+        )
 
     text_prompt = f"{_flatten_system(system)}\n\n{_flatten(messages)}"
     if output_format is not None:
@@ -776,12 +784,13 @@ def _complete_gateway(
         )
 
     request = urllib.request.Request(
-        settings.llm_endpoint,
+        credential.endpoint,
         data=json.dumps({"prompt": text_prompt}).encode("utf-8"),
         method="POST",
-        headers={"Content-Type": "application/json", "x-api-key": settings.llm_api_key},
+        headers={"Content-Type": "application/json", "x-api-key": credential.api_key},
     )
-    with urllib.request.urlopen(request, timeout=settings.llm_timeout_seconds) as response:
+    timeout = get_settings().llm_timeout_seconds
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         payload = json.loads(response.read().decode("utf-8"))
 
     text = ""
@@ -879,12 +888,85 @@ _GEMINI_DEFAULT_THINKING = "low"
 _GEMINI_THINKING_HEADROOM = {"minimal": 0, "low": 512, "medium": 8192, "high": 12288}
 
 
+def _gemini_thinks(model: str) -> bool:
+    """Whether `thinkingConfig.thinkingLevel` is a field this model has.
+
+    It is a 3.x field. A 2.x model answers it with a 400 naming the unknown
+    field - and 400 is deliberately not retried, so it fails fast, once per
+    call, on every call, which is indistinguishable on a dashboard from a
+    dead key. That is not hypothetical: the comment above predicted it, and
+    the 2.5 Flash-Lite line is the one worth configuring here, because it is
+    the model whose free tier is measured in thousands of requests a day
+    rather than tens.
+    """
+    return model.startswith("gemini-3")
+
+
+# How much of Google's error body to keep. Long enough for the sentence that
+# names the model or the quota metric, short enough to survive the VARCHAR(300)
+# that `fallback_reason` is stored in.
+_GEMINI_ERROR_BODY_CHARS = 400
+
+
+class GeminiHttpError(Exception):
+    """An HTTP error from Google, WITH the body that says what went wrong.
+
+    `urllib.error.HTTPError` stringifies to "HTTP Error 404: Not Found" and
+    nothing else. The sentence that actually identifies the fault - "models/
+    gemini-3.7-flash is not found for API version v1beta", or the name of the
+    exhausted quota metric - is in the response body, which is readable exactly
+    once and is otherwise dropped on the floor. That loss is not academic: it
+    is the difference between an operator reading their dashboard and knowing
+    the model id is wrong, and reading "HTTP Error 404" and guessing.
+
+    `.code` is kept as an attribute rather than only in the message so callers
+    can branch on it without parsing prose.
+    """
+
+    def __init__(self, code: int, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def _gemini_http_error(exc: urllib.error.HTTPError) -> GeminiHttpError:
+    """Read the body while it is still readable, and name the fault with it.
+
+    Google answers with `{"error": {"code", "message", "status"}}`, and only
+    `message` says anything a person can act on. Unwrapping it rather than
+    keeping the raw JSON is not tidiness: the message is stored in a bounded
+    column and grouped, on the dashboard, by its first 80 characters - and the
+    envelope alone is 45 of them, so a raw body would spend the whole budget on
+    punctuation and truncate immediately before the model id that identifies
+    the fault. The envelope is kept only when it is not the shape we expect.
+    """
+    try:
+        raw = exc.read().decode("utf-8", "replace").strip()
+    except Exception:  # pragma: no cover - a body that cannot be read at all
+        raw = ""
+
+    detail = ""
+    try:
+        error = json.loads(raw).get("error") or {}
+        detail = " ".join(
+            str(part) for part in (error.get("status"), error.get("message")) if part
+        )
+    except (ValueError, AttributeError):
+        detail = raw
+
+    detail = " ".join(detail.split())[:_GEMINI_ERROR_BODY_CHARS]
+    return GeminiHttpError(exc.code, f"gemini HTTP {exc.code}: {detail or exc.reason}")
+
+
 def _gemini_post(request: urllib.request.Request, timeout: float) -> dict[str, Any]:
     """POST with backoff on the failures that are Google being busy.
 
     The jitter is not decoration. Every bot on this site shares one API key and
     the worker fires them on a fixed tick, so a fixed backoff would line the
     retries up into exactly the thundering herd the retry is meant to survive.
+
+    Every HTTPError is converted to a `GeminiHttpError` at the point it is
+    caught, because `exc.read()` works once and only before the exception has
+    been passed around - so it has to happen here or not at all.
     """
     last: Exception | None = None
     for attempt in range(_GEMINI_ATTEMPTS):
@@ -895,9 +977,10 @@ def _gemini_post(request: urllib.request.Request, timeout: float) -> dict[str, A
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
+            error = _gemini_http_error(exc)
             if exc.code not in _GEMINI_RETRY_STATUS:
-                raise
-            last = exc
+                raise error from None
+            last = error
         except (TimeoutError, urllib.error.URLError) as exc:
             last = exc
     assert last is not None
@@ -925,6 +1008,7 @@ def _complete_gemini(
     system: list[dict[str, Any]],
     messages: list[dict[str, str]],
     *,
+    credential,
     model: str,
     max_tokens: int,
     effort: str,
@@ -959,9 +1043,8 @@ def _complete_gemini(
       add SSE parsing to buy nothing. If a slower Gemini model is ever
       configured here, this is the first thing to revisit.
     """
-    settings = get_settings()
-    if not settings.llm_api_key:
-        raise ValueError("LLM_API_KEY is required by the gemini provider")
+    if not credential.api_key:
+        raise ValueError(f"credential {credential.label!r} has no API key")
 
     level = effort if effort in _GEMINI_THINKING_LEVELS else _GEMINI_DEFAULT_THINKING
 
@@ -974,11 +1057,15 @@ def _complete_gemini(
             }
             for message in messages
         ],
-        "generationConfig": {
-            "maxOutputTokens": max_tokens + _GEMINI_THINKING_HEADROOM[level],
-            "thinkingConfig": {"thinkingLevel": level},
-        },
+        "generationConfig": {"maxOutputTokens": max_tokens},
     }
+    if _gemini_thinks(model):
+        # The headroom is added only alongside the dial that makes it
+        # necessary: without thinking, `max_tokens` is spent on the answer
+        # alone and the extra budget would only raise the ceiling on a
+        # runaway generation.
+        body["generationConfig"]["maxOutputTokens"] += _GEMINI_THINKING_HEADROOM[level]
+        body["generationConfig"]["thinkingConfig"] = {"thinkingLevel": level}
     if output_format is not None:
         body["generationConfig"]["responseMimeType"] = "application/json"
         body["generationConfig"]["responseSchema"] = _gemini_schema(
@@ -991,10 +1078,10 @@ def _complete_gemini(
         method="POST",
         headers={
             "Content-Type": "application/json",
-            "x-goog-api-key": settings.llm_api_key,
+            "x-goog-api-key": credential.api_key,
         },
     )
-    payload = _gemini_post(request, settings.llm_timeout_seconds)
+    payload = _gemini_post(request, get_settings().llm_timeout_seconds)
 
     # A blocked prompt comes back 200 with no candidates at all. Saying so
     # beats "empty completion from gemini", which would send the caller looking
@@ -1091,7 +1178,8 @@ class Provider:
     """One backend: how to call it, when it is usable, what it runs by default."""
 
     complete: Callable[..., Completion]
-    # Given a Settings, is this provider credentialed enough to be worth trying?
+    # Given a Credential, is this provider credentialed enough to be worth
+    # trying?
     # Cheap and local - a real check would mean a network round trip on every
     # health poll. Anything it cannot see (a missing SDK, an expired role, a
     # revoked key) surfaces as a failed call, falls back like any other error,
@@ -1105,31 +1193,51 @@ class Provider:
 PROVIDERS: dict[str, Provider] = {
     "bedrock": Provider(
         complete=_complete_bedrock,
-        is_configured=lambda settings: bool(settings.aws_region),
+        is_configured=lambda credential: bool(credential.aws_region),
         default_model="anthropic.claude-opus-5",
         capabilities=SDK_CAPABILITIES,
     ),
     "anthropic": Provider(
         complete=_complete_anthropic,
-        is_configured=lambda settings: bool(settings.llm_api_key),
+        is_configured=lambda credential: bool(credential.api_key),
         default_model="claude-opus-5",
         capabilities=SDK_CAPABILITIES,
     ),
     "gemini": Provider(
         complete=_complete_gemini,
         # One key, one host - Google needs no region and no endpoint of its own.
-        is_configured=lambda settings: bool(settings.llm_api_key),
-        # Flash is the point of this provider: a real schema on a free tier
-        # that allows roughly 1,500 requests a day, which is several times what
-        # this site actually spends.
-        default_model="gemini-3.7-flash",
+        is_configured=lambda credential: bool(credential.api_key),
+        # VERIFY THIS AGAINST YOUR OWN KEY BEFORE TRUSTING IT. Google's model
+        # availability differs per account: a measurement taken against this
+        # project on 2026-09-01 had every 2.5-series model answering 404 "no
+        # longer available to new users", while the published free-tier figures
+        # below describe models that account could not reach. The admin AI
+        # tab's failure panel now shows Google's own message, so one call
+        # settles it - and a 404 here is a 100% failure rate, not a slow day.
+        #
+        # Flash-Lite, not the newest Flash. The point of this provider is a
+        # real schema on a free tier, and the free tier is not uniform across
+        # models: Google publishes ~1,000 requests a day for 2.5 Flash-Lite
+        # and publishes nothing at all for the current-generation Flash
+        # models, whose measured allowance is around twenty. This provider was
+        # previously defaulted to `gemini-3.7-flash` on the strength of a
+        # "roughly 1,500 a day" figure that belongs to a different model, and
+        # the court spent its whole daily allowance before anyone was awake.
+        #
+        # Flash-Lite is also the right answer on the merits and not only on
+        # price: the tasks routed here are a juror's one-line vote, a filing
+        # and a memory rewrite, none of which is reasoning-heavy, and it is
+        # the fastest model in the family. Should this ever move to a paid
+        # tier it is $0.10/$0.40 per million tokens - a rounding error at this
+        # site's volume.
+        default_model="gemini-2.5-flash-lite",
         capabilities=SDK_CAPABILITIES,
     ),
     "gateway": Provider(
         complete=_complete_gateway,
         # Both halves matter: the key alone cannot say where to send itself.
-        is_configured=lambda settings: bool(
-            settings.llm_api_key and settings.llm_endpoint
+        is_configured=lambda credential: bool(
+            credential.api_key and credential.endpoint
         ),
         # The endpoint picks the model, so there is no default to name here.
         default_model="",
@@ -1138,31 +1246,140 @@ PROVIDERS: dict[str, Provider] = {
 }
 
 
+def usable(credential: Any) -> bool:
+    """Whether this one credential names a provider and has what it needs."""
+    provider = PROVIDERS.get(credential.provider)
+    return provider is not None and provider.is_configured(credential)
+
+
 def is_configured(settings: Any) -> bool:
-    """Whether the configured provider is set up enough to try at all."""
-    provider = PROVIDERS.get(settings.llm_provider)
-    return provider is not None and provider.is_configured(settings)
+    """Whether ANY credential in the chain is worth trying at all.
+
+    Any, not all: a chain whose third entry is missing its key is a chain of
+    two, not a broken deployment. The missing one is reported through
+    `Settings.llm_credential_errors` and by never being selected.
+    """
+    return any(usable(credential) for credential in settings.llm_chain)
 
 
 def capabilities() -> Capabilities:
-    """What the configured provider can do. An unknown provider can do nothing.
+    """What the chain can do - the UNION over its usable credentials.
+
+    The union, not the first entry's answer, because `brain` reads this to
+    decide whether a task is possible at all ("can I get an enforced enum
+    anywhere?") and then the chain filters to the credentials that can
+    actually deliver it. Answering with the first credential's capabilities
+    would let one gateway entry sitting anywhere in the chain silently
+    disable every filing on the site.
 
     Never raises: this is read on paths that only want to decide whether to
     attempt something, and "no" is a complete answer for a misconfigured
-    LLM_PROVIDER. The call itself still raises loudly when it is actually made.
+    chain. The call itself still raises loudly when it is actually made.
     """
-    provider = PROVIDERS.get(get_settings().llm_provider)
-    return provider.capabilities if provider else Capabilities(structured_output=False)
+    return Capabilities(
+        structured_output=any(
+            PROVIDERS[credential.provider].capabilities.structured_output
+            for credential in get_settings().llm_chain
+            if usable(credential)
+        )
+    )
 
 
-def _provider_and_model(settings: Any) -> tuple[Provider, str]:
-    name = settings.llm_provider
-    provider = PROVIDERS.get(name)
+def resolve(credential: Any) -> tuple[Provider, str]:
+    """The provider that serves this credential, and the model to ask for."""
+    provider = PROVIDERS.get(credential.provider)
     if provider is None:
         raise ValueError(
-            f"unknown LLM_PROVIDER {name!r}; known: {', '.join(sorted(PROVIDERS))}"
+            f"credential {credential.label!r} names unknown provider "
+            f"{credential.provider!r}; known: {', '.join(sorted(PROVIDERS))}"
         )
-    return provider, (settings.llm_model or provider.default_model)
+    return provider, (credential.model or provider.default_model)
+
+
+@dataclass(frozen=True)
+class Attempt:
+    """One credential's turn at a call: what it was asked, and how it went."""
+
+    credential: str
+    provider: str
+    model: str
+    ok: bool
+    latency_ms: int
+    error: str | None = None
+    usage: Completion | None = None
+
+
+class AllCredentialsFailed(Exception):
+    """Every credential worth trying was tried, and none answered.
+
+    Carries the attempts so `brain` can write one `brain_calls` row per one -
+    a credential that was rate-limited really did spend one of somebody's
+    requests, and a log that recorded only the final give-up would under-count
+    exactly the calls the cap is meant to be counting.
+    """
+
+    def __init__(self, attempts: tuple[Attempt, ...], summary: str) -> None:
+        super().__init__(summary)
+        self.attempts = attempts
+
+
+def _try_chain(
+    call: Callable[[Any, Any, str], Completion],
+    *,
+    structured: bool = False,
+    max_attempts: int = chain.DEFAULT_MAX_ATTEMPTS,
+) -> Completion:
+    """Work down the chain until one credential answers.
+
+    A failure advances to the next credential rather than being retried here:
+    within-provider retries are `_gemini_post`'s job and only for the statuses
+    that mean "busy". Asking the same key twice for a fault it has already
+    diagnosed spends a second request to learn the same thing.
+
+    What comes back is stamped with which credential and model produced it, so
+    `brain` can persist provenance without the provider functions ever having
+    to know a chain exists.
+    """
+    attempts: list[Attempt] = []
+    for credential, provider, model in chain.candidates(
+        structured=structured, max_attempts=max_attempts
+    ):
+        chain.note_attempt(credential)
+        started = time.monotonic()
+        try:
+            completion = call(provider, credential, model)
+        except Exception as exc:
+            elapsed = int((time.monotonic() - started) * 1000)
+            chain.note_failure(credential, exc)
+            attempts.append(
+                Attempt(
+                    credential=credential.label,
+                    provider=credential.provider,
+                    model=model,
+                    ok=False,
+                    latency_ms=elapsed,
+                    error=f"{type(exc).__name__}: {exc}"[:500],
+                )
+            )
+            log.warning(
+                "credential %s failed (%s); trying the next", credential.label, exc
+            )
+            continue
+
+        elapsed = int((time.monotonic() - started) * 1000)
+        chain.note_success(credential)
+        return replace(
+            completion,
+            credential=credential.label,
+            model=model,
+            latency_ms=elapsed,
+        )
+
+    raise AllCredentialsFailed(
+        tuple(attempts),
+        "; ".join(f"{a.credential}: {a.error}" for a in attempts)
+        or f"nothing to try - {chain.unavailable()}",
+    )
 
 
 def generate(
@@ -1172,6 +1389,7 @@ def generate(
     *,
     max_chars: int = 400,
     history: list[dict[str, str]] | None = None,
+    max_attempts: int = chain.DEFAULT_MAX_ATTEMPTS,
 ) -> Completion:
     """Ask the configured provider. Raises on any failure; the caller falls back.
 
@@ -1192,9 +1410,6 @@ def generate(
     blocks byte-identical across all 31 personalities and all nine tasks, which
     is the entire shared prefix this application has.
     """
-    settings = get_settings()
-    provider, model = _provider_and_model(settings)
-
     prompt = build_prompt(task, context, pick_angle(personality_prompt, task, context))
 
     if history:
@@ -1204,22 +1419,26 @@ def generate(
         system = build_system(personality_prompt)
         messages = [{"role": "user", "content": prompt}]
 
-    completion = provider.complete(
-        system,
-        messages,
-        model=model,
-        max_tokens=_max_tokens_for(max_chars),
-        effort=effort_for(task),
-        output_format=None,
-        stream=False,
-    )
+    def call(provider, credential, model):
+        completion = provider.complete(
+            system,
+            messages,
+            credential=credential,
+            model=model,
+            max_tokens=_max_tokens_for(max_chars),
+            effort=effort_for(task),
+            output_format=None,
+            stream=False,
+        )
+        if not completion.text:
+            # An empty completion is a failure, not a valid answer - and
+            # raising here rather than returning it means the next credential
+            # gets a turn, instead of the caller falling straight to a blank
+            # comment because one provider had a bad moment.
+            raise ValueError(f"empty completion from {credential.label}")
+        return completion
 
-    if not completion.text:
-        # An empty completion is a failure, not a valid answer - falling back
-        # gives the user something in character instead of a blank comment.
-        raise ValueError(f"empty completion from {settings.llm_provider}")
-
-    return completion
+    return _try_chain(call, max_attempts=max_attempts)
 
 
 # --- a juror's vote and its reasoning, in one breath --------------------------
@@ -1299,9 +1518,6 @@ def deliberate(
     here - `brain.deliberate` asks `capabilities()` first and never routes a
     provider that cannot enforce the enum into this function.
     """
-    settings = get_settings()
-    provider, model = _provider_and_model(settings)
-
     prompt = "\n\n".join(
         (
             build_prompt(
@@ -1315,17 +1531,22 @@ def deliberate(
         )
     )
 
-    raw = provider.complete(
-        build_system(personality_prompt),
-        [{"role": "user", "content": prompt}],
-        model=model,
-        max_tokens=_max_tokens_for(400),
-        effort=effort_for("jury_deliberation"),
-        output_format=DELIBERATION_SCHEMA,
-        stream=False,
-    )
-    if not raw.text:
-        raise ValueError(f"empty deliberation from {settings.llm_provider}")
+    def call(provider, credential, model):
+        completion = provider.complete(
+            build_system(personality_prompt),
+            [{"role": "user", "content": prompt}],
+            credential=credential,
+            model=model,
+            max_tokens=_max_tokens_for(400),
+            effort=effort_for("jury_deliberation"),
+            output_format=DELIBERATION_SCHEMA,
+            stream=False,
+        )
+        if not completion.text:
+            raise ValueError(f"empty deliberation from {credential.label}")
+        return completion
+
+    raw = _try_chain(call, structured=True)
 
     data = json.loads(raw.text)
     vote = str(data.get("vote") or "")
@@ -1458,8 +1679,6 @@ def invent_lawsuit(
     Raises on anything malformed so brain/__init__.py falls back to the offline
     filing - which is why this can afford to be strict rather than forgiving.
     """
-    settings = get_settings()
-    provider, model = _provider_and_model(settings)
     target = target or {"kind": "thing"}
 
     # The target is part of the seed, not just the prompt: the same bot on the
@@ -1468,33 +1687,38 @@ def invent_lawsuit(
     seed_context = {"s": seed_extra, "target": target.get("kind"), "name": target.get("name")}
     angle = pick_angle(personality_prompt, "bot_lawsuit_meta", seed_context)
 
-    raw = provider.complete(
-        build_system(personality_prompt),
-        [
-            {
-                "role": "user",
-                "content": "\n\n".join(
-                    (
-                        FILING_BRIEF,
-                        _target_section(target),
-                        f"## הזווית שלך הפעם\n{angle}",
-                    )
-                ),
-            }
-        ],
-        model=model,
-        max_tokens=_max_tokens_for(900),
-        effort=effort_for("bot_lawsuit"),
-        output_format=LAWSUIT_SCHEMA,
-        # The only streaming call in the application, and not so anybody can
-        # watch: this asks for the most tokens of anything here, and the SDK's
-        # HTTP timeout applies to a whole non-streaming request. A filing that
-        # generates slowly would trip the timeout, land in the fallback, and
-        # skip the tick - for no reason except the shape of the request.
-        stream=True,
-    )
+    def call(provider, credential, model):
+        return provider.complete(
+            build_system(personality_prompt),
+            [
+                {
+                    "role": "user",
+                    "content": "\n\n".join(
+                        (
+                            FILING_BRIEF,
+                            _target_section(target),
+                            f"## הזווית שלך הפעם\n{angle}",
+                        )
+                    ),
+                }
+            ],
+            credential=credential,
+            model=model,
+            max_tokens=_max_tokens_for(900),
+            effort=effort_for("bot_lawsuit"),
+            output_format=LAWSUIT_SCHEMA,
+            # The only streaming call in the application, and not so anybody
+            # can watch: this asks for the most tokens of anything here, and
+            # the SDK's HTTP timeout applies to a whole non-streaming request.
+            # A filing that generates slowly would trip the timeout, land in
+            # the fallback, and skip the tick - for no reason except the shape
+            # of the request.
+            stream=True,
+        )
+
+    raw = _try_chain(call, structured=True)
     if not raw.text:
-        raise ValueError(f"empty filing from {settings.llm_provider}")
+        raise ValueError(f"empty filing from {raw.credential or 'the model'}")
 
     data = json.loads(raw.text)
 
@@ -1590,9 +1814,6 @@ def remember(personality_prompt: str, context: dict[str, Any]) -> dict[str, Any]
     written - a transcript for a person, a list of episodes for a colleague or
     for the bot's own record.
     """
-    settings = get_settings()
-    provider, model = _provider_and_model(settings)
-
     sections = [MEMORY_BRIEF]
     if context.get("you_remember"):
         sections.append(f"## הזיכרון הקודם שלך\n{context['you_remember']}")
@@ -1608,17 +1829,22 @@ def remember(personality_prompt: str, context: dict[str, Any]) -> dict[str, Any]
             "## מה קרה מאז\n" + "\n".join(f"- {line}" for line in context["episodes"])
         )
 
-    raw = provider.complete(
-        build_system(personality_prompt),
-        [{"role": "user", "content": "\n\n".join(sections)}],
-        model=model,
-        max_tokens=_max_tokens_for(600),
-        effort=effort_for("remember"),
-        output_format=MEMORY_SCHEMA,
-        stream=False,
-    )
-    if not raw.text:
-        raise ValueError(f"empty memory from {settings.llm_provider}")
+    def call(provider, credential, model):
+        completion = provider.complete(
+            build_system(personality_prompt),
+            [{"role": "user", "content": "\n\n".join(sections)}],
+            credential=credential,
+            model=model,
+            max_tokens=_max_tokens_for(600),
+            effort=effort_for("remember"),
+            output_format=MEMORY_SCHEMA,
+            stream=False,
+        )
+        if not completion.text:
+            raise ValueError(f"empty memory from {credential.label}")
+        return completion
+
+    raw = _try_chain(call, structured=True)
 
     data = json.loads(raw.text)
     summary = " ".join(str(data.get("summary") or "").split())

@@ -15,10 +15,12 @@ from __future__ import annotations
 
 import io
 import json
+import urllib.error
 
 import pytest
 
 from app.brain import llm
+from app.config import Credential
 
 # These live in tests/unit and are hermetic - no database, no network - but
 # carried no marker, so `pytest -m unit` silently ran a fraction of the layer.
@@ -62,12 +64,21 @@ def _reply(text: str, finish: str = "STOP") -> dict:
     return {"candidates": [{"finishReason": finish, "content": {"parts": [{"text": text}]}}]}
 
 
+def _credential(**overrides) -> Credential:
+    """The key this provider is being handed. A credential is a value now,
+    not a reading of the environment, so the tests pass one explicitly."""
+    return Credential(
+        **{"label": "api1-gemini", "provider": "gemini", "api_key": "test-key", **overrides}
+    )
+
+
 def _complete(captured, reply, messages=None, system=None, **kwargs):
     captured["reply"] = reply
     return llm._complete_gemini(
         system or [{"type": "text", "text": "SYSTEM-MARKER"}],
         messages or [{"role": "user", "content": "PROMPT-MARKER"}],
-        model=kwargs.pop("model", "gemini-3.7-flash"),
+        credential=kwargs.pop("credential", None) or _credential(),
+        model=kwargs.pop("model", "gemini-3.5-flash"),
         max_tokens=kwargs.pop("max_tokens", 512),
         effort=kwargs.pop("effort", "low"),
         **kwargs,
@@ -278,16 +289,15 @@ def test_an_empty_answer_names_the_finish_reason(captured):
         _complete(captured, _reply("   "))
 
 
-def test_a_missing_key_is_refused_before_the_network(monkeypatch):
-    monkeypatch.setenv("LLM_API_KEY", "")
-    with pytest.raises(ValueError, match="LLM_API_KEY"):
-        llm._complete_gemini(
-            [{"type": "text", "text": "S"}],
-            [{"role": "user", "content": "P"}],
-            model="gemini-3.7-flash",
-            max_tokens=512,
-            effort="low",
-        )
+def test_a_credential_without_a_key_is_refused_before_the_network():
+    """And the message names the credential, not the variable.
+
+    With a chain, "LLM_API_KEY is missing" is no longer a true sentence -
+    there may be three keys and only the second one absent - so the error has
+    to say which of them.
+    """
+    with pytest.raises(ValueError, match="api2-gemini"):
+        _complete({}, None, credential=_credential(label="api2-gemini", api_key=""))
 
 
 def test_the_parts_of_a_multi_part_answer_are_joined(captured):
@@ -421,7 +431,7 @@ def test_a_bad_request_is_not_retried(monkeypatch, no_sleep):
         "urlopen",
         _urlopen_raising([_http_error(400)], _reply("שלום")),
     )
-    with pytest.raises(llm.urllib.error.HTTPError):
+    with pytest.raises(llm.GeminiHttpError):
         _complete({}, None)
     assert no_sleep == []
 
@@ -432,7 +442,7 @@ def test_an_unauthorised_key_is_not_retried(monkeypatch, no_sleep):
         "urlopen",
         _urlopen_raising([_http_error(403)], _reply("שלום")),
     )
-    with pytest.raises(llm.urllib.error.HTTPError):
+    with pytest.raises(llm.GeminiHttpError):
         _complete({}, None)
     assert no_sleep == []
 
@@ -443,7 +453,7 @@ def test_it_gives_up_and_reports_the_last_failure(monkeypatch, no_sleep):
     monkeypatch.setattr(
         llm.urllib.request, "urlopen", _urlopen_raising(errors, _reply("שלום"))
     )
-    with pytest.raises(llm.urllib.error.HTTPError) as caught:
+    with pytest.raises(llm.GeminiHttpError) as caught:
         _complete({}, None)
     assert caught.value.code == 503
     assert len(no_sleep) == llm._GEMINI_ATTEMPTS - 1
@@ -467,7 +477,7 @@ def test_the_backoff_is_jittered(monkeypatch, no_sleep):
             ),
         )
         no_sleep.clear()
-        with pytest.raises(llm.urllib.error.HTTPError):
+        with pytest.raises(llm.GeminiHttpError):
             _complete({}, None)
         runs.append(tuple(no_sleep))
     assert len(set(runs)) > 1
@@ -521,3 +531,135 @@ def test_every_effort_the_task_table_can_produce_is_valid():
     efforts = {*llm._EFFORT_BY_TASK.values(), llm._DEFAULT_EFFORT}
     for effort in efforts:
         assert effort in llm._GEMINI_THINKING_LEVELS, effort
+
+
+def test_an_http_error_keeps_googles_own_explanation(monkeypatch):
+    """The body is the whole point: "HTTP Error 404" names no culprit.
+
+    This is the failure that motivated reading it - a wrong model id fails
+    exactly this way, once per call, and is indistinguishable on a dashboard
+    from a quota wall until somebody can read the sentence Google sent back.
+    """
+    body = b'{"error":{"message":"models/gemini-9.9-flash is not found for API version v1beta"}}'
+
+    def _raise(request, timeout):  # noqa: ARG001
+        raise urllib.error.HTTPError(
+            "https://example.invalid", 404, "Not Found", {}, io.BytesIO(body)
+        )
+
+    monkeypatch.setattr(llm.urllib.request, "urlopen", _raise)
+
+    with pytest.raises(llm.GeminiHttpError) as caught:
+        _complete({}, None, model="gemini-9.9-flash")
+
+    assert caught.value.code == 404
+    assert "gemini-9.9-flash is not found" in str(caught.value)
+
+
+def test_a_non_retryable_status_is_not_retried(monkeypatch):
+    """404 is a fault in the request; asking again only repeats it."""
+    calls = []
+
+    def _raise(request, timeout):  # noqa: ARG001
+        calls.append(1)
+        raise urllib.error.HTTPError(
+            "https://example.invalid", 404, "Not Found", {}, io.BytesIO(b"{}")
+        )
+
+    monkeypatch.setattr(llm.urllib.request, "urlopen", _raise)
+
+    with pytest.raises(llm.GeminiHttpError):
+        _complete({}, None)
+
+    assert len(calls) == 1
+
+
+def test_the_error_envelope_is_unwrapped_to_the_part_that_names_the_fault(monkeypatch):
+    """`{"error": {...}}` costs 45 characters before saying anything.
+
+    The dashboard groups failures on the first 80 characters of the stored
+    reason, so a raw body truncates mid-envelope and every distinct fault
+    collapses into one indistinguishable row of punctuation.
+    """
+    body = json.dumps(
+        {
+            "error": {
+                "code": 404,
+                "message": "models/gemini-9.9-flash is not found for API version v1beta",
+                "status": "NOT_FOUND",
+            }
+        }
+    ).encode("utf-8")
+
+    def _raise(request, timeout):  # noqa: ARG001
+        raise urllib.error.HTTPError(
+            "https://example.invalid", 404, "Not Found", {}, io.BytesIO(body)
+        )
+
+    monkeypatch.setattr(llm.urllib.request, "urlopen", _raise)
+
+    with pytest.raises(llm.GeminiHttpError) as caught:
+        _complete({}, None)
+
+    message = str(caught.value)
+    assert message.startswith("gemini HTTP 404: NOT_FOUND models/gemini-9.9-flash")
+    assert '{"error"' not in message
+
+
+def test_a_body_that_is_not_googles_shape_is_kept_verbatim(monkeypatch, no_sleep):
+    """A proxy or a WAF answers with HTML, and that is still a clue."""
+
+    def _raise(request, timeout):  # noqa: ARG001
+        raise urllib.error.HTTPError(
+            "https://example.invalid",
+            502,
+            "Bad Gateway",
+            {},
+            io.BytesIO(b"<html>upstream connect error</html>"),
+        )
+
+    monkeypatch.setattr(llm.urllib.request, "urlopen", _raise)
+
+    with pytest.raises(llm.GeminiHttpError) as caught:
+        _complete({}, None)
+
+    assert "upstream connect error" in str(caught.value)
+
+
+# --- the thinking field is a 3.x field ---------------------------------------
+
+
+def test_a_2x_model_is_not_sent_a_thinking_config(captured):
+    """`thinkingLevel` on a 2.x model is a 400, and 400 is not retried.
+
+    So configuring the model with the most generous free tier in the family
+    would, without this gate, fail fast on every single call and look exactly
+    like a revoked key.
+    """
+    _complete(captured, _reply("שלום"), model="gemini-2.5-flash-lite", max_tokens=512)
+
+    config = captured["body"]["generationConfig"]
+    assert "thinkingConfig" not in config
+    # No thinking means no thinking headroom: the budget is the answer's alone.
+    assert config["maxOutputTokens"] == 512
+
+
+def test_a_3x_model_still_gets_the_thinking_dial(captured):
+    _complete(
+        captured, _reply("שלום"), model="gemini-3.5-flash", effort="medium", max_tokens=512
+    )
+
+    config = captured["body"]["generationConfig"]
+    assert config["thinkingConfig"] == {"thinkingLevel": "medium"}
+    assert config["maxOutputTokens"] == 512 + llm._GEMINI_THINKING_HEADROOM["medium"]
+
+
+def test_the_default_model_has_a_free_tier_worth_having(monkeypatch):
+    """A regression guard on the number, not on taste.
+
+    The previous default was a current-generation Flash whose free allowance
+    is roughly twenty calls a day - less than this site spends in a quarter of
+    an hour - chosen against a published figure belonging to another model.
+    """
+    assert llm.PROVIDERS["gemini"].default_model == "gemini-2.5-flash-lite"
+    assert not llm._gemini_thinks(llm.PROVIDERS["gemini"].default_model)

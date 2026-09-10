@@ -29,7 +29,16 @@ def admin_brain_usage():
         {
             "today": brain_usage_service.usage_today(),
             "week": brain_usage_service.usage_this_week(),
-            "gemini_quota": brain_usage_service.gemini_quota_today(),
+            # Per KEY, not per vendor. Quota belongs to a credential and a
+            # model, so "Gemini is at 900" says nothing useful once there is
+            # more than one key - it is the one that is exhausted that matters.
+            "credentials": brain_usage_service.credential_quotas(),
+            "by_credential": brain_usage_service.usage_by_credential(),
+            "by_credential_week": brain_usage_service.usage_by_credential(days=7),
+            # Why calls are failing, not just how many. Without this the tab
+            # cannot tell "near the quota" apart from "every call is erroring",
+            # which are the same picture and completely different problems.
+            "failures": brain_usage_service.recent_failures(),
         }
     ), 200
 
