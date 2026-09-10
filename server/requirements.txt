@@ -8,7 +8,7 @@ bcrypt>=4.1
 gunicorn>=21.2
 python-dotenv>=1.0
 
-# The live model backend. brain/llm.py imports it lazily and brain/__init__.py
+# The live model backend. brain/llm/providers/base.py imports it lazily and brain/__init__.py
 # falls back to the offline generator if it is missing - which is exactly how a
 # missing dependency stayed invisible in production for so long: BRAIN_FORCE_OFFLINE=0
 # plus AWS_REGION made /api/health report "brain": "llm" while every single

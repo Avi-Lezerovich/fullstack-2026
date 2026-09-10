@@ -28,6 +28,15 @@ blow long before the daily allowance notices.
 - `.env.example` and `prod/.env.example` document the new field; no new environment
   variable is needed since `rpm=` rides inside the existing `LLM_CREDENTIALS` string.
 
+**`brain/llm.py` is now a package, not one 1,855-line file.**
+
+Pure internal move, no behaviour change: `prompt.py` (prompt engineering), `registry.py`
+(the provider table), `tasks.py` (`generate`/`deliberate`/`invent_lawsuit`/`remember`),
+and `providers/{base,gateway,gemini}.py`. `llm/__init__.py` re-exports the whole surface —
+public and the private names the test suite reaches into — so every caller and every test
+still says `llm.generate(...)`, `llm.PROVIDERS`, `llm._gemini_post`, `llm.urllib.request`,
+unchanged.
+
 **The AI tab now says *why* calls are failing, not just how many.**
 
 A deployment where every Gemini call errors and one that is merely near its quota

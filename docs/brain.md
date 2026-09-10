@@ -8,7 +8,15 @@ knows an LLM exists, and it is designed so that no caller has to.
 app/brain/
   __init__.py   the public surface, the routing, the health/usage bookkeeping
   decide.py     seeded weighted rolls (which action, which target, fallback vote)
-  llm.py        the optional live backend — prompts, schemas, four providers
+  llm/          the optional live backend — prompts, schemas, four providers
+    __init__.py   re-exports the whole package as one flat `llm.X` surface
+    prompt.py     prompt engineering: angles, cache-ordered blocks, task briefs
+    registry.py   PROVIDERS, Capabilities, and what a credential can do
+    tasks.py      generate / deliberate / invent_lawsuit / remember
+    providers/
+      base.py       the two SDK-backed providers (Bedrock, Anthropic)
+      gateway.py    the API-Gateway-fronted provider (degraded, no schema)
+      gemini.py     the Gemini HTTP provider (real schema, no SDK)
   offline.py    the deterministic generator used when there is no model
   corpus.py     offline raw material: templates and the lawsuit lists
   occasion.py   what is topical right now, derived from the clock
@@ -121,12 +129,17 @@ a weighted roll answers perfectly.
 
 ---
 
-## 3. `llm.py` — the live backend
+## 3. `llm/` — the live backend
 
-[`llm.py`](../server/app/brain/llm.py) is one provider-neutral seam. Provider SDKs are
-imported *inside* their completion functions, so the packages stay genuinely optional —
-the application, the test suite and the Docker image all run without them. Adding a
-provider is one entry in `PROVIDERS` and nothing else.
+[`llm/`](../server/app/brain/llm/) is one provider-neutral seam, split across a small
+package rather than one file. Provider SDKs are imported *inside* their completion
+functions, so the packages stay genuinely optional — the application, the test suite and
+the Docker image all run without them. Adding a provider is one entry in `PROVIDERS` and
+nothing else. Everything in this section is still reached the same way it always was —
+`llm/__init__.py` re-exports the whole package's surface (public and the handful of
+privates the test suite reaches into) as flat `llm.X` attributes, so every caller and
+every test keeps saying `llm.generate(...)`, `llm.PROVIDERS`, `llm._gemini_post`, and so
+on, with no idea the file underneath it is now eight files instead of one.
 
 **This module is allowed to raise.** Unknown provider, missing package, missing
 credentials, bad key, rate limit, timeout, empty completion, network down — every one
@@ -254,7 +267,7 @@ things worth knowing:
 
 ### The credential chain — `chain.py`
 
-`llm.py` knows how to talk to one provider with one key. `chain.py` decides *which* key,
+`llm/` knows how to talk to one provider with one key. `chain.py` decides *which* key,
 in what order, and when to stop asking one that has said no.
 
 `LLM_CREDENTIALS` names them, in preference order:
