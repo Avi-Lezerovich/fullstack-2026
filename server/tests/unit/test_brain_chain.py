@@ -150,6 +150,81 @@ def test_a_credential_with_no_cap_is_never_blocked_by_one(monkeypatch, _no_datab
     assert _labels() == ["api1-gemini"]
 
 
+# --- rpm pacing -----------------------------------------------------------
+
+
+def test_rpm_is_parsed_from_llm_credentials(monkeypatch):
+    from app.config import get_settings
+
+    _configure(monkeypatch, "provider=gemini,label=api1-gemini,key=k1,rpm=12")
+
+    assert get_settings().llm_credentials[0].rpm == 12
+
+
+def test_rpm_defaults_to_zero_meaning_unpaced(monkeypatch):
+    from app.config import get_settings
+
+    _configure(monkeypatch, GEMINI_1)
+
+    assert get_settings().llm_credentials[0].rpm == 0
+
+
+def test_a_non_numeric_rpm_is_a_configuration_error(monkeypatch):
+    from app.config import get_settings
+
+    _configure(monkeypatch, "provider=gemini,label=api1-gemini,key=k1,rpm=soon")
+
+    settings = get_settings()
+    assert "rpm" in settings.llm_credential_errors[0]
+
+
+def test_a_credential_at_its_rpm_is_skipped_in_favour_of_the_next(monkeypatch):
+    """A burst that would blow the per-minute limit moves on rather than
+    waiting - see the module docstring on why this is a skip, not a sleep."""
+    _configure(monkeypatch, "provider=gemini,label=api1-gemini,key=k1,rpm=2", GEMINI_2)
+    credential = Credential(label="api1-gemini", provider="gemini", api_key="k1", rpm=2)
+
+    assert _labels()[0] == "api1-gemini"
+    chain.note_attempt(credential)
+    chain.note_attempt(credential)
+
+    assert _labels() == ["api2-gemini"]
+
+
+def test_a_credential_with_no_rpm_is_never_paced(monkeypatch):
+    """Zero means unpaced, the same convention `daily_cap` uses."""
+    _configure(monkeypatch, "provider=gemini,label=api1-gemini,key=k1")
+    credential = Credential(label="api1-gemini", provider="gemini", api_key="k1")
+
+    for _ in range(50):
+        chain.note_attempt(credential)
+
+    assert _labels() == ["api1-gemini"]
+
+
+def test_the_rpm_window_rolls_over(monkeypatch):
+    """A burst from a minute ago must not count against the next one."""
+    _configure(monkeypatch, "provider=gemini,label=api1-gemini,key=k1,rpm=1")
+    credential = Credential(label="api1-gemini", provider="gemini", api_key="k1", rpm=1)
+
+    clock = [1_000.0]
+    monkeypatch.setattr(chain.time, "monotonic", lambda: clock[0])
+
+    chain.note_attempt(credential)
+    assert _labels() == []
+
+    clock[0] += 61
+    assert _labels() == ["api1-gemini"]
+
+
+def test_the_unavailable_line_names_the_rpm_reason(monkeypatch):
+    _configure(monkeypatch, "provider=gemini,label=api1-gemini,key=k1,rpm=1")
+    credential = Credential(label="api1-gemini", provider="gemini", api_key="k1", rpm=1)
+    chain.note_attempt(credential)
+
+    assert "api1-gemini 1/1 this minute" in chain.unavailable()
+
+
 # --- what a failure does ------------------------------------------------------
 
 
@@ -215,6 +290,70 @@ def test_every_shape_a_quota_answer_arrives_in_is_recognised(exc):
 def test_an_ordinary_failure_is_not_mistaken_for_a_quota_answer(exc):
     """Over-matching here writes off a healthy key for a day."""
     assert not chain.is_quota_error(exc)
+
+
+# --- a rate 429 is not a quota 429 ---------------------------------------
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        llm.GeminiHttpError(
+            429,
+            "gemini HTTP 429: RESOURCE_EXHAUSTED quota_id: "
+            "GenerateRequestsPerMinutePerProjectPerModel-FreeTier",
+        ),
+        Exception("ThrottlingException: Too many requests"),
+        Exception("rate limit exceeded"),
+        Exception("TooManyRequestsException: slow down"),
+    ],
+)
+def test_a_burst_is_recognised_as_a_rate_limit(exc):
+    """Too fast, not out for the day - see the module docstring."""
+    assert chain.is_rate_limit_error(exc)
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        llm.GeminiHttpError(429, "gemini HTTP 429: RESOURCE_EXHAUSTED"),
+        Exception("RESOURCE_EXHAUSTED: generate_content_free_tier_requests"),
+        ValueError("empty completion"),
+    ],
+)
+def test_a_plain_day_quota_is_not_mistaken_for_a_rate_limit(exc):
+    """No 'PerMinute' in the quota id - and Google's daily allowance running
+    out looks exactly like this - so the long cooldown must still apply."""
+    assert not chain.is_rate_limit_error(exc)
+
+
+def test_a_rate_limit_rests_a_credential_only_for_the_window(monkeypatch):
+    _configure(monkeypatch, GEMINI_1, GEMINI_2)
+    credential = Credential(label="api1-gemini", provider="gemini", api_key="k1")
+
+    chain.note_failure(
+        credential,
+        llm.GeminiHttpError(
+            429,
+            "gemini HTTP 429: RESOURCE_EXHAUSTED quota_id: "
+            "GenerateRequestsPerMinutePerProjectPerModel-FreeTier",
+        ),
+    )
+
+    cooling = chain.status()["api1-gemini"]["cooling_for"]
+    assert 0 < cooling <= chain._RATE_COOLDOWN_SECONDS
+    assert _labels() == ["api2-gemini"]
+
+
+def test_an_aws_throttle_rests_a_credential_only_briefly_not_until_midnight(monkeypatch):
+    """AWS has no daily-quota concept behind a throttling exception - it is
+    always a request-rate answer, never 'you are out until tomorrow'."""
+    _configure(monkeypatch, "provider=bedrock,label=api3-bedrock,region=eu-central-1")
+    credential = Credential(label="api3-bedrock", provider="bedrock", aws_region="eu-central-1")
+
+    chain.note_failure(credential, Exception("ThrottlingException: Too many requests"))
+
+    assert chain.status()["api3-bedrock"]["cooling_for"] <= chain._RATE_COOLDOWN_SECONDS
 
 
 # --- when there is nothing left ----------------------------------------------
