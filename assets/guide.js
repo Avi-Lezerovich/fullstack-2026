@@ -38,7 +38,11 @@
     a.innerHTML = '<span class="num"></span><span></span><span class="chk" aria-hidden="true">✔</span>';
     a.children[0].textContent = String(i + 1).padStart(2, "0");
     a.children[1].textContent = sec.dataset.title;
-    a.addEventListener("click", function () { sec.classList.remove("collapsed"); document.body.classList.remove("menu-open"); });
+    a.addEventListener("click", function (e) {
+      document.body.classList.remove("menu-open");
+      sec.classList.remove("collapsed");
+      if (state.mode !== "all") { e.preventDefault(); go(sec.id, true); }
+    });
     li.appendChild(a);
     toc.appendChild(li);
   });
@@ -72,6 +76,84 @@
   });
   refreshProgress();
 
+  /* ---------- one topic at a time, with previous / next ---------- */
+  var ids = sections.map(function (s) { return s.id; });
+  var current = ids[0];
+  function titleOf(i) { return (i + 1) + ". " + sections[i].dataset.title; }
+  sections.forEach(function (sec, i) {
+    var pos = document.createElement("span");
+    pos.className = "topic-pos";
+    pos.textContent = "נושא " + (i + 1) + " מתוך " + sections.length;
+    $(".topic-head", sec).insertBefore(pos, $(".done-toggle", sec));
+    var pager = document.createElement("nav");
+    pager.className = "pager";
+    pager.setAttribute("aria-label", "מעבר בין נושאים");
+    var prev = i > 0
+      ? '<a class="prev" href="#' + ids[i - 1] + '" data-go="' + ids[i - 1] + '"><span class="dir">→ הקודם</span><span class="ttl"></span></a>'
+      : '<span class="empty"></span>';
+    var next = i < sections.length - 1
+      ? '<a class="next cta" href="#' + ids[i + 1] + '" data-go="' + ids[i + 1] + '"><span class="dir">הבא ←</span><span class="ttl"></span></a>'
+      : '<span class="empty"></span>';
+    pager.innerHTML = prev + next +
+      '<button class="btn done-next" type="button">' + (i < sections.length - 1 ? "סמן כנלמד ועבור לנושא הבא" : "סמן כנלמד") + '</button>';
+    if (i > 0) $(".prev .ttl", pager).textContent = titleOf(i - 1);
+    if (i < sections.length - 1) $(".next .ttl", pager).textContent = titleOf(i + 1);
+    $(".done-next", pager).addEventListener("click", function () {
+      var box = $("input[data-done]", sec);
+      box.checked = true; state.done[sec.id] = true; save(); refreshProgress();
+      if (i < sections.length - 1) go(ids[i + 1], true);
+    });
+    sec.appendChild(pager);
+  });
+  document.addEventListener("click", function (e) {
+    var link = e.target.closest && e.target.closest("[data-go]");
+    if (!link || state.mode === "all") return;
+    e.preventDefault();
+    go(link.getAttribute("data-go"), true);
+  });
+  function markActive(id) {
+    $$("a", toc).forEach(function (a) { a.classList.toggle("active", a.getAttribute("href") === "#" + id); });
+  }
+  function go(id, push) {
+    if (ids.indexOf(id) < 0) id = ids[0];
+    current = id;
+    state.current = id; save();
+    document.body.classList.toggle("first", id === ids[0]);
+    sections.forEach(function (s) { s.classList.toggle("off", s.id !== id); });
+    markActive(id);
+    if (push && location.hash !== "#" + id) {
+      try { history.pushState(null, "", "#" + id); } catch (e) { /* file:// in some browsers */ }
+    }
+    if (state.mode !== "all") {
+      window.scrollTo({ top: 0 });
+      var sec = document.getElementById(id);
+      if (sec) labelBackgrounds(sec);
+    }
+  }
+  function applyMode() {
+    var focus = state.mode !== "all";
+    document.body.classList.toggle("focus", focus);
+    $("#modeBtn").textContent = focus ? "הצג את כל הנושאים ברצף" : "הצג נושא אחד בכל פעם";
+    if (focus) go(current, false); else labelBackgrounds(document);
+  }
+  $("#modeBtn").addEventListener("click", function () {
+    state.mode = state.mode === "all" ? "focus" : "all"; save();
+    applyMode();
+    if (state.mode === "all") { var s = document.getElementById(current); if (s && s.scrollIntoView) s.scrollIntoView(); }
+  });
+  window.addEventListener("hashchange", function () {
+    var id = location.hash.slice(1);
+    if (ids.indexOf(id) >= 0 && state.mode !== "all") go(id, false);
+  });
+  document.addEventListener("keydown", function (e) {
+    if (state.mode === "all" || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.nodeName) || document.body.classList.contains("searching")) return;
+    var i = ids.indexOf(current);
+    // Right-to-left page: the left arrow moves forward.
+    if (e.key === "ArrowLeft" && i < ids.length - 1) { e.preventDefault(); go(ids[i + 1], true); }
+    if (e.key === "ArrowRight" && i > 0) { e.preventDefault(); go(ids[i - 1], true); }
+  });
+
   /* ---------- collapse ---------- */
   sections.forEach(function (sec) {
     $(".collapse", sec).addEventListener("click", function () {
@@ -85,14 +167,15 @@
     $$("main details.sub").forEach(function (d) { d.open = true; });
     labelBackgrounds(document);
   });
-  $("#collapseAll").addEventListener("click", function () { sections.forEach(function (s) { s.classList.add("collapsed"); }); });
 
   /* ---------- active section ---------- */
   if ("IntersectionObserver" in window) {
     var io = new IntersectionObserver(function (entries) {
+      if (state.mode !== "all") return;
       entries.forEach(function (e) {
         if (!e.isIntersecting) return;
-        $$("a", toc).forEach(function (a) { a.classList.toggle("active", a.getAttribute("href") === "#" + e.target.id); });
+        current = e.target.id;
+        markActive(e.target.id);
       });
     }, { rootMargin: "-25% 0px -65% 0px" });
     sections.forEach(function (s) { io.observe(s); });
@@ -135,6 +218,7 @@
   function runSearch() {
     var q = search.value.trim().toLowerCase();
     clearMarks();
+    document.body.classList.toggle("searching", !!q);
     if (!q) {
       sections.forEach(function (s) { s.classList.remove("hidden"); });
       $$("li", toc).forEach(function (li) { li.classList.remove("hidden"); });
@@ -347,7 +431,9 @@
       var items = $$(selector);
       items.forEach(function (d) { d.open = false; d.classList.remove("flash"); });
       var pick = items[Math.floor(Math.random() * items.length)];
-      pick.closest("section").classList.remove("collapsed");
+      var owner = pick.closest("section");
+      owner.classList.remove("collapsed");
+      if (state.mode !== "all" && owner.id !== current) go(owner.id, true);
       if (pick.classList.contains("recipe")) pick.open = true;
       if (pick.scrollIntoView) pick.scrollIntoView({ block: "center" });
       void pick.offsetWidth; pick.classList.add("flash");
@@ -382,9 +468,8 @@
     labelBackgrounds(document);
   });
 
-  /* ---------- open the section named in the hash ---------- */
-  if (location.hash) {
-    var target = document.getElementById(location.hash.slice(1));
-    if (target && target.classList.contains("topic")) target.classList.remove("collapsed");
-  }
+  /* ---------- start on the topic named in the hash, else where the reader left off ---------- */
+  var fromHash = location.hash.slice(1);
+  current = ids.indexOf(fromHash) >= 0 ? fromHash : (ids.indexOf(state.current) >= 0 ? state.current : ids[0]);
+  applyMode();
 })();

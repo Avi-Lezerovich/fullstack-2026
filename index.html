@@ -22,7 +22,7 @@
 </svg>
 <header class="bar">
   <button class="iconbtn menu-btn" id="menuBtn" type="button" aria-controls="side" aria-expanded="false">☰ נושאים</button>
-  <div class="seal" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 8h16M12 5v14M6 8l-3 6h6zM18 8l-3 6h6zM8 19h8"/></svg></div>
+  <img class="seal-img" src="assets/lolsuit-seal.svg" alt="" width="36" height="36">
   <div class="name">LolSuit<small>מדריך למבחן · Full Stack RUNI 2026</small></div>
   <div class="grow"></div>
   <div class="status"><span class="chip" id="progChip">הוגשה · 0/16</span><span class="meter" aria-hidden="true"><i id="progBar"></i></span></div>
@@ -34,8 +34,8 @@
   <input class="search" id="search" type="search" placeholder="חיפוש, למשל dedupe_key" aria-label="חיפוש במדריך">
   <div class="search-info" id="searchInfo" aria-live="polite"></div>
   <ol class="toc" id="toc"></ol>
-  <div class="tools"><button class="btn" id="expandAll" type="button">פתח הכל</button><button class="btn" id="collapseAll" type="button">סגור הכל</button></div>
-  <p class="hint"><kbd>/</kbd> חיפוש · <kbd>Esc</kbd> ניקוי. ההתקדמות נשמרת בדפדפן הזה בלבד.</p>
+  <div class="tools"><button class="btn" id="modeBtn" type="button">הצג את כל הנושאים ברצף</button><button class="btn" id="expandAll" type="button">פתח את כל תתי־הסעיפים</button></div>
+  <p class="hint"><kbd>←</kbd> הנושא הבא · <kbd>→</kbd> הקודם · <kbd>/</kbd> חיפוש · <kbd>Esc</kbd> ניקוי. ההתקדמות נשמרת בדפדפן הזה בלבד.</p>
 </nav>
 <main id="main"><div class="wrap">
 
@@ -1288,9 +1288,16 @@ curl -s localhost:5002/api/health</code></pre></div>
 </div></section>
 
 
-<p class="foot">נבנה מתוך הקוד ב־commit 546a080 של <a href="https://github.com/Avi-Lezerovich/fullstack-2026">fullstack-2026</a>. האתר נמצא רק בענף gh-pages-gudide ואינו חלק מהאפליקציה.</p>
+
 </div></main>
 </div>
+<footer class="site-foot">
+  <div class="foot-in">
+    <div class="foot-brand"><img src="assets/lolsuit-seal.svg" alt="" width="32" height="32"><span>LolSuit</span></div>
+    <p class="foot-tag">בית המשפט לתביעות מצחיקות. כל התיקים בדיוניים, כל פסקי הדין סופיים.</p>
+    <p class="foot-cap">Mid term project · Full-Stack @ RUNI · 2026<br>מדריך לימוד · commit 546a080 · <a href="https://github.com/Avi-Lezerovich/fullstack-2026">GitHub</a></p>
+  </div>
+</footer>
 <button class="btn totop" id="toTop" type="button" aria-label="לראש הדף">↑</button>
 <dialog class="zoom" id="zoomDlg" aria-label="תרשים מוגדל"><div class="zhead"><span class="ztitle"></span><button class="btn" id="zoomClose" type="button">סגור</button></div><div class="zbody"></div></dialog>
 <script src="assets/seq-data.js"></script>
