@@ -5,13 +5,28 @@ outputs and forming an impression. That is exactly how a site ends up with
 twenty personalities who all sound the same: each individual change looked like
 an improvement to whoever made it.
 
+Run from `server/` (the package imports `app`), with the virtualenv active:
+
 ```bash
-# free, no credentials, no model calls
+cd server
+
+# the unjudged half; free and model-free only when the brain is offline
 python -m evals.run --no-judge --out before.json
 
 # the full scorecard; needs a credentialed provider with structured output
 python -m evals.run --out after.json
 ```
+
+Flags: `--personalities N` (default 5), `--cases N` (default 5, and `fixtures.py` has
+exactly 5, so more is the same as 5), `--no-judge`, `--out FILE`.
+
+> **Currently broken: the judged half.** `metrics._judge` calls
+> `llm._provider_and_model(settings)` ([`metrics.py`](metrics.py), line 121), which no
+> longer exists since the brain moved to a credential chain, and calls
+> `provider.complete` without the now-required `credential=` argument. Every judge call
+> raises, the runner swallows it, and `voice.accuracy`, `drift.*` and
+> `grounding.grounded_rate` come back `null`. `repetition` is unaffected. Listed in
+> [docs/known-issues.md](../../docs/known-issues.md).
 
 Run it **before** a change and **after** one. A number that did not move is a
 change that did not do what you thought it did.
@@ -40,11 +55,20 @@ bill. `cache_reads` is the ground truth, so something has to look at it.
 
 ## Cost
 
-With the judge on, roughly `personalities × cases` generating calls plus the same
-number of judging calls, plus a ten-turn thread per personality for `drift`. The
-defaults (5 × 5) keep that to a few dollars. `--no-judge` is free and still
-catches repetition — which is what the offline stenographer is scored on, since
-there is nothing there for a judge to attribute.
+The generation step always runs: `personalities × cases` calls to `brain.generate`,
+**even with `--no-judge`** — so `--no-judge` is free only when the brain is offline
+(`BRAIN_FORCE_OFFLINE=1` or no credential). With the judge on, add two judging calls per
+generated line (voice and grounding), a ten-turn thread per personality plus two judge
+calls each for `drift`, and two calls for `caching`. The defaults (5 × 5) keep that to a
+few dollars. `--no-judge` still catches repetition — which is what the offline
+stenographer is scored on, since there is nothing there for a judge to attribute — but
+it skips `caching` too (the module docstring in `run.py` says otherwise).
+
+`caching.read_on_second_call` can be a false negative: its two calls use tasks with
+different effort levels, and changing effort invalidates the cache. On Gemini the cache
+counters are always 0, so it is always `false` there. The scorecard's `provider` /
+`model` fields come from the legacy `LLM_PROVIDER` / `LLM_MODEL`, not from
+`LLM_CREDENTIALS`.
 
 ## Fixtures are frozen
 

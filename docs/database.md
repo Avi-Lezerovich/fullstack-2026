@@ -1,9 +1,9 @@
 # The database
 
 MySQL 8, InnoDB, `utf8mb4` throughout (the UI is Hebrew). One file is the source of
-truth: [`database/init.sql`](../database/init.sql), 24 tables. The three files in
+truth: [`database/init.sql`](../database/init.sql), 24 tables. The four files in
 [`prod/migrations/`](../prod/migrations/) are the deploy path for a database that already
-has data, not a second source of truth.
+has data, not a second source of truth — `init.sql` already contains everything they add.
 
 ---
 
@@ -23,7 +23,9 @@ has data, not a second source of truth.
   (`python -m app.seed`).
 - `docker-entrypoint-initdb.d` **only runs on an empty data volume**. After editing
   `init.sql` you need `docker compose down -v && docker compose up -d`.
-- Nothing is ever `DELETE`d for moderation. Hiding is a status transition.
+- Nothing is ever `DELETE`d for moderation. Hiding is a status transition. (Other paths do
+  delete: an author withdrawing a case is a hard `DELETE FROM cases`, and "forget me"
+  deletes memory rows.)
 
 ---
 
@@ -275,6 +277,10 @@ erDiagram
         int output_tokens
         int cache_read
         int cache_write
+        datetime created_at
+        varchar credential "label from LLM_CREDENTIALS, '' before 004"
+        varchar model
+        int latency_ms
     }
     worker_state {
         varchar name PK "scheduler"
@@ -336,10 +342,10 @@ erDiagram
 
 | Table | Purpose |
 |---|---|
-| `agent_events` | What a bot itself has **done**: voted on case 41, was sued by a colleague, answered somebody. Written by the code paths that already do the work — one INSERT beside the UPDATE that advanced the trial — so an episode costs no model call and cannot disagree with what happened. **Raw and never overwritten**: this is the evidence the consolidated summary is derived from and can be rebuilt from. `importance` (1–5) is written by the caller, which knows what happened, and weighs retrieval. `dedupe_key` makes a retried tick re-insert nothing. |
+| `agent_events` | What a bot itself has **done**: voted on case 41, was sued by a colleague, answered somebody. Written by the code paths that already do the work — one INSERT beside the UPDATE that advanced the trial — so an episode costs no model call and cannot disagree with what happened. **Raw and never overwritten** (though `DELETE /api/users/me/memories` deletes the episodes that name the caller, along with their `agent_memories` and `bot_memories` rows): this is the evidence the consolidated summary is derived from and can be rebuilt from. `importance` (1–5) is written by the caller, which knows what happened, and weighs retrieval. `dedupe_key` makes a retried tick re-insert nothing. |
 | `agent_memories` | The consolidated summary: one row per `(agent, subject)`, written by `brain.remember`. `covered_event_id` is the high-water mark. A **cache** over `agent_events`, never the only record — a summary that came out wrong is one rebuild away from correct. |
 | `bot_memories` | The v1 predecessor, superseded by `agent_memories` and deliberately **not dropped**: `init.sql` can only ever add, and leaving the old table inert makes a rollback to the previous image a redeploy rather than a restore. Drop it by hand once, later. |
-| `brain_calls` | One row per `generate()` / `deliberate()` / `invent_lawsuit()` / `remember()` outcome — the only history of what the LLM backend has actually done. `LAST_CALL` in `brain/__init__.py` answers "is it working right now" from memory for `/api/health`, does not survive a restart and does not add up across gunicorn's workers; this does both. |
+| `brain_calls` | One row per `generate()` / `deliberate()` / `invent_lawsuit()` / `remember()` outcome when it succeeds or goes offline, and one row **per failed provider attempt** when every credential failed. (The comment in `init.sql` says "one row per provider attempt" always; the code does not log the failed attempts that precede a success — see [known-issues.md](known-issues.md).) The only history of what the LLM backend has actually done. `LAST_CALL` in `brain/__init__.py` answers "is it working right now" from memory for `/api/health`, does not survive a restart and does not add up across gunicorn's workers; this does both. |
 
 The `provider` / `backend` distinction on `brain_calls` is the point of the table:
 
@@ -355,13 +361,16 @@ The `provider` / `backend` distinction on `brain_calls` is the point of the tabl
 fallbacks, tokens, cache reads/writes), `recent_failures()` groups the last 24 hours of
 `fallback_reason` so a run of identical errors reads as one fact, and
 `usage_by_credential()` groups by `(credential, model)`, and `credential_quotas()` counts
-each configured credential's calls against its allowance — every attempt, successful or
-not, because a failed call still spends one of Google's requests. An unset `cap=` falls
+each configured credential's calls against its allowance — every *logged* row, successful
+or not, because a failed call still spends one of Google's requests (with the caveat
+above: failures followed by a success on another credential are not logged). An unset `cap=` falls
 back to `gemini_daily_cap(model)` rather than to a single provider-wide constant: the
 allowance is ~1,000/day on `gemini-2.5-flash-lite` and an unpublished figure in the tens
 on the newest Flash models, so one number for "Gemini" was wrong by fifty times as soon as
 the model changed. `spend_today()` is the same count, keyed by label, and is what the
-credential chain reads to decide whether a key is spent.
+credential chain reads to decide whether a key is spent. Only an explicit `cap=` is
+enforced by the chain; the per-model fallback cap only feeds the dashboard tile (see
+[brain.md](brain.md)).
 
 ### The worker
 
@@ -377,13 +386,16 @@ advancing?" without any cross-process channel.
 
 | Key | What it guarantees |
 |---|---|
-| `comments.dedupe_key` UNIQUE | **The crash-safety primitive.** Bot content carries a deterministic key (`jury:<member_id>`, `verdict:<case_id>`, `creply:<reply_id>`); a worker that dies after the INSERT but before recording the vote cannot post a second copy. Human comments leave it NULL, and MySQL permits unlimited NULLs in a UNIQUE index. |
+| `uq_comments_dedupe` (`comments.dedupe_key`) | **The crash-safety primitive.** Bot content carries a deterministic key (`jury:<member_id>`, `verdict:<case_id>`, `creply:<reply_id>`); a worker that dies after the INSERT but before recording the vote cannot post a second copy. Human comments leave it NULL, and MySQL permits unlimited NULLs in a UNIQUE index. |
 | `jury_panels.case_id` as PK | Seating a jury is idempotent without any application check. |
 | `uq_members_juror`, `uq_members_seat` | No juror sits twice, no seat is filled twice. |
 | `likes` / `case_follows` composite PKs | One like, one follow, per user per case. |
 | `uq_reports_once` | One report per person per target. |
 | `uq_conv_pair` | One conversation per pair. |
 | `uq_agent_memory`, `uq_event_dedupe` | One memory per (bot, subject); a retried tick writes no duplicate episode. |
+| `uq_summons_case_witness` | A person is summoned to a case at most once. |
+| `uq_charges` | A charge appears once per case. |
+| `uq_memory_pair` | One legacy `bot_memories` row per (bot, person). |
 | `uq_users_email`, `uq_sessions_token`, `uq_resets_token` | The obvious ones. |
 
 Two rules that would naturally be `CHECK` constraints live in Python instead, because
@@ -404,6 +416,11 @@ and every bot's memory of that person all go with it, with no application code r
 `SET NULL` is used where a deletion must not erase somebody else's record:
 `witness_summons.testimony_comment_id`, `jury_panel_members.comment_id`,
 `notifications.case_id` / `actor_user_id`, `reports.claimed_by` / `resolved_by`.
+
+Note the two `CASCADE`s that cut against "the audit trail stays complete":
+`moderation_actions.actor_user_id` and `reports.reported_by` are `ON DELETE CASCADE`, so
+deleting an admin or a reporter deletes their audit and report rows. Latent — nothing in
+the application deletes users.
 
 `jury_panels.judge_user_id` and `jury_panel_members.juror_user_id` have **no** referential
 action at all (plain `REFERENCES users(id)`), so MySQL restricts: a bot that presided over
@@ -426,8 +443,13 @@ a trial cannot be deleted out from under it.
 | `idx_notif_stream (user_id, id)` | The SSE cursor |
 | `idx_agents_social (last_social_action_at)` | Least-recently-active bot selection |
 | `idx_comments_thread (case_id, root_comment_id, created_at)` | A whole comment thread in one read |
-| `idx_event_agent_subject`, `idx_event_agent_recent`, `idx_event_case` | The three episode-retrieval paths, in the order `recall_for_agent` uses them |
-| `idx_brain_calls_provider_day (provider, created_at)` | The usage dashboard and the Gemini quota check |
+| `idx_event_agent_recent`, `idx_event_agent_subject`, `idx_event_case` | Episode retrieval. `recall_for_agent` is one scored query `WHERE agent_user_id = …`, so `idx_event_agent_recent` is its lead; the others serve per-subject and per-case lookups |
+| `idx_brain_calls_provider_day (provider, created_at)` | The per-provider usage dashboard |
+| `idx_brain_calls_day_credential (created_at, credential)` | The chain's `spend_today()` and the quota tiles — "calls per credential since UTC midnight" |
+| `idx_follows_user (user_id, created_at)` | A user's followed cases (My Feed) |
+| `idx_activity_recent (last_activity_at)` | Ordering the feed by latest activity |
+| `idx_reports_queue (status, created_at)` | The report queue |
+| `idx_notif_unread (user_id, is_read)` | The unread badge |
 
 ---
 
@@ -444,12 +466,16 @@ then starts, serves every page, and fails only inside the worker, where nobody i
 |---|---|---|
 | [`001-brain-v2.sql`](../prod/migrations/001-brain-v2.sql) | `agent_events`, `agent_memories` | Copies every `bot_memories` row across, with `covered_event_id = 0` — the two high-water marks count different things, and 0 ("no episodes folded in yet") is true and self-correcting. Does **not** drop `bot_memories`. |
 | [`002-my-feed.sql`](../prod/migrations/002-my-feed.sql) | `case_follows`, `case_activity` | Reconstructs `last_activity_at` from `GREATEST(filed_at, verdict_at, closed_at, last visible comment)`, and auto-follows every case a user filed, was named defendant in, or testified in. Without these two tables the app serves the public feed as usual and then 500s on `GET /api/cases/feed` **and on the first comment posted to any case** — the activity bump runs in the same transaction. |
-| [`003-brain-usage-log.sql`](../prod/migrations/003-brain-usage-log.sql) | `brain_calls` | None — a call made before the table existed was never recorded anywhere. Without it the app runs unchanged (`_log_call` swallows the failure and logs a warning) and the AI Usage tab has nothing to aggregate. |
+| [`003-brain-usage-log.sql`](../prod/migrations/003-brain-usage-log.sql) | `brain_calls` | None — a call made before the table existed was never recorded anywhere. Without it the app runs unchanged (`_log_call` swallows the failure and logs a warning) and the AI Usage tab has nothing to aggregate. Creates `fallback_reason` as `VARCHAR(300)`; 004 widens it. |
+| [`004-brain-credentials.sql`](../prod/migrations/004-brain-credentials.sql) | `ALTER TABLE brain_calls`: adds `credential`, `model`, `latency_ms`; widens `fallback_reason` to 500; adds `idx_brain_calls_day_credential` | None — old rows keep `credential = ''` and are read as their provider. Without it every usage row fails to insert and the AI tab goes blank. |
 
-All three are safe to re-run (`CREATE TABLE IF NOT EXISTS`, backfills guarded by
-`ON DUPLICATE KEY UPDATE`), none drops or alters an existing table, so rolling back to the
-previous image is a redeploy rather than a restore. Take an RDS snapshot first, every
-time:
+001–003 are safe to re-run (`CREATE TABLE IF NOT EXISTS`, backfills guarded by
+`ON DUPLICATE KEY UPDATE`) and none of them drops or alters an existing table.
+**004 is not idempotent** — an `ADD COLUMN` fails on a second run, so check
+`information_schema.COLUMNS` for `brain_calls` first (the query is in the file's header)
+— and it needs the `ALTER` privilege. Apply them in order. Rolling back to the previous
+image is still a redeploy rather than a restore, since the added columns have defaults.
+Take an RDS snapshot first, every time:
 
 ```bash
 docker run --rm -i -e MYSQL_PWD="$DB_PASSWORD" mysql:8.0 \

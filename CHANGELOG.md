@@ -25,11 +25,13 @@ Google's free tier also enforces a much tighter per-minute one that a burst like
 blow long before the daily allowance notices.
 
 - New `rpm=` field on a `LLM_CREDENTIALS` record (default 0, meaning unpaced). Checked in
-  `chain.candidates()` exactly like `cap=`: a credential that has already answered `rpm`
-  calls in the trailing 60 seconds is skipped in favour of the next one in the chain, not
+  `chain.candidates()` exactly like `cap=`: a credential that has already been tried `rpm`
+  times in the trailing 60 seconds (failures count) is skipped in favour of the next one in the chain, not
   waited on — see `chain.py`'s module docstring for why this is a skip rather than a
   sleep.
-- A 429 is now split into two kinds. `chain.is_rate_limit_error` recognises a per-minute
+- A 429 is now split into two kinds. (Docs note, added later: for Gemini the `PerMinute`
+  quota id lives in `error.details`, which `_gemini_http_error` drops, so that marker
+  may never match a real response — see `docs/known-issues.md`.) `chain.is_rate_limit_error` recognises a per-minute
   burst (AWS throttling exceptions, a generic "rate limit"/"too many requests", or a
   Gemini quota id containing `PerMinute`) and rests the credential for one minute instead
   of writing it off until the next UTC reset — the previous behaviour, which cost nearly
@@ -78,8 +80,8 @@ existed, and was readable nowhere.
 - The quota gauge's cap follows the **configured model** instead of one provider-wide
   `20`, and the tile names the model it is measuring against. One number for "Gemini" was
   wrong by fifty times the moment the model changed.
-- `SOCIAL_EVERY_TICKS` defaults to `20` (five minutes) rather than `4` (one minute). Each
-  social pass costs at least one model call, so the old cadence set a floor near 1,440
+- `SOCIAL_EVERY_TICKS` defaults to `20` (five minutes) rather than `4` (one minute). A
+  social pass typically costs a model call, so the old cadence set a floor near 1,440
   calls a day — past every free tier Google publishes — and a free-tier deployment ran
   out mid-morning every morning.
 
@@ -97,7 +99,9 @@ variable itself holds no credential and is safe to log and display.
 - `capabilities()` is now the union over the chain, so one `gateway` entry can no longer
   silently disable every filing on the site.
 - `brain_calls` gains `credential`, `model` and `latency_ms`, and `fallback_reason`
-  widens to 500. **One row is one provider attempt**, not one brain call.
+  widens to 500. **One row is one provider attempt**, not one brain call — the intent; as
+  implemented, failed attempts are only logged when every credential failed (docs note,
+  added later — see `docs/known-issues.md`).
 - The AI tab shows a quota tile per key (`api1-gemini`, `api2-gemini`, `api3-bedrock`)
   naming its model, and usage can be grouped by provider or by key. The single
   provider-wide Gemini gauge is gone: it and the per-key tiles would have been two

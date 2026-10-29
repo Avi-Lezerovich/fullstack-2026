@@ -7,7 +7,8 @@ internet ──80──> [ EC2 ]  web (nginx)  ──/api──>  server (gunico
                               └──3306──>  [ Amazon RDS: MySQL 8 ]
 ```
 
-Three containers on the instance; the data tier is RDS. There is **no database
+Three long-running containers on the instance (`web`, `server`, `worker`) plus the
+one-shot `seed` job that runs and exits on every deploy; the data tier is RDS. There is **no database
 container** in production — that exists only in the development stack at the repo root.
 
 | File | Runs on | What it is |
@@ -105,7 +106,8 @@ cd /opt/lolsuit/prod && cp .env.example .env && chmod 600 .env
 `chmod 600` is not decoration — the file holds your RDS password.
 
 Fill in at minimum `DOCKERHUB_USERNAME`, `DB_HOST`, `DB_PASSWORD` and `CLIENT_ORIGIN`.
-The compose file declares these as `${VAR:?…}`, so a missing one **aborts the deploy**
+`TAG`, `DB_NAME` and `DB_USER` are required too, but the template pre-fills them. The
+compose file declares these as `${VAR:?…}`, so a missing one **aborts the deploy**
 rather than quietly booting with a development password. That `?` is the most important
 character in the file.
 
@@ -147,7 +149,7 @@ instance. Check connectivity without changing anything:
 cd /opt/lolsuit/prod && ./init-rds.sh --check
 ```
 
-It is **safe to re-run**: all 23 `CREATE TABLE` statements are `IF NOT EXISTS`.
+It is **safe to re-run**: all 24 `CREATE TABLE` statements are `IF NOT EXISTS`.
 
 For exactly that reason it is **not a migration tool** — `IF NOT EXISTS` can only ever
 *add* a table, never add a column to an existing one. See "Schema changes" below.
@@ -161,6 +163,11 @@ cd /opt/lolsuit/prod && ./deploy.sh v1.0.1
 The seed job runs automatically and creates the 31 court bots, the demo accounts and the
 opening case. It is idempotent, so it runs safely on every deploy.
 
+> **Change the seeded passwords.** Seeding creates `admin@lolsuit.local` (an admin) and
+> `dana@` / `yoni@` / `maya@lolsuit.local`, all with the password `demo1234` that is
+> published in this repo. Log in and change them, at least the admin's, right after the
+> first deploy — the seed never resets a password that has been changed.
+
 ---
 
 ## Releasing a new version
@@ -173,14 +180,15 @@ From the repo root, on your Mac:
 
 > **Your Mac is arm64; your EC2 instance is x86_64.** A plain `docker build && docker
 > push` publishes an arm64 image that pulls fine and then dies instantly with
-> `exec /usr/local/bin/gunicorn: exec format error`. `release.sh` never calls
+> `exec /opt/venv/bin/gunicorn: exec format error`. `release.sh` never calls
 > `docker build` — it uses `buildx` with an explicit `--platform linux/amd64`, so this
 > cannot happen by accident. (On Graviton, use
 > `PLATFORMS=linux/amd64,linux/arm64`.)
 
 The script:
 
-1. refuses anything that is not `vMAJOR.MINOR.PATCH`;
+1. refuses anything that is not `vMAJOR.MINOR.PATCH`, optionally with a pre-release
+   suffix (`v1.0.0-rc.1`);
 2. refuses to build from a dirty tree — a published image should be rebuildable from its
    git sha, and from a dirty tree it would not be;
 3. cross-builds both images for `linux/amd64`;
@@ -200,6 +208,11 @@ Variations:
 ```bash
 ./prod/release.sh v1.0.1 --git-tag     # also create and push an annotated git tag
 ```
+
+Also: `--server-only` (skip the web image), `--no-latest` (do not move `:latest`),
+`--allow-dirty` (build from an uncommitted tree), `-u/--user NAME` (Docker Hub user,
+otherwise `DOCKERHUB_USERNAME`), `-h/--help`. `make release VERSION=v1.0.1` and
+`make release-dry VERSION=v1.0.1` wrap it.
 
 ### Which commit is actually running?
 
@@ -262,6 +275,10 @@ downloading 250MB — turning seconds of downtime into minutes.
 You do not need `--env-file`: Compose reads `.env` from the *project directory* — the
 one holding the compose file — so `prod/.env` is found even when you run from the repo
 root.
+
+`deploy.sh` with no version re-deploys the current `TAG` from `prod/.env`. Flags:
+`--rollback`, `--no-rollback` (do not auto-roll-back on a failed health check),
+`--skip-health`; environment `HEALTH_TIMEOUT` (120) and `COMPOSE_FILE`.
 
 ### Rolling back
 
@@ -375,15 +392,22 @@ the console. That is the main reason to be on RDS at all. A manual dump:
 docker run --rm -e MYSQL_PWD="$DB_PASSWORD" mysql:8.0 mysqldump -h "$DB_HOST" -u "$DB_USER" "$DB_NAME" | gzip > "lolsuit-$(date +%F).sql.gz"
 ```
 
+These commands expect `DB_HOST`, `DB_USER`, `DB_NAME` and `DB_PASSWORD` in your shell.
+Nothing exports them from `prod/.env` (the scripts deliberately never `source` it), so
+set them yourself first, e.g. `export DB_HOST=… DB_USER=… DB_NAME=…` and
+`read -rs DB_PASSWORD && export DB_PASSWORD`.
+
 **Uploads are the one piece of state RDS does not cover.** Avatars and evidence photos
 live in a named Docker volume on the instance's EBS root device. They are not in your RDS
 snapshots and do not survive replacing the instance:
 
 ```bash
-docker run --rm -v lolsuit_uploads:/data -v "$PWD:/backup" alpine tar czf /backup/uploads-$(date +%F).tar.gz -C /data .
+docker run --rm -v prod_uploads:/data -v "$PWD:/backup" alpine tar czf /backup/uploads-$(date +%F).tar.gz -C /data .
 ```
 
-Check the real volume name first — Compose prefixes it with the project name:
+Check the real volume name first — Compose prefixes it with the project name, which is
+the directory name (`prod`) since the compose file sets no `name:`; `prod_uploads` above
+is that expectation, not a verified value:
 
 ```bash
 docker volume ls | grep uploads
@@ -408,6 +432,13 @@ Written migrations live in `prod/migrations/`, newest last:
 | --- | --- | --- |
 | `001-brain-v2.sql` | v2.0.0 | Adds `agent_events` and `agent_memories`, and copies `bot_memories` across. |
 | `002-my-feed.sql` | v3.0.0 | Adds `case_follows` and `case_activity`, backfills each case's last-activity timestamp and the automatic follows. Apply *before* the new images. |
+| `003-brain-usage-log.sql` | v4.0.0 | Adds `brain_calls`, the AI usage log. Idempotent. |
+| `004-brain-credentials.sql` | v5.0.0 | `ALTER TABLE brain_calls`: adds `credential`, `model`, `latency_ms`, widens `fallback_reason`, adds an index. **Not idempotent** — run once; check `information_schema.COLUMNS` first (query in the file header). Needs `ALTER`. |
+
+001–003 are safe to re-run; 004 is not. Apply in order, each after a snapshot, with the
+`docker run … mysql` command above (it needs no `mysql` client on the instance — the
+`mysql -h …` line in 004's own header and in CHANGELOG 5.0.0 assumes one). See
+[docs/database.md](../docs/database.md#migrations).
 
 **A new table needs this step even though `init.sql` already has it.** `init-rds.sh`
 reads `init.sql` from *this instance's own checkout*, so a box that was not pulled
@@ -430,8 +461,8 @@ CREATE USER 'lolsuit'@'%' IDENTIFIED BY 'a-strong-password';
 GRANT SELECT, INSERT, UPDATE, DELETE ON lolsuit.* TO 'lolsuit'@'%';
 ```
 
-Grant `CREATE, ALTER, INDEX, REFERENCES` temporarily when you run `init-rds.sh`, then
-revoke them. Day to day the application never issues DDL — `create_app()` is deliberately
+Grant `CREATE, ALTER, INDEX, REFERENCES` temporarily when you run `init-rds.sh` **or a
+migration** (004 is an `ALTER`), then revoke them. Day to day the application never issues DDL — `create_app()` is deliberately
 side-effect free.
 
 ---

@@ -17,8 +17,9 @@ Mid-semester project — Full Stack course, Reichman University (RUNI) 2026.
 
 Everything the frontend fetches goes through `/api`.
 
-Deeper architecture notes — the worker's tick loop, the AI "brain", the schema, the API
-and the client — are in **[docs/](docs/README.md)**.
+Deeper architecture notes — the worker's tick loop, the AI "brain", the schema, the API,
+the client, every environment variable, the dev workflow and the known issues — are in
+**[docs/](docs/README.md)**.
 
 The **worker is its own process, not a thread**. It is a long-running loop, so gunicorn
 has no way to run it, and a background thread inside a web worker would tick once per
@@ -57,13 +58,25 @@ docker compose up -d db
 
 That publishes MySQL on `127.0.0.1:3307` with the schema already applied.
 
+### 0. Create `.env` — required for this path
+
+```bash
+cp .env.example .env
+```
+
+Without it the server falls back to its code defaults, `DB_USER=root` /
+`DB_PASSWORD=lolsuit-dev` ([`config.py`](server/app/config.py)), and the compose
+database refuses that login: its root password is `lolsuit-root-dev`, and
+`lolsuit-dev` belongs to the `lolsuit` user. `.env.example` sets `DB_USER=lolsuit`,
+which is what makes it work.
+
 ### 1. Server — port 5002
 
 ```bash
 cd server
 python -m venv .venv                 # first time only
 source .venv/bin/activate            # Windows: .venv\Scripts\activate
-pip install -r requirements.txt      # first time only
+pip install -r requirements-dev.txt  # first time only (includes requirements.txt + pytest)
 python -m app.seed                   # first time only: bots, admin, demo accounts
 python run.py
 ```
@@ -88,16 +101,21 @@ npm run dev
 
 Open <http://localhost:5174>. Vite proxies `/api` to the server on 5002.
 
+The worker and the server each read `.env` on their own. To make trials move in minutes
+rather than days, set `PHASE_MINUTES=2` in `.env` (both processes read it from there).
+
 ### Configuration
 
-The server reads everything from the environment; every value has a default
+The server reads everything from the environment; every value has a code default
 (see [`server/app/config.py`](server/app/config.py)). Defaults in parentheses:
 `DB_HOST` (`127.0.0.1`), `DB_PORT` (`3307`), `DB_USER` (`root`), `DB_PASSWORD`
 (`lolsuit-dev`), `DB_NAME` (`lolsuit`), `PORT` (`5002`), `CLIENT_ORIGIN`
-(`http://localhost:5174`).
+(`http://localhost:5174`). The DB defaults do **not** match the compose database —
+see step 0.
 
-`.env` in the repo root is read automatically for local runs — copy
-[`.env.example`](.env.example) and edit. Never commit it.
+`.env` in the repo root is read automatically for local runs (`load_dotenv` in
+`config.py`; it never overrides a variable already set). Never commit it. The full
+variable reference is [docs/configuration.md](docs/configuration.md).
 
 ---
 
@@ -150,14 +168,16 @@ docker compose down -v && docker compose up --build
   → closed`, advanced by the worker. Witnesses are summoned and testify; a seven-juror
   panel is drawn deterministically; a judge breaks ties.
 - **AI court personalities** — 31 bots with distinct voices who comment, vote and rule. They also sue each other, and sue whatever the season happens to be doing.
-  They run on a **deterministic offline generator by default** — no credentials, no
-  network — or on Amazon Bedrock, the Anthropic API, Google Gemini, or an HTTP
-  gateway when configured.
-- **Bot memory** — a bot answering a direct message is given three things: the
-  facts the site already holds about that person (their cases and how those
-  trials ended, read live), the recent turns of the conversation as real turns,
-  and a short summary of everything older, written by the model and stored per
-  (bot, person) pair. The same seam gives a commenting bot the actual filing
+  Under Docker Compose they run on a **deterministic offline generator by default**
+  (compose sets `BRAIN_FORCE_OFFLINE=1`) — no credentials, no network — or on Amazon
+  Bedrock, the Anthropic API, Google Gemini, or an HTTP gateway when configured. Outside
+  compose the code default is `BRAIN_FORCE_OFFLINE` off, so a configured credential is
+  used if one is present. See [docs/brain.md](docs/brain.md).
+- **Bot memory** — four layers ([`memory_service.py`](server/app/services/memory_service.py)):
+  the facts the site already holds about that person (their cases and how those
+  trials ended, read live), the recent turns of the conversation as real turns, the
+  bot's own episodes (`agent_events` — what it voted, who sued it), and a short summary
+  of everything older, written by the model and stored per (bot, person) pair. The same seam gives a commenting bot the actual filing
   instead of just its title. You can read what the court remembers about you at
   `GET /api/users/me/memories`, and clear it with `DELETE`.
 - **Social** — likes, threaded comments, user search, direct messages, and follows.
@@ -183,61 +203,20 @@ docker compose down -v && docker compose up --build
 
 ## Tests
 
-The backend suite runs against **real MySQL**. `tests/conftest.py` executes
-`database/init.sql` itself into a throwaway `lolsuit_test` database, so the tests
-exercise the actual dialect — the real foreign keys, the real ENUM constraints,
-`FOR UPDATE SKIP LOCKED` and `UTC_TIMESTAMP()` — rather than an approximation of
-them. Your own `lolsuit` database is never touched.
-
 ```bash
-docker compose up -d db
+docker compose up -d db                 # integration + worker tests need MySQL on 3307
+cd server && python -m pytest --cov     # ~1,055 backend tests, 85% coverage gate
 ```
 
 ```bash
-cd server && python -m pytest --cov
+cd client && npm test && npm run lint   # ~157 vitest tests, then tsc --noEmit
 ```
 
-Zero collection errors. `--cov` is the one flag to remember — `.coveragerc` holds
-everything else, including the 85% gate and the missing-line report. The harness
-rebuilds the schema and seeds the court's cast once per session, then returns the
-database to that state before each test.
-
-Three markers select a layer:
-
-```bash
-cd server && python -m pytest -m unit
-```
-
-```bash
-cd server && python -m pytest -m "integration or worker"
-```
-
-The `unit` layer is hermetic and needs nothing running. **Without the database the
-`integration` and `worker` tests skip** — loudly, with a reason naming
-`docker compose up -d db` — rather than erroring, so `pytest` still passes on a
-machine with no Docker. The coverage figure below assumes it is up.
-
-Point the harness elsewhere with `TEST_DB_HOST`, `TEST_DB_PORT`,
-`TEST_DB_ROOT_USER`, `TEST_DB_ROOT_PASSWORD` and `TEST_DB_NAME`. It needs an
-account that may `CREATE DATABASE`, which is why it connects as root by default
-while the application itself never does.
-
-```bash
-cd client && npm test
-```
-
-```bash
-cd client && npm run lint
-```
-
-Frontend tests are vitest + @testing-library/react, aimed at the pieces with real
-logic rather than at markup: `usePagedList` (offset accumulation, the stale-response
-token, `patchItems`), `useAsync`, `AuthContext`, `useNotificationStream` (the
-SSE-to-polling fallback), `LikeButton` / `FollowButton` (the guarded prop-sync),
-`CommentThread`, `CaseCard`, `InfiniteScroll` (the scroll sentinel), `ErrorPage`,
-`AppErrorBoundary`, `ProtectedRoute` and `utils/format`. There is no coverage gate on
-the client; the page components are deliberately untested, bar two narrow exceptions
-that pin behaviour rather than markup — see [TESTING.md](TESTING.md).
+The backend suite runs against **real MySQL**: `tests/conftest.py` builds a throwaway
+`lolsuit_test` database from `database/init.sql`, so your own `lolsuit` database is never
+touched. Without the database the `integration` and `worker` tests **skip** (with a
+reason) rather than fail. Markers, the harness, counts and what each layer covers are in
+**[TESTING.md](TESTING.md)**.
 
 ---
 
@@ -248,6 +227,8 @@ RDS** for MySQL. Everything production-specific lives in **[`prod/`](prod/)**. F
 guide: **[prod/README.md](prod/README.md)**.
 
 > **Read [CHANGELOG.md](CHANGELOG.md) before upgrading across a major version.**
+> The migrations live in [`prod/migrations/`](prod/migrations/) (001–004; 004 is not
+> idempotent).
 > A release that adds a table needs the migration applied *first*, and skipping it
 > does not fail loudly — the site comes up and only the worker dies.
 
@@ -284,11 +265,12 @@ Silicon Mac will not run on EC2.
 │   ├── Dockerfile            # multi-stage: node builds, nginx serves
 │   ├── nginx.conf.template   # SPA fallback + /api reverse proxy + SSE
 │   └── src/
-│       ├── api.ts            # the only place the app calls fetch
+│       ├── api.ts            # the REST seam (the SSE hook has its own fetch/EventSource)
 │       ├── components/       # UI, grouped by feature
 │       ├── pages/            # route-level screens
 │       ├── context/          # auth + notification providers
-│       └── hooks/
+│       ├── hooks/            # useAsync, usePagedList, useNotificationStream
+│       └── utils/            # format, adminOps
 ├── server/
 │   ├── Dockerfile            # multi-stage, non-root; one image, three commands
 │   ├── run.py                # web entry point (gunicorn run:app)
@@ -302,10 +284,17 @@ Silicon Mac will not run on EC2.
 │   │   ├── seed_data.py      # the cast: 31 personalities, as pure data
 │   │   ├── api/              # one blueprint per resource group, all under /api
 │   │   ├── services/         # business logic + parameterised SQL
-│   │   └── brain/            # the bots: offline generator and LLM backends
-│   └── worker/               # the tick loop and its tasks
+│   │   └── brain/            # the bots: offline generator, LLM package, credential chain
+│   ├── worker/               # the tick loop and its tasks
+│   ├── tests/                # pytest: unit/ and integration/
+│   └── evals/                # offline scorecard for the bots' voices
 ├── database/
 │   └── init.sql              # the schema; mounted into MySQL's entrypoint
-├── docker-compose.yml        # the whole stack
-└── DOCKER.md                 # how to run it
+├── prod/                     # EC2 + RDS: compose, scripts, migrations/
+├── docs/                     # architecture docs, config reference, known issues
+├── docker-compose.yml        # the whole local stack
+├── Makefile                  # shortcuts for compose and prod scripts (`make help`)
+├── DOCKER.md                 # how to run it
+├── TESTING.md                # how to test it
+└── CHANGELOG.md              # releases and upgrade steps
 ```

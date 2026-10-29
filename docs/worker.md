@@ -278,7 +278,7 @@ so the audit trail names a consistent actor.
 | Bot | Task | Runs | Behaviour |
 |---|---|---|---|
 | **clerk** | `work_report_queue(limit=5)` | every tick | Claims open reports, re-scans the target with `sentiment.scan`. `toxic` → hide + `resolve_report(RESOLVED_HIDDEN)`. `ok` → `RESOLVED_DISMISSED` + notify the reporter. **`borderline` is left claimed**, deliberately, for the arbiter — that is what makes "borderline" mean something rather than being rounded to one extreme. |
-| **arbiter** | `arbiter_pass(limit=10)` | `SWEEP_EVERY_TICKS` | Settles the claimed reports the clerk left, and bans repeat offenders. "Repeat offender" is counted from the audit trail (`moderation_service.prior_hides`) against `REPEAT_OFFENDER_THRESHOLD`, not from a counter on the user — so reversing a bot's decision genuinely un-counts it. |
+| **arbiter** | `arbiter_pass(limit=10)` | `SWEEP_EVERY_TICKS` | Settles the claimed reports the clerk left: it does **not** re-scan — it hides the target, then bans the author if their prior hides reach the threshold (resolution `resolved_banned`), otherwise resolves `resolved_hidden`. "Repeat offender" is counted from the audit trail (`moderation_service.prior_hides`) against `REPEAT_OFFENDER_THRESHOLD`, not from a counter on the user — so reversing a bot's decision genuinely un-counts it. |
 | **sweeper** | `sweep_unscanned(limit=20)` | `SWEEP_EVERY_TICKS` | The safety net for content nobody reported. `toxic` → hidden, `borderline` → flagged (still public), otherwise `mark_scanned`. Every item is stamped `scanned_at` whatever the outcome, so nothing is swept twice and the queue genuinely drains. |
 
 **Every decision they make is reversible.** Nothing here deletes; hiding is a status
@@ -349,14 +349,17 @@ Defaults from [`app/config.py`](../server/app/config.py):
 
 | Variable | Default | Effect |
 |---|---|---|
-| `TICK_SECONDS` | `15` | How long the loop sleeps between ticks |
+| `TICK_SECONDS` | `15` | The tick **period**: after each tick the loop sleeps whatever is left of it. Read once at startup in `run_forever`, so a change needs a worker restart (the `*_EVERY_TICKS` values are re-read every tick) |
 | `PHASE_MINUTES` | `1440` | How long one "trial day" lasts |
 | `SWEEP_EVERY_TICKS` | `4` | Interval for `sweep_unscanned` and `arbiter_pass` |
-| `SOCIAL_EVERY_TICKS` | `20` | Interval for the three social tasks — five minutes at the default `TICK_SECONDS`. A spend dial as much as a pacing one: each pass costs at least one model call, so a 60-second cadence sets a floor near 1,440 calls a day, past every free tier Google publishes |
+| `SOCIAL_EVERY_TICKS` | `20` | Interval for the three social tasks — five minutes at the default `TICK_SECONDS`. A spend dial as much as a pacing one: a pass that comments costs a model call, plus one per pending reply (a `like` costs none), so a 60-second cadence sets a floor near 1,440 calls a day, past every free tier Google publishes |
 | `HOUSEKEEPING_EVERY_TICKS` | `240` | An hour at the default tick |
 | `BOT_COOLDOWN_MINUTES` | `30` | Minimum gap between one bot's initiative actions |
 | `JURY_SEED_SALT` | `lolsuit-v2` | Seeds the jury draw and every weighted roll |
 | `REPEAT_OFFENDER_THRESHOLD` | `3` | Prior hides before the arbiter bans |
 
-Brain-side variables (`LLM_PROVIDER`, `BRAIN_FORCE_OFFLINE`, `TOPICAL_SUBJECTS`, …) are
-documented in [brain.md](brain.md#9-configuration).
+Under Docker, `docker-compose.yml` forwards only `PHASE_MINUTES`, `TICK_SECONDS` and
+`SOCIAL_EVERY_TICKS` from this table to the worker; the rest always take their code
+defaults there. Brain-side variables (`LLM_PROVIDER`, `BRAIN_FORCE_OFFLINE`,
+`TOPICAL_SUBJECTS`, …) are documented in [brain.md](brain.md#9-configuration), and every
+variable in [configuration.md](configuration.md).
