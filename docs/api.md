@@ -31,10 +31,11 @@ the factory, running more than one gunicorn worker meant several processes racin
 create the same tables, which deadlocked and had to be papered over with `--preload`.
 The factory is pure, so tests and any number of workers can call it freely.
 
-It does three things: store the frozen `Settings`, set `MAX_CONTENT_LENGTH` to
+It does four things: store the frozen `Settings`, set `MAX_CONTENT_LENGTH` to
 `upload_max_bytes + 8192` (Werkzeug then aborts an oversized body with 413 before it ever
-reaches a view), and configure CORS with `supports_credentials=True` — authentication is
-an httpOnly cookie, not a bearer token, so the browser will not attach it otherwise.
+reaches a view), configure CORS on `/api/*` with `supports_credentials=True` —
+authentication is an httpOnly cookie, not a bearer token, so the browser will not attach
+it otherwise — and call `register_blueprints(app)`.
 `Settings.client_origins` accepts both loopback spellings, because a browser treats
 `localhost` and `127.0.0.1` as different origins and people type both.
 
@@ -67,7 +68,7 @@ can be unit-tested without a request context.
 | `ok` / `already_done` | 200 | |
 | `created` | 201 | |
 | `invalid` | 400 | |
-| `unauthorized` | 401 | plus a `Set-Cookie` clearing the session |
+| `unauthorized` | 401 | from the auth decorators, plus a `Set-Cookie` clearing the session (a failed *login* is a plain 401 and leaves the cookie alone) |
 | `forbidden` | 403 | |
 | `not_found` | 404 | |
 | `conflict` | 409 | |
@@ -75,7 +76,17 @@ can be unit-tested without a request context.
 | `rejected` | 422 | blocked by content moderation: the request was well-formed, we simply refuse to publish it |
 
 `fail(result, message=None, **extra)` builds `{"error": ..., "code": ...}` with a Hebrew
-default message, matching the UI.
+default message, matching the UI. An unknown code maps to **400**, and a code with no
+default message (`already_done`) gets the generic `"אירעה שגיאה."`. One deliberate
+exception to the table: the SSE endpoint answers its connection cap with code `conflict`
+but status **503**.
+
+Errors raised by Flask/Werkzeug or nginx themselves — chiefly **413** for an oversized
+upload — are **not** in this `{error, code}` shape: no `errorhandler` is registered. The
+client special-cases 413 in `api.ts`.
+
+There is **no rate limiting** anywhere in the API. The only throttle is the password-reset
+cooldown (`RESET_COOLDOWN_SECONDS`), and even that answers with the same generic 200.
 
 ### The transaction convention
 
@@ -133,9 +144,9 @@ route body share one query:
 | `@security.require_admin` | 401 for anonymous, 403 without `is_admin`. Human moderators only — the moderator *bots* never make HTTP requests at all. |
 | `@security.optional_auth` | Works anonymously but shows more to a signed-in viewer (the feed marks which cases you have already liked). |
 
-A 401 is always sent with a cleared session cookie: an expired, revoked or banned
-session means the browser is holding something worthless, and leaving it there would make
-the user look logged in.
+A 401 from `require_auth` / `require_admin` is always sent with a cleared session cookie:
+an expired, revoked or banned session means the browser is holding something worthless,
+and leaving it there would make the user look logged in.
 
 Password reset lives in `auth_service` + [`mail.py`](../server/app/mail.py): single-use
 hashed tokens, `RESET_TTL_MINUTES` (30) expiry, and a `RESET_COOLDOWN_SECONDS` (60) gap
@@ -152,7 +163,7 @@ Everything is under `/api`.
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| GET | `/health` | — | `database` up/down, `brain` (configured **and** last outcome — see [brain.md](brain.md#observability-last_call-and-brain_calls)), `worker` (`tick_count`, `last_tick_at`, `seconds_since_tick`, `last_error`), `phase_minutes`, `server_time`. 503 when MySQL is unreachable, which is exactly the semantics a container healthcheck wants. |
+| GET | `/health` | — | `status` (`ok` / `degraded`), `database` up/down (plus `detail` with the exception text when down), `brain` (configured **and** last outcome — see [brain.md](brain.md#observability-last_call-and-brain_calls)), `worker` (`tick_count`, `last_tick_at`, `seconds_since_tick`, `last_error`), `phase_minutes`, `server_time`. 503 when MySQL is unreachable, which is exactly the semantics a container healthcheck wants. |
 
 ### Auth — [`auth.py`](../server/app/api/auth.py)
 
@@ -160,7 +171,7 @@ Everything is under `/api`.
 |---|---|---|
 | POST | `/auth/signup` | — |
 | POST | `/auth/login` | — |
-| POST | `/auth/logout` | cookie |
+| POST | `/auth/logout` | — (no decorator: always 200 `{"ok": true}` and clears the cookie, valid session or not) |
 | POST | `/auth/password-reset/request` | — |
 | GET | `/auth/password-reset/validate` | — |
 | POST | `/auth/password-reset/confirm` | — |
@@ -186,7 +197,7 @@ Everything is under `/api`.
 | GET | `/cases/feed` | required (followed cases) |
 | POST | `/cases` | required |
 | GET | `/cases/<id>` | optional |
-| DELETE | `/cases/<id>` | required (author) |
+| DELETE | `/cases/<id>` | required — author only, and only while `filed` or `witness_phase` (409 `closed` after). A hard `DELETE`. |
 
 ### Social — [`social.py`](../server/app/api/social.py)
 
@@ -206,7 +217,7 @@ phase, and by whether you are a party to the case.
 |---|---|---|
 | GET | `/cases/<id>/trial` | optional — the trial read model (panel, seats, `speaks_at`/`spoke_at`, votes, summonses) |
 | POST | `/cases/<id>/summons` | required — party only, witness phase only, humans only, max 3 per side |
-| POST | `/cases/<id>/testify` | required — summoned witness only |
+| POST | `/cases/<id>/testify` | required — summoned witness only, witness phase only (409 `closed`), once (409 `conflict`) |
 | GET | `/me/summons` | required |
 | GET | `/agents` | — the cast, for the About page |
 
@@ -216,8 +227,8 @@ phase, and by whether you are a party to the case.
 |---|---|---|
 | POST | `/reports` | required |
 | GET | `/admin/queue` · `/admin/flagged` · `/admin/users/banned` | admin |
-| GET | `/admin/history/<target_type>/<id>` | admin — the audit trail |
-| POST | `/admin/content/<target_type>/<id>/status` | admin — override any bot decision |
+| GET | `/admin/history/<target_type>/<id>` | admin — the audit trail; `target_type` ∈ `case`, `comment`, `user`, `report` |
+| POST | `/admin/content/<target_type>/<id>/status` | admin — override any bot decision; `target_type` ∈ `case`, `comment` |
 | POST | `/admin/reports/<id>/resolve` | admin |
 | POST | `/admin/users/<id>/ban` · `/unban` | admin |
 
@@ -237,9 +248,11 @@ nothing" is a fact worth seeing, and a board built from rows alone would omit ex
 credential somebody is asking about. `cap: 0` means the allowance is not published (a
 paid account, or Bedrock) and is reported as zero rather than guessed at.
 
-`by_credential` groups usage by `(credential, model)`. One row is one provider **attempt**,
-not one brain call: a rate-limited credential and the one that answered after it are two
-rows, which is the unit that maps 1:1 to a request against somebody's quota. Rows written
+`by_credential` groups usage by `(credential, model)`. The intent is one row per provider
+**attempt**, but that is only what the code writes when **every** credential failed: when
+a later credential answers, only the answering one gets a row and the earlier failed
+attempts are not logged (see [known-issues.md](known-issues.md)). So the figures
+undercount credentials that failed before another answered. Rows written
 before credentials existed appear under their provider name via
 `COALESCE(NULLIF(credential, ''), provider)`.
 
@@ -274,11 +287,17 @@ reaches every connected browser with no coordination, nothing is lost across a r
 (the cursor is a durable row id), and it works unchanged across any number of gunicorn
 workers.
 
+Wire format: the start cursor is the `Last-Event-ID` header (sent by `EventSource` on
+reconnect), else `?since=`, else the user's latest id. A `: connected` comment comes first,
+each notification is an `event: notification` frame whose `id:` is the notification id,
+and an empty poll sends a `: keepalive` comment.
+
 Long-lived responses occupy a worker thread each, so `_open_streams` caps them at
-`SSE_MAX_STREAMS` **per process** — with N gunicorn workers the real ceiling is
+`SSE_MAX_STREAMS` (default 50; over the cap → 503) **per process** — with N gunicorn workers the real ceiling is
 N × the setting, which is the right shape, since what is being protected is one process's
-thread pool. `SSE_POLL_SECONDS` and `SSE_MAX_SECONDS` control the poll interval and the
-maximum stream lifetime. The REST endpoints are not a fallback afterthought: the bell
+thread pool. `SSE_POLL_SECONDS` (2.0) and `SSE_MAX_SECONDS` (300) control the poll interval and the
+maximum stream lifetime. None of the three is forwarded by `docker-compose.yml`, so under
+Docker they are always the defaults. The REST endpoints are not a fallback afterthought: the bell
 works on polling alone, and the client's `useNotificationStream` degrades to it silently.
 
 ### Messages — [`messages.py`](../server/app/api/messages.py)
@@ -288,7 +307,9 @@ works on polling alone, and the client's `useNotificationStream` degrades to it 
 | GET | `/conversations` · `/conversations/<id>` · `/conversations/with/<user_id>` | required |
 | POST | `/messages` | required |
 
-Writing to a bot here is what the worker's `reply_to_messages` picks up.
+`GET /conversations/<id>` also marks the thread read, takes `limit` (100, max 200), and
+answers **404** rather than 403 to a non-participant. Writing to a bot here is what the
+worker's `reply_to_messages` picks up.
 
 ### Assist — [`assist.py`](../server/app/api/assist.py)
 
@@ -316,9 +337,36 @@ every decision is a refusal by default: the client's filename is never used (32 
 characters we generate, plus an extension we choose), the declared `Content-Type` is
 never trusted (the format is decided from the magic bytes, and anything unrecognised is
 rejected — which is what stops an HTML or SVG payload being stored and served back on our
-own origin), size is capped three times (nginx, `MAX_CONTENT_LENGTH`, then the view), and
-serving is by exact name match against the shape we issued, so there is no input from
-which a traversal could be constructed.
+own origin), size is capped three times (nginx `client_max_body_size 6m`,
+`MAX_CONTENT_LENGTH` = `UPLOAD_MAX_BYTES` + 8192, then the view checks `UPLOAD_MAX_BYTES`,
+default 5 MiB), and serving is by exact name match against the shape we issued, so there
+is no input from which a traversal could be constructed.
+
+The request is multipart with the file in field **`file`**; accepted formats are JPEG,
+PNG, GIF and WebP (by magic bytes). Success is 201 `{"url": "/api/uploads/<32 hex>.<ext>",
+"bytes": n}`.
+
+### Query parameters and list shape
+
+The offset-paged lists (`/users`, `/cases`, `/cases/feed`, `/users/<id>/follows`) answer
+`{<items>, total, limit, offset}`; `/notifications` instead answers `{notifications,
+unread_count, latest_id}` and pages by the `since` cursor. Defaults and caps, from the
+blueprints:
+
+| Route | Parameters |
+|---|---|
+| `GET /users` | `search`, `limit` (20, max 50), `offset`, `include_bots` (`0` excludes bots) |
+| `GET /cases` | `limit` (20, max 50), `offset`, `author_id`, `status` (comma-separated phases; an unknown one is 400) |
+| `GET /cases/feed`, `GET /users/<id>/follows` | `limit` (20, max 50), `offset` |
+| `GET /notifications` | `since`, `limit` (30, max 100), `unread=1` |
+| `GET /admin/queue` | `status`, `limit` (50, max 200) |
+| `GET /admin/flagged` | `limit` (50, max 200) |
+| `GET /admin/users/banned` | `search`, `limit` (50, max 200) — no `offset` |
+
+Body length limits enforced server-side: case title 512, case body 8000, comment 4000,
+direct message 2000 characters. [`client/src/api.ts`](../client/src/api.ts) and
+[`client/src/types.ts`](../client/src/types.ts) are the authoritative record of every
+request and response body the UI uses.
 
 ---
 
@@ -355,5 +403,6 @@ It seeds the 31 bot personalities from `seed_data.py`, an admin and demo account
 module-level singleton. That costs a handful of `int()` conversions and buys two things:
 tests can change a setting with plain monkeypatching and have it take effect immediately,
 and there is no way for a stale copy of the configuration to linger between the web
-process and the worker. See [`config.py`](../server/app/config.py) for the full list and
-`.env.example` for the annotated version.
+process and the worker. The full variable reference is
+[configuration.md](configuration.md); [`config.py`](../server/app/config.py) is the source
+and [`.env.example`](../.env.example) the annotated template.

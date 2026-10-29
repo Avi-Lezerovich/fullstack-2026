@@ -8,8 +8,11 @@ docker compose up --build
 
 Then open **<http://localhost:8080>**.
 
-No `.env` is required. Every variable has a working local default; see
-[Environment variables](#environment-variables) for what to set and when.
+No `.env` is required **for the compose stack**: every variable has a working default in
+`docker-compose.yml`. (Running the server *outside* Docker is different — there `.env`
+is required; see [README.md](README.md#running-locally-without-docker).) See
+[Environment variables](#environment-variables) for what to set and when, and
+[docs/configuration.md](docs/configuration.md) for the full reference.
 
 ---
 
@@ -79,21 +82,34 @@ cp .env.example .env
 | Variable | Default | Why you'd change it |
 |---|---|---|
 | `WEB_PUBLISH_PORT` | `8080` | Something else already owns 8080. |
+| `API_PUBLISH_PORT` | `5002` | Loopback port the API is published on. |
+| `DB_PUBLISH_PORT` | `3307` | Loopback port MySQL is published on. The tests and a non-Docker server expect 3307. |
+| `DB_NAME`, `DB_USER` | `lolsuit`, `lolsuit` | The application database and account the `db` container creates on first boot. |
 | `DB_PASSWORD` | `lolsuit-dev` | **Mandatory** anywhere that is not your laptop. |
 | `MYSQL_ROOT_PASSWORD` | `lolsuit-root-dev` | Same. Only the local `db` container uses it; the app never connects as root. |
 | `PHASE_MINUTES` | `1440` | A trial phase is a day. Set `2` to watch a case reach a verdict over a coffee. |
-| `TICK_SECONDS` | `15` | How often the worker wakes up. |
+| `TICK_SECONDS` | `15` | The worker's tick period (passed to `worker` only). |
 | `FLASK_SESSION_SECURE` | `0` | Set `1` behind HTTPS. It **breaks plain-HTTP local dev**, so it stays 0 here. |
 | `CLIENT_ORIGIN` | `http://localhost:8080` | Only consulted when something calls the API directly instead of through nginx. |
 | `MAIL_BACKEND` | `console` | `smtp` to actually send the password-reset email. On `console` the link is printed to `docker compose logs server`. |
-| `MAIL_FROM`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_USE_TLS` | — | Only read when `MAIL_BACKEND=smtp`. See the commented Brevo block in `.env.example`. |
+| `MAIL_FROM`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_USE_TLS` | `court@lolsuit.local`, empty, `587`, empty, empty, `1` | Only read when `MAIL_BACKEND=smtp`. See the commented Brevo block in `.env.example`. (Outside compose the code defaults differ: `SMTP_HOST=localhost`, `SMTP_PORT=25`, TLS off.) |
 | `RESET_COOLDOWN_SECONDS` | `60` | How long before a second reset link is sent to the same account. |
+
+Not every variable the code reads is forwarded by `docker-compose.yml`. In particular
+`RESET_TTL_MINUTES`, `UPLOAD_MAX_BYTES`, `SESSION_TTL_DAYS`, the `SSE_*` knobs and the
+worker's `SWEEP_EVERY_TICKS` / `HOUSEKEEPING_EVERY_TICKS` / `BOT_COOLDOWN_MINUTES`
+reach no container, so setting them in `.env` has no effect under Docker — they take
+their code defaults. `UPLOAD_DIR` is pinned to `/app/uploads`. The per-variable table in
+[docs/configuration.md](docs/configuration.md) says which are forwarded.
 
 ### The bots' brain (all optional)
 
-The default is `BRAIN_FORCE_OFFLINE=1`: a deterministic offline generator, fully
-functional, no credentials, no network. To use a real model set
-`BRAIN_FORCE_OFFLINE=0` and pick one of:
+Compose's default is `BRAIN_FORCE_OFFLINE=1` (the code's own default is off): a
+deterministic offline generator, fully functional, no credentials, no network. To use a
+real model set `BRAIN_FORCE_OFFLINE=0` and either configure a credential chain with
+`LLM_CREDENTIALS` (plus `GEMINI_KEY_1`…`GEMINI_KEY_3`, which compose forwards for
+`key_env=` to name — see [docs/brain.md](docs/brain.md)), or pick one legacy single
+provider:
 
 * `LLM_PROVIDER=bedrock` with `AWS_REGION` — credentials come from the standard AWS
   chain (an instance role in production, never pasted keys);
@@ -105,9 +121,11 @@ functional, no credentials, no network. To use a real model set
   dashboard's AI tab.
 
 `LLM_MODEL` is optional; empty means the provider's own default. There is a fourth
-provider, `gateway`, for a box with no AWS identity — it needs `LLM_ENDPOINT`, which
-this compose file does not forward, so it is a production concern; see
-`prod/.env.example`.
+provider, `gateway`, for a box with no AWS identity — it needs `LLM_API_KEY` and
+`LLM_ENDPOINT`, both of which compose forwards to `server` and `worker`; see
+`prod/.env.example` for an example. Note that compose passes `LLM_PROVIDER` through as
+an **empty string** when unset, so with `BRAIN_FORCE_OFFLINE=0` and no
+`LLM_CREDENTIALS` you must set `LLM_PROVIDER` explicitly.
 
 ### Secrets
 
@@ -137,6 +155,10 @@ columns. It never resets a password that has since been changed.
 ---
 
 ## Everyday commands
+
+Most of these also have a `make` shortcut (`make up`, `make logs S=server`, `make
+seed`, `make db-shell`, …) — `make help` lists them, and
+[docs/development.md](docs/development.md) has the full table.
 
 ```bash
 docker compose up --build          # build and start everything, logs in the foreground
@@ -175,19 +197,22 @@ docker compose down -v && docker compose up --build
 ```
 
 A wipe is the blunt answer, and it costs you every account and case you have
-locally. Every one of the 23 `CREATE TABLE` statements in `init.sql` is
+locally. Every one of the 24 `CREATE TABLE` statements in `init.sql` is
 `IF NOT EXISTS`, so when the change is a **new table** you can apply just that one
 against the running database instead — this is what to do for `agent_events` and
 `agent_memories`, which are what the bots remember about the people they talk to.
 (They supersede the older `bot_memories`: `init.sql` still creates it, the
-application no longer reads it.)
+application no longer reads it — "forget me" still deletes from it.)
 
 ```bash
-docker compose exec -T db mysql -ulolsuit -plolsuit-dev lolsuit < database/init.sql
+docker compose exec -T db mysql --default-character-set=utf8mb4 -ulolsuit -plolsuit-dev lolsuit < database/init.sql
 ```
 
-That adds anything missing and touches nothing that already exists. It is not a
-migration tool: it cannot add a column to a table that is already there.
+(Substitute your own `DB_PASSWORD` if you changed it.) That adds anything missing and
+touches nothing that already exists. It is not a migration tool: it cannot add a column
+to a table that is already there — for those, apply the matching file from
+[`prod/migrations/`](prod/migrations/) (e.g. `004-brain-credentials.sql` adds columns to
+`brain_calls`) or wipe.
 
 The same applies to `case_follows` and `case_activity`, the two tables behind
 "My Feed": a fresh `docker compose down -v && docker compose up --build` picks
@@ -285,13 +310,15 @@ docker compose up -d db            # just MySQL, on 127.0.0.1:3307
 ```
 
 ```bash
+cp .env.example .env               # first time only — required, see below
 cd server && python -m app.seed && python run.py
 ```
 
-The API listens on `5002`; `client/vite.config.ts` proxies `/api` there. Creating the
-virtualenv and installing `requirements.txt` first is in
-[README.md](README.md#running-locally-without-docker); on Windows the interpreter is
-the `py` launcher, not `python`.
+The API listens on `5002`; `client/vite.config.ts` proxies `/api` there. Copying
+`.env.example` to `.env` (required — the code's own DB defaults do not match the
+container), creating the virtualenv and installing the requirements first are in
+[README.md](README.md#running-locally-without-docker). On Windows, use the `py` launcher
+where these docs say `python`.
 
 ```bash
 cd client && npm run dev           # http://localhost:5174

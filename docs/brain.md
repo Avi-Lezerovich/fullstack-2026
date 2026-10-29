@@ -6,7 +6,8 @@ knows an LLM exists, and it is designed so that no caller has to.
 
 ```
 app/brain/
-  __init__.py   the public surface, the routing, the health/usage bookkeeping
+    __init__.py   the public surface, the routing, the health/usage bookkeeping
+  chain.py      the credential chain: order, caps, RPM pacing, cooldowns (per process)
   decide.py     seeded weighted rolls (which action, which target, fallback vote)
   llm/          the optional live backend — prompts, schemas, four providers
     __init__.py   re-exports the whole package as one flat `llm.X` surface
@@ -51,9 +52,13 @@ settings.use_llm is False      ->  offline.generate()
 settings.use_llm is True       ->  llm.generate()  ->  on ANY exception, offline
 ```
 
-`use_llm` (in [`config.py`](../server/app/config.py)) is a **local, cheap** check — for
-Bedrock it asks only "is `AWS_REGION` set?" — so it reports the *intent* to call a model,
-never the outcome. `BRAIN_FORCE_OFFLINE=1` forces it off regardless.
+`use_llm` (in [`config.py`](../server/app/config.py)) is a **local, cheap** check — true
+when any credential in the chain is usable; for Bedrock that means only "is a region
+set?" — so it reports the *intent* to call a model, never the outcome.
+`BRAIN_FORCE_OFFLINE=1` forces it off regardless. Note the code default for
+`BRAIN_FORCE_OFFLINE` is **off** and for `LLM_PROVIDER` is `bedrock`, so a non-Docker run
+with `AWS_REGION` in the shell will try Bedrock; compose defaults
+`BRAIN_FORCE_OFFLINE=1`.
 
 Three deliberate exceptions to failing open:
 
@@ -88,12 +93,17 @@ Two records now exist side by side:
   visible** and their disagreement is the alarm. It starts as `"unknown"` rather than
   lying in either direction, because a health poll may land on a gunicorn worker that
   has not generated anything yet.
-- **`_log_call()`** — one row in `brain_calls` per outcome, written on its own
+- **`_log_call()`** — one row in `brain_calls` per outcome (and `_log_attempts`, one row
+  per failed attempt, only when every credential failed), written on its own
   short-lived connection and swallowing any failure, on the same reasoning as everything
   else here: better an unlogged call than a failed trial. This is the history that
   survives a restart and adds up across gunicorn's workers; it is what
-  `brain_usage_service` aggregates for the admin AI Usage tab and what checks Gemini's
-  free-tier cap before the app finds out by being rate limited.
+  `brain_usage_service` aggregates for the admin AI Usage tab, and what `spend_today()`
+  counts for the chain's `cap=` check. Two accuracy caveats, both code issues listed in
+  [known-issues.md](known-issues.md): a successful row records `provider` as the legacy
+  `LLM_PROVIDER` setting rather than the provider of the credential that answered (the
+  `credential` and `model` columns are right), and failed attempts that precede a success
+  on a later credential are not logged at all.
 
 `cache_reads` deserves its own note: prompt caching is the one optimisation here that
 fails **silently** — the requests keep succeeding and only the bill moves — so the read
@@ -252,18 +262,21 @@ things worth knowing:
   admin dashboard groups failures on the first 80, so keeping it raw would spend the whole
   budget on punctuation and truncate before the model id. `.code` is kept as an attribute
   so callers can branch without parsing prose.
-- `_gemini_post` retries `_GEMINI_RETRY_STATUS` (408/429/500/502/503/504) three times
-  with jittered exponential backoff. 503 is the one that matters: the free tier is shared
+- `_gemini_post` makes up to `_GEMINI_ATTEMPTS = 3` attempts (so two retries) on
+  `_GEMINI_RETRY_STATUS` (408/429/500/502/503/504), with jittered exponential backoff
+  (`min(4, 2**n)` seconds × a 0.5–1.5 jitter). A 429 is retried here too, so one quota
+  answer can cost up to three requests while counting as one chain attempt. 503 is the one that matters: the free tier is shared
   with everyone else on it. The jitter is not decoration — every bot shares one key and
   the worker fires on a fixed tick, so a fixed backoff would line the retries up into
   the thundering herd the retry is meant to survive.
-- Gemini 3.x charges thinking against `maxOutputTokens` too. `effort_for()` already
-  returns Gemini's own vocabulary, so the level is passed through as
-  `thinkingConfig.thinkingLevel` and `_GEMINI_THINKING_HEADROOM` adds budget *on top* of
+- Gemini 3.x charges thinking against `maxOutputTokens` too. **Only for models whose name
+  starts with `gemini-3`** (a 2.x model answers the field with a 400), `effort_for()`'s
+  level is passed through as `thinkingConfig.thinkingLevel` and `_GEMINI_THINKING_HEADROOM` adds budget *on top* of
   the text budget (8192 for `medium`), sized for the tail rather than the average. A
   `MAX_TOKENS` finish with a schema raises a message naming the budget and the thinking
   spend, because the raw `json.loads` failure reads as a model that cannot follow a
-  schema — the wrong culprit.
+  schema — the wrong culprit. With the default `gemini-2.5-flash-lite` neither
+  `thinkingConfig` nor the headroom is sent.
 
 ### The credential chain — `chain.py`
 
@@ -293,35 +306,52 @@ which is a ceiling rather than a requirement: `candidates()` simply returns what
 Fields: `provider` (required), `label` (defaults to `api{n}-{provider}`), `key_env` or
 `key`, `model`, `endpoint`, `region`, `cap`, `rpm`. Secrets are referenced **by name**, so
 `LLM_CREDENTIALS` itself carries no credential and is safe to log, print and show on an
-admin page. Unset it and the chain is one credential built from `LLM_PROVIDER` /
-`LLM_API_KEY` / `LLM_MODEL` / `AWS_REGION`, labelled with the provider name — every
+admin page. Unset it — or set it so that **no** record parses — and the chain is one
+credential built from `LLM_PROVIDER` / `LLM_API_KEY` / `LLM_MODEL` / `LLM_ENDPOINT` /
+`AWS_REGION` (or `AWS_DEFAULT_REGION`), labelled with the provider name — every
 deployment that changes nothing behaves exactly as it did, and rows written before
 credentials existed (which have no label) read back under that same name.
 
 A record that cannot be parsed is **skipped into `Settings.llm_credential_errors`**, never
 raised: `get_settings()` runs on every database connection, so a typo that raised would
-take the site down rather than the brain.
+take the site down rather than the brain. (Nothing currently surfaces those errors —
+not `/api/health` either, despite what a comment in `config.py` says — so a typo is
+silent; see [known-issues.md](known-issues.md).)
 
-**Selection.** A credential is a candidate when it names a known provider, has what that
+**Selection.** `candidates()` returns, in chain order and at most
+`DEFAULT_MAX_ATTEMPTS = 3`, the credentials that name a known provider, have what that
 provider needs, can do the task (a `gateway` entry is never offered a structured one),
-is under its cap, and is not cooling. `capabilities()` is the **union** over the chain —
+are under their `cap=`, under their `rpm=`, and not cooling. Only an explicit `cap=` is
+enforced here: the per-model Gemini table in `brain_usage_service` (used when `cap=` is
+unset) only sets the cap shown on the dashboard tile, so a Gemini credential with no
+`cap=` has no daily limit in the chain. `capabilities()` is the **union** over the chain —
 answering with the first credential's answer would let one gateway entry anywhere
 silently disable every filing on the site.
 
 **Failure.** A credential is tried at most once per call; within-provider retries belong
-to `_gemini_post` and only for the statuses that mean *busy*. A 429 is now split in two:
+to `_gemini_post` and only for the statuses that mean *busy*. Only an exception moves on to
+the next credential: a reply that parses but fails the semantic check in `tasks.py` (an
+out-of-enum vote, a filing missing a field) is raised *after* the credential is marked
+successful, so it falls back offline instead of trying the next credential. A 429 is now
+split in two:
 `is_rate_limit_error` catches a **per-minute** burst — AWS's throttling exceptions, a
 generic "rate limit"/"too many requests", or a Gemini quota id containing `PerMinute` —
-and rests the credential for one minute, the width of the window it just blew. Everything
-else `is_quota_error` still recognises is treated as the **daily** allowance running out
-and written off until the next UTC reset, the branch that matters for a free-tier key
+and rests the credential for one minute (`_RATE_COOLDOWN_SECONDS = 60`), the width of the
+window it just blew. **Caveat:** Google puts the quota id in
+`error.details[].violations[].quotaId`, and `_gemini_http_error` keeps only
+`error.status` + `error.message`, so the `PerMinute` marker only matches if the message
+text itself contains it. Unverified against a live response — a Gemini per-minute 429 may
+in practice take the daily branch below. Everything else `is_quota_error` still
+recognises (status 429, or quota markers) is treated as the **daily** allowance running
+out and written off until the next UTC midnight, the branch that matters for a free-tier key
 whose real allowance Google does not publish, so the configured `cap` is a guess. On any
-other failure it rests two minutes, so a DNS blip does not pin the site to the last key
+other failure it rests two minutes (`_TRANSIENT_COOLDOWN_SECONDS = 120`), so a DNS blip does not pin the site to the last key
 in the chain.
 
 **RPM is the same idea, applied before the fact instead of after.** `cap=` is a daily
 budget; `rpm=` is a one-minute one, checked in `candidates()` exactly like `cap` — a
-credential that has already answered `rpm` calls in the trailing 60 seconds is skipped in
+credential that has already been **tried** `rpm` times in the trailing 60 seconds
+(`note_attempt` counts failures too) is skipped in
 favour of the next one in the chain, tracked per-process as a ring of recent monotonic
 timestamps on the credential's `_State`. This matters because Google's free tier is
 usually two numbers, not one (a generous per-day allowance and a much tighter per-minute
@@ -351,10 +381,18 @@ safe direction.
 > measured in tens on the newest Flash models. Set `cap=` from the published RPD of the
 > model that credential names, and name a model you have verified exists.
 
-**One usage row per attempt.** When a credential is rate-limited and the next one
-answers, that is two `brain_calls` rows. This is the honest unit: the 429'd attempt spent
-one of somebody's requests, and the counter deciding whether a key is exhausted is a
-`COUNT(*)` over exactly these rows.
+**Usage rows: intended one per attempt, actually not quite.** The design (and the
+comments in `init.sql` and `brain_usage_service.py`) says that when a credential is
+rate-limited and the next one answers, that is two `brain_calls` rows. The code does not
+do that: on success `tasks._try_chain` discards its list of failed attempts, and only the
+answering credential gets a row. Per-attempt rows (`_log_attempts`) are written only when
+**every** credential failed. So `spend_today()` undercounts a credential whose failures
+were followed by a success elsewhere. Listed in [known-issues.md](known-issues.md).
+
+**All of the chain's state is per process and in memory** — cooldowns, RPM rings, the
+spend figure. Each gunicorn worker and the scheduler keep their own, nothing is locked
+across processes, and a restart forgets every cooldown (spend is re-read from
+`brain_calls` within `_SPEND_TTL_SECONDS = 60`).
 
 ### The three structured tasks
 
@@ -413,8 +451,10 @@ Text hygiene, three functions with three different jobs:
   that is not the court's to shape: the user's own filing, handed back corrected.
   `correct_text()` offline is exactly this — the text, unchanged. A "correction" that
   only moves a comma would tell the user their spelling was fine when nothing looked at
-  it; the endpoint reports `backend: "offline"` so the UI can say plainly that no
-  correction was made.
+    it. The endpoint's `backend` field is `"llm"` or `"offline"` according to
+  `settings.use_llm` — what is **configured**, not what actually answered — so when a
+  model is configured but the call fails, the user gets their text back unchanged and
+  labelled `"llm"`.
 
 **What this deliberately is not.** It used to try to be the characters, drawing each
 personality's lines from a twelve-tone phrase bank. A phrase bank cannot read the case in
@@ -525,10 +565,10 @@ wrote hands back prose they did not write, with their own jokes ironed out.
 |---|---|---|
 | `LLM_CREDENTIALS` | *(empty)* | the chain, in order. `;`-separated records of `key=value` fields — see above. Empty means "the single credential the four variables below describe" |
 | `GEMINI_KEY_1` … | *(empty)* | whatever `key_env=` in a record points at. The name is yours; these three are pre-declared in the compose files |
-| `LLM_PROVIDER` | `bedrock` | one of `bedrock`, `anthropic`, `gemini`, `gateway`. Ignored when `LLM_CREDENTIALS` is set |
+| `LLM_PROVIDER` | `bedrock` (compose passes `""` when unset) | one of `bedrock`, `anthropic`, `gemini`, `gateway`. Ignored when `LLM_CREDENTIALS` has at least one valid record |
 | `LLM_API_KEY` | *(empty)* | used by `anthropic`, `gemini`, `gateway`. Bedrock ignores it entirely — a key set alongside `LLM_PROVIDER=bedrock` is a decoy, not a credential |
 | `LLM_ENDPOINT` | *(empty)* | required by, and only by, the `gateway` provider |
-| `LLM_MODEL` | *(empty)* | empty means "this provider's `default_model`". Ignored when `LLM_CREDENTIALS` is set |
+| `LLM_MODEL` | *(empty)* | empty means "this provider's `default_model`". Ignored when `LLM_CREDENTIALS` has at least one valid record |
 | `LLM_TIMEOUT_SECONDS` | `60` | not 10. Current models think before answering, and every timed-out call used to land silently in the offline generator with `/api/health` still reporting a working backend |
 | `AWS_REGION` / `AWS_DEFAULT_REGION` | *(empty)* | what gates the `bedrock` provider |
 | `BRAIN_FORCE_OFFLINE` | `false` | forces the deterministic path (compose defaults it to `1`) |
@@ -536,4 +576,7 @@ wrote hands back prose they did not write, with their own jokes ironed out.
 | `TOPICAL_SUBJECTS` | *(empty)* | comma-separated; what the bots may treat as current |
 
 With none of these set the whole application still runs — on the offline generator, which
-is the default rather than a fallback.
+is the default rather than a fallback. Not configurable from the environment: the chain's
+60 s spend refresh, 60 s rate-limit cooldown and RPM window, 120 s transient cooldown,
+3-credential attempt ceiling, and Gemini's 3 attempts. The full variable list across
+every subsystem is [configuration.md](configuration.md).

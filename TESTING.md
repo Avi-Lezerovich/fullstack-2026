@@ -6,29 +6,38 @@ lines rather than by comment, which is what the suite settled on.
 
 | Layer | Marker | Count | Needs | What it checks |
 |-------|--------|-------|-------|----------------|
-| **Unit** | `unit` | 486 | nothing | Pure logic in isolation — password hashing and the length rule bcrypt 5 enforces, cookie flags, the sentiment lexicon, jury selection and tallying, trial-clock arithmetic, the SQL a service sends and the parameters bound to it, and the layering rules the other layers rely on. |
-| **Integration** | `integration` | 465 | MySQL | The real Flask endpoints and the real service layer against a real MySQL schema built from `database/init.sql` — sessions, password resets, the four moderation statuses, content visibility, messages, witnesses, uploads, and the permission matrix on every endpoint. |
+| **Unit** | `unit` | 564 | nothing | Pure logic in isolation — password hashing and the length rule bcrypt 5 enforces, cookie flags, the sentiment lexicon, jury selection and tallying, trial-clock arithmetic, the SQL a service sends and the parameters bound to it, and the layering rules the other layers rely on. |
+| **Integration** | `integration` | 491 | MySQL | The real Flask endpoints and the real service layer against a real MySQL schema built from `database/init.sql` — sessions, password resets, the four moderation statuses, content visibility, messages, witnesses, uploads, and the permission matrix on every endpoint. |
 | **Worker** | `worker` | 69 | MySQL | The trial state machine end to end, the three moderator bots, the social bots, and the idempotency guarantee: a tick run twice reaches the same state as a tick run once. Also carry `integration`, so they are counted in the row above. |
-| **Frontend** | — | 136 | nothing | vitest + @testing-library/react over the client's hooks, context and the components with real logic. |
+| **Frontend** | — | 157 | nothing | vitest + @testing-library/react over the client's hooks, context and the components with real logic. |
 
-951 backend tests in total. Every one carries a layer marker — the worker tests
+1,055 backend tests in total. Every one carries a layer marker — the worker tests
 carry both `worker` and `integration`, which is why the three counts add to more
-than 951 — so `-m unit` and `-m "integration or worker"` between them run the
+than 1,055 — so `-m unit` and `-m "integration or worker"` between them run the
 whole suite and nothing twice.
 
-Backend coverage: **95.5%** across `app` and `worker` (gate: 85%, set in
-`server/.coveragerc` and applied whenever the run is measured — see `--cov` below).
+The counts drift with every change; they were taken with these (neither needs MySQL):
+
+```bash
+cd server && python -m pytest --collect-only -q -m unit | tail -1
+cd client && npx vitest list | wc -l
+```
+
+Backend coverage: **95.5%** across `app` and `worker` when last measured (gate: 85%,
+set in `server/.coveragerc` and applied whenever the run is measured — see `--cov`
+below). Re-run `pytest --cov` with the database up for the current figure.
 
 ---
 
 ## Prerequisites
 
-- **Python** — on this Windows box use the `py` launcher; the bare `python`
-  command is shadowed by the Windows Store alias stub.
-- **Docker Desktop** — for MySQL. The unit layer runs without it.
+- **Python 3.12** (what the server image uses) and **Node 22** (what the client image
+  builds with). Neither is pinned for local runs. On Windows, use the `py` launcher
+  wherever these docs say `python`: the bare command can be the Windows Store stub.
+- **Docker** — for MySQL. The unit layer runs without it.
 
-```powershell
-py -m pip install -r server/requirements-dev.txt
+```bash
+python -m pip install -r server/requirements-dev.txt   # ideally inside server/.venv
 npm --prefix client install
 ```
 
@@ -36,35 +45,35 @@ npm --prefix client install
 
 ## Backend
 
-```powershell
+```bash
 docker compose up -d db
 ```
 
-```powershell
+```bash
 cd server
-py -m pytest --cov
+python -m pytest --cov
 ```
 
 `--cov` is the one flag to remember: `pytest.ini` does not carry it, so a bare
-`py -m pytest` runs the suite without measuring anything and without the gate.
+`python -m pytest` runs the suite without measuring anything and without the gate.
 Everything past the flag lives in `.coveragerc` — which packages to measure, the
 85% `fail_under`, and `show_missing`, so the uncovered lines are already in that
 output and there is no `--cov-report` to add.
 
 Without coverage, which is what you want while iterating:
 
-```powershell
+```bash
 cd server
-py -m pytest
+python -m pytest
 ```
 
 One layer at a time:
 
-```powershell
+```bash
 cd server
-py -m pytest -m unit
-py -m pytest -m integration
-py -m pytest -m worker
+python -m pytest -m unit
+python -m pytest -m integration
+python -m pytest -m worker
 ```
 
 ### How the harness works
@@ -84,7 +93,8 @@ py -m pytest -m worker
    personalities to do anything at all;
 5. deletes everything but the cast before each test.
 
-No monkeypatching is involved. `app/config.py` re-reads the environment on every
+No monkeypatching is involved in pointing the app at the test database (individual
+tests do use pytest's `monkeypatch` for their own seams). `app/config.py` re-reads the environment on every
 `get_settings()` call, so pointing `DB_NAME` at the test database redirects the
 services, the API *and* the worker's own `connect()` at once.
 
@@ -92,8 +102,11 @@ services, the API *and* the worker's own `connect()` at once.
 a reason naming `docker compose up -d db`, and the unit layer still runs. The
 95.5% figure assumes the database is up.
 
-Overridable: `TEST_DB_HOST`, `TEST_DB_PORT`, `TEST_DB_ROOT_USER`,
-`TEST_DB_ROOT_PASSWORD`, `TEST_DB_NAME`.
+Overridable (defaults in parentheses, from `tests/conftest.py`): `TEST_DB_HOST`
+(`127.0.0.1`), `TEST_DB_PORT` (`3307`), `TEST_DB_ROOT_USER` (`root`),
+`TEST_DB_ROOT_PASSWORD` (`lolsuit-root-dev` — the compose default for
+`MYSQL_ROOT_PASSWORD`; change one, change the other), `TEST_DB_NAME` (`lolsuit_test`).
+It connects as root because it must `CREATE DATABASE`; the application never does.
 
 ### Why real MySQL and not SQLite
 
@@ -117,8 +130,9 @@ those; it cannot check them.
 
 ## Frontend
 
-```powershell
-npm --prefix client test
+```bash
+npm --prefix client test            # vitest run
+npm --prefix client run test:watch  # vitest in watch mode
 npm --prefix client run lint
 npm --prefix client run test:coverage
 ```
@@ -137,6 +151,7 @@ Tests aim at the pieces with real logic rather than at markup:
   fall back to polling permanently, and both transports share one cursor;
 - **`LikeButton` / `FollowButton`** — the guarded prop-sync, including the round
   trip where the parent hands the server's answer straight back as props;
+- **`AiUsage`** (the admin AI tab) and **`utils/adminOps`** (the helpers behind it);
 - **`CommentThread`**, **`CaseCard`**, **`InfiniteScroll`**, **`ErrorPage`**,
   **`AppErrorBoundary`** — that it keeps the chrome around a thrown render and
   clears itself on navigation — **`ProtectedRoute`** and **`utils/format`**.
@@ -158,6 +173,10 @@ is behaviour rather than markup:
 ---
 
 ## Known gaps
+
+Other open issues, outside testing, are collected in
+[docs/known-issues.md](docs/known-issues.md).
+
 
 - **`app/brain/llm/providers/base.py`** sits around 50%, and is the only file in
   the `llm/` package materially below the rest. It is the Bedrock and direct-Anthropic

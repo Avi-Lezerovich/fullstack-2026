@@ -3,10 +3,12 @@
 How the application is packaged and how the pieces fit together — two images, five
 services, one public port, and the same images running locally and in production.
 
-> **This is the architecture view.** The step-by-step runbooks already exist and are not
-> repeated here:
-> - [DOCKER.md](../DOCKER.md) — running the local stack: commands, every environment
->   variable, demo accounts, resetting the database, expected log noise.
+> **This is the architecture view.** The step-by-step runbooks live elsewhere; this page
+> repeats from them only what it needs to explain the design:
+> - [DOCKER.md](../DOCKER.md) — running the local stack: commands, the common environment
+>   variables, demo accounts, resetting the database, expected log noise.
+> - [configuration.md](configuration.md) — every environment variable, with its code and
+>   compose defaults.
 > - [prod/README.md](../prod/README.md) — deploying to EC2 + RDS: security groups,
 >   instance preparation, releases, rollback, HTTPS, backups.
 
@@ -79,14 +81,9 @@ reason to carry the repo around.
 
 ## 4. Why nginx fronts everything
 
-The bundle and the API are served from the **same origin**, which is a design decision
-rather than a convenience:
-
-- the httpOnly session cookie is first-party, so it works without `SameSite=None` (which
-  would force HTTPS, including locally);
-- `flask-cors` never has to answer a preflight, and `CLIENT_ORIGIN` stops being a thing
-  that can be misconfigured;
-- the client's `const BASE = "/api"` is correct in dev and in production alike.
+The bundle and the API are served from the **same origin** — a design decision, for the
+three reasons in [DOCKER.md](../DOCKER.md#why-nginx-proxies-api) (first-party cookie, no
+CORS preflight, one `BASE = "/api"` everywhere).
 
 Four location blocks do something the generic proxy rule cannot:
 
@@ -132,9 +129,8 @@ query rather than a new channel: fail if `last_tick_at` is more than 120 seconds
 
 ## 6. Only one port is public
 
-`web` publishes `8080`. The API (`5002`) and MySQL (`3307`) are bound to `127.0.0.1` —
-they exist for `curl`, Postman and the pytest suite, not for the browser, which reaches
-the API through nginx.
+`web` publishes `8080`; the API (`5002`) and MySQL (`3307`) are bound to `127.0.0.1`
+only. See [DOCKER.md](../DOCKER.md#only-one-port-is-public).
 
 ## 7. State
 
@@ -164,7 +160,7 @@ differences are all deliberate:
 | Version | `:local` | pinned to `${TAG}`. `latest` is a convenience for humans, not a thing to deploy — it makes "which version is running?" unanswerable and rollback impossible. |
 | Logging | default | `json-file` with rotation on every service. Unbounded logs are the most common way a small instance fills its root volume and takes the site down. |
 | Public port | `8080` | `80` on the host → `8080` in the container. TLS terminates in front of it (`WEB_PUBLISH_BIND=127.0.0.1`, then Caddy). |
-| Cookies | `FLASK_SESSION_SECURE=0` | `1`, and `CLIENT_ORIGIN` is required. |
+| Cookies | `FLASK_SESSION_SECURE=0` | Compose defaults it to `1`, and `CLIENT_ORIGIN` is required. **But `prod/.env.example` sets `FLASK_SESSION_SECURE=0`**, so a `.env` copied from the template runs with `0` until you change it (set `1` once HTTPS is in front). |
 
 Because there is no `db` container to gate on, **`seed` becomes the first thing that
 touches the database** in production, which makes it the de-facto connectivity check for
@@ -209,10 +205,11 @@ Configuration reaches a container through the **environment, never through a Doc
 A value baked into an image layer is readable by anyone who can pull the image, and both
 `.dockerignore` files exclude `.env` for the same reason.
 
-Nothing is required locally — every variable has a working local default, and the default
-brain is `BRAIN_FORCE_OFFLINE=1`, so `docker compose up` with an empty `.env` runs the
-whole application end to end. The full tables live in [DOCKER.md](../DOCKER.md#environment-variables)
-and `.env.example`; the subsystem docs cover their own knobs
+Nothing is required for the local compose stack — every variable has a working default in
+`docker-compose.yml`, and compose's brain default is `BRAIN_FORCE_OFFLINE=1`, so `docker
+compose up` with an empty `.env` runs the whole application end to end. The full reference
+is [configuration.md](configuration.md); the common knobs are in
+[DOCKER.md](../DOCKER.md#environment-variables), and the subsystem docs cover their own
 ([worker.md](worker.md#9-configuration), [brain.md](brain.md#9-configuration)).
 
 ## 11. Where each subsystem runs
@@ -227,7 +224,7 @@ and `.env.example`; the subsystem docs cover their own knobs
 
 ---
 
-> **One stale comment worth knowing.** `client/Dockerfile` reuses the `nginx` account that
+> **One stale comment worth knowing** (also listed in [known-issues.md](known-issues.md)). `client/Dockerfile` reuses the `nginx` account that
 > `nginx:1.27-alpine` already defines and says it is uid 101; `client/nginx.conf.template`
 > says nginx runs as uid 1001. Only one can be right — the Dockerfile's `USER nginx`
 > resolves to whatever the base image defines — so the template's comment looks stale.

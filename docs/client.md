@@ -8,14 +8,16 @@ on 5002.
 client/src/
   main.tsx        providers: emotion RTL cache, theme, router, auth, notifications
   App.tsx         the route table
-  api.ts          the ONLY place this app talks to the network
+  api.ts          the REST seam (the notification stream hook is the one exception)
   types.ts        the shapes the API returns
   theme.ts        the courtroom palette, direction: "rtl"
   context/        AuthContext, NotificationContext
   hooks/          useAsync, usePagedList, useNotificationStream
   pages/          one component per route
   components/     admin/ assist/ case/ comments/ common/ feed/ layout/ moderation/ routing/ trial/
+  utils/          format.ts (server dates, relative time, initials), adminOps.ts (worker-staleness, brain-mismatch, quota-severity rules for the admin tabs)
   test/setup.ts   vitest + @testing-library setup
+  *.d.ts          vendor.d.ts, stylis.d.ts — type shims
 ```
 
 ---
@@ -52,14 +54,18 @@ session; everything else renders for anonymous visitors too.
 | `/login`, `/signup`, `/forgot-password`, `/reset-password` | auth pages | |
 | `*` | `NotFound` | |
 
-The whole tree sits inside an `AppErrorBoundary`, and `ErrorPage` renders the branded
+The `<Routes>` sit inside an `AppErrorBoundary` — `TopBar` and `Footer` are outside it,
+so a page that throws keeps the chrome around it — and `ErrorPage` renders the branded
 failure states.
 
-## 3. `api.ts` — the single network seam
+## 3. `api.ts` — the REST seam
 
-**No component calls `fetch` directly.** Everything goes through `request<T>`, so
+**No component calls `fetch` directly.** Every REST call goes through `request<T>`, so
 credentials handling, JSON parsing and error translation exist once rather than in thirty
-components.
+components. The one exception is
+[`hooks/useNotificationStream.ts`](../client/src/hooks/useNotificationStream.ts), which
+opens its own `EventSource` on `/api/notifications/stream` and, in polling mode, calls
+`fetch("/api/notifications?since=…")` itself.
 
 - `credentials: "include"` on every call — authentication is an httpOnly cookie, and
   without this the browser will not attach it and every request looks anonymous.
@@ -109,15 +115,17 @@ components.
 
 ## 7. Tests and tooling
 
-Vitest + Testing Library, jsdom, with `*.test.tsx` files sitting beside the source they
-cover and shared setup in `src/test/setup.ts`.
+Vitest + Testing Library, jsdom, with `*.test.ts` / `*.test.tsx` files sitting beside the
+source they cover and shared setup in `src/test/setup.ts`.
 
 ```bash
 npm run dev            # Vite on 5174, /api proxied to 5002
 npm run lint           # tsc --noEmit
 npm test               # vitest run
+npm run test:watch     # vitest in watch mode
 npm run test:coverage  # v8 coverage
 npm run build          # tsc -b && vite build
+npm run preview        # serve the built bundle (vite preview)
 ```
 
 The dev proxy streams responses unbuffered, which is what lets the SSE notification
