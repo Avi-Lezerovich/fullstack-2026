@@ -149,7 +149,14 @@ DOCKER_CONFIG_JSON="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
 
 resolve_dockerhub_user() {
   [ -f "$DOCKER_CONFIG_JSON" ] || return 0
-  python3 - "$DOCKER_CONFIG_JSON" <<'PYEOF' 2>/dev/null || true
+  # On Windows `python3` is a Microsoft Store stub that exists but cannot run,
+  # and the real interpreter is `python`. Pick the first one that works.
+  local py=""
+  for c in python3 python; do
+    if "$c" -c "" >/dev/null 2>&1; then py="$c"; break; fi
+  done
+  [ -n "$py" ] || return 0
+  "$py" - "$DOCKER_CONFIG_JSON" <<'PYEOF' 2>/dev/null || true
 import base64, json, subprocess, sys
 
 INDEX = "https://index.docker.io/v1/"
