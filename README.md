@@ -47,6 +47,6 @@ loads its data over HTTP, so opening the file directly will not work).
   code symbols (functions, constants, routes, tables, env vars) and files.
 - **Code viewer**: every file or symbol mentioned in the guide opens the real
   code at that line; in-browser grep across all files; copy `path:line`.
-- **Open in VS Code**: set the local project folder once (⚙ in the code pane);
+- **Open in VS Code**: defaults to C:SERSzRDOCUMENTSGITHUBULLSTACK-2026 (� IN THE CODE PANE CHANGES IT);
   then "פתח ב־VS Code" or Alt+click on any path opens `vscode://file/...:line`.
   The folder is stored only in that browser's localStorage.

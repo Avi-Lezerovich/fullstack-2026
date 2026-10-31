@@ -213,8 +213,10 @@
 
   /* open in the local VS Code: vscode://file/<absolute path>:<line>:<column> */
   var ROOT_KEY = "lolsuit-local-root";
+  // The exam laptop's checkout; ⚙ overrides it per browser.
+  var DEFAULT_ROOT = "C:\\Users\\lzr\\Documents\\GitHub\\fullstack-2026";
   var localForm = $(".cp-local", pane), rootIn = $("#cpRoot", pane);
-  function localRoot() { try { return localStorage.getItem(ROOT_KEY) || ""; } catch (e) { return ""; } }
+  function localRoot() { try { return localStorage.getItem(ROOT_KEY) || DEFAULT_ROOT; } catch (e) { return DEFAULT_ROOT; } }
   function showLocal(on) {
     localForm.hidden = !on;
     if (on) { rootIn.value = localRoot(); setTimeout(function () { rootIn.focus(); }, 0); }
@@ -234,7 +236,7 @@
     var v = rootIn.value.trim().replace(/^"|"$/g, "");
     try { if (v) localStorage.setItem(ROOT_KEY, v); else localStorage.removeItem(ROOT_KEY); } catch (err) { /* storage blocked */ }
     localForm.hidden = true;
-    toast(v ? "נשמר. עכשיו אפשר לפתוח ב־VS Code" : "התיקייה נמחקה");
+    toast(v ? "נשמר. עכשיו אפשר לפתוח ב־VS Code" : "חזרה לתיקיית ברירת המחדל");
   });
   $(".cp-cfg", pane).addEventListener("click", function () { showLocal(localForm.hidden); });
   $(".cp-vscode", pane).addEventListener("click", function () {
