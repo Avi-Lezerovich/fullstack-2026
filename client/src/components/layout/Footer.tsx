@@ -1,4 +1,6 @@
-import { Box, Container, Stack, Typography } from "@mui/material";
+import { Box, Container, IconButton, Stack, Typography } from "@mui/material";
+import GitHubIcon from "@mui/icons-material/GitHub";
+import LinkedInIcon from "@mui/icons-material/LinkedIn";
 
 const PARCHMENT_DIM = "rgba(250, 246, 233, 0.7)";
 
@@ -53,9 +55,33 @@ const Footer = () => {
             בית המשפט לתביעות מצחיקות. כל התיקים בדיוניים, כל פסקי הדין סופיים.
           </Typography>
 
-          <Typography variant="caption" sx={{ color: PARCHMENT_DIM }}>
-            Mid term project · Full-Stack @ RUNI · 2026
-          </Typography>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <Typography variant="caption" sx={{ color: PARCHMENT_DIM }}>
+              Final project · Full-Stack @ RUNI · 2026
+            </Typography>
+            <Stack direction="row" spacing={0.5}>
+              <IconButton
+                component="a"
+                href="https://www.linkedin.com/in/avi-lezerovich"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="LinkedIn"
+                sx={{ color: "background.default" }}
+              >
+                <LinkedInIcon />
+              </IconButton>
+              <IconButton
+                component="a"
+                href="https://github.com/Avi-Lezerovich"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="GitHub"
+                sx={{ color: "background.default" }}
+              >
+                <GitHubIcon />
+              </IconButton>
+            </Stack>
+          </Stack>
         </Stack>
       </Container>
     </Box>
