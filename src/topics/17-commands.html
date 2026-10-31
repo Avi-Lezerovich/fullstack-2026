@@ -128,10 +128,13 @@ docker compose -f prod/docker-compose.yml logs -f server</code></pre>
     <p>מה שכתוב כאן על השחרור והפריסה נלקח מהתיעוד ומהקוד של <code>release.sh</code> ו-<code>deploy.sh</code> (כולל <code>--rollback</code>). לא הרצתי שחרור או פריסה אמיתיים. עזרה מלאה: <code>./deploy.sh --help</code> ו-<code>./prod/release.sh --help</code>.</p>
 
 <h3>8. כשמשהו לא עובד</h3>
+    <p>רשימה מלאה יותר, עם סיבה ופתרון לכל תקלה: <a href="#t19" data-go="t19">נושא 19</a>.</p>
     <div class="tablewrap"><table>
       <tr><th>תסמין</th><th>פתרון</th></tr>
       <tr><td>failed to connect to the docker API</td><td>Docker Desktop לא רץ. להפעיל ולחכות לירוק.</td></tr>
       <tr><td>'node' / 'py' is not recognized</td><td>לסגור ולפתוח טרמינל מחדש (PATH).</td></tr>
+      <tr><td>The token '&amp;&amp;' is not a valid statement separator</td><td>זה Windows PowerShell 5.1, שאין בו <code>&amp;&amp;</code>. כותבים כל פקודה בשורה משלה, או מחברים עם <code>;</code></td></tr>
+      <tr><td>'grep' is not recognized</td><td>ב־Windows אין grep. משתמשים ב־<code>git grep -n "טקסט"</code>, ב־<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> ב־VS Code, או ב"חיפוש בכל הקוד" באתר</td></tr>
       <tr><td>activate נחסם (execution policy)</td><td>Set-ExecutionPolicy -Scope CurrentUser RemoteSigned</td></tr>
       <tr><td>שרת: Access denied / לא מתחבר ל-DB</td><td>חסר <code>.env</code>. להריץ: <code>copy .env.example .env</code></td></tr>
       <tr><td>port 5002 / 5174 already in use</td><td>תהליך ישן רץ. ראו הפקודה למטה.</td></tr>

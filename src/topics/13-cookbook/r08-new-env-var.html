@@ -15,6 +15,6 @@
 <span class="rlabel">מה יכול להישבר</span>
 <ul><li><code>Settings</code> הוא <b>frozen dataclass בלי defaults</b> — אם מוסיפים שדה למחלקה ושוכחים אותו ב־<code>get_settings()</code> → <code>TypeError</code> בכל קריאה ל־<code>get_settings()</code> = כל השרת נופל. אם עושים להפך → <code>TypeError: unexpected keyword</code>.</li>
 <li>שוכחים את compose → בדוקר תמיד 3, בלי שום שגיאה.</li>
-<li>מקומות שבונים <code>Settings(...)</code> ידנית בטסטים (בדוק: <code>grep -rn "Settings(" server/tests</code>).</li>
+<li>מקומות שבונים <code>Settings(...)</code> ידנית בטסטים (בדוק: <code>git grep -n "Settings(" -- server/tests</code>).</li>
 <li>צריך restart אחרי שינוי ב־<code>.env</code>: <code>get_settings()</code> קורא את <code>os.environ</code> בכל קריאה, אבל <code>load_dotenv</code> רץ פעם אחת ב־import של <code>config.py</code> (שורה 23) ולא דורס ערך קיים.</li></ul>
 </div></details>

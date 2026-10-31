@@ -32,7 +32,10 @@ self.addEventListener("activate", (event) => {
 function pageFromNetwork(request) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("slow network")), NETWORK_TIMEOUT_MS);
-    fetch(request).then((response) => {
+    // no-cache: always revalidate with the server (a cheap 304 when nothing changed).
+    // A plain fetch may be answered from the HTTP cache, which on GitHub Pages
+    // (max-age=600) would show a page up to ten minutes old after a deploy.
+    fetch(request.url, { cache: "no-cache", credentials: "same-origin" }).then((response) => {
       clearTimeout(timer);
       if (response.ok) {
         const copy = response.clone();

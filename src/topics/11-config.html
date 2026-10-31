@@ -2,6 +2,7 @@
 <section class="topic" id="t11" data-title="Configuration">
 <div class="topic-head"><div class="n">11</div><h2>Configuration ומשתני סביבה</h2><label class="done-toggle"><input type="checkbox" data-done="t11"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li><code>config.py</code>: <code>Settings</code> (קפוא) + <code>get_settings()</code>, שקורא את הסביבה מחדש בכל קריאה.</li><li>native: <code>.env</code> נטען אוטומטית. בלי <code>.env</code> החיבור ל־DB נכשל, כי הסיסמה בקוד לא מתאימה.</li><li>בדוקר compose <b>דורס</b> חלק מהערכים (<code>PHASE_MINUTES</code>) ו<b>לא מעביר</b> אחרים (<code>UPLOAD_MAX_BYTES</code>).</li><li><code>BRAIN_FORCE_OFFLINE</code> כבוי בקוד, אבל דולק (1) ב־compose.</li></ul></div>
 <div class="callout key"><b>איך ערכים מגיעים</b>
 <p><b>מחוץ לדוקר</b>: <code>config.py</code> קורא <code>load_dotenv</code> על <code>.env</code> בשורש ה־repo (לא דורס משתנה שכבר מוגדר); חסר → ברירת המחדל בקוד. <code>get_settings()</code> (<code>config.py:324</code>) קורא את הסביבה <b>בכל קריאה</b> — אין singleton, ו־<code>Settings</code> הוא frozen dataclass.</p>
 <p><b>בדוקר</b>: compose קורא <code>.env</code> רק להחלפת <code>${VAR}</code>. קונטיינר רואה רק את מה שב־<code>environment:</code> של השירות שלו.</p></div>

@@ -2,6 +2,7 @@
 <section class="topic" id="t5" data-title="Database">
 <div class="topic-head"><div class="n">5</div><h2>Database — סכמה, קשרים, migrations, seed</h2><label class="done-toggle"><input type="checkbox" data-done="t5"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li>24 טבלאות ב־<code>database/init.sql</code>, והקובץ רץ <b>רק על DB ריק</b>.</li><li><code>users</code> = בני אדם וגם בוטים. <code>comments</code> = כל מה שנאמר בתיק, מובחן לפי <code>role</code>.</li><li><code>dedupe_key</code> ו־PK של <code>jury_panels</code> מונעים כפילויות אם worker קרס באמצע.</li><li>שלבים: <code>witness_phase → jury_deliberation → verdict_reached → closed</code>. "יום" במשפט = <code>PHASE_MINUTES</code>.</li></ul></div>
 <p>MySQL 8, InnoDB, <code>utf8mb4</code>. קובץ אמת אחד: <code>database/init.sql</code> — <b>24 טבלאות</b>, כולן <code>CREATE TABLE IF NOT EXISTS</code>, בלי triggers/procedures/<code>DELIMITER</code> (הטסטים מריצים את הקובץ עצמו). כל timestamp הוא <code>DATETIME</code> ב־UTC נאיבי שנכתב ע"י <code>UTC_TIMESTAMP()</code>.</p>
 
 <figure>
@@ -91,7 +92,7 @@
 <details class="sub"><summary>5.3 Migrations ו־seed</summary><div class="in">
 <ul>
 <li><b>אין framework של migrations.</b> DB חדש מקבל את <code>init.sql</code> (כבר כולל הכל). <code>prod/migrations/001–004</code> מיועדים ל־RDS קיים עם נתונים: 001 agent_events/agent_memories, 002 case_follows/case_activity, 003 brain_calls, 004 <code>ALTER</code> ל־brain_calls (<b>לא אידמפוטנטי</b>).</li>
-<li><code>/docker-entrypoint-initdb.d</code> רץ <b>רק על volume ריק</b>. אחרי שינוי ב־<code>init.sql</code> מקומית: <code>docker compose down -v &amp;&amp; docker compose up --build</code> (מוחק את הנתונים!).</li>
+<li><code>/docker-entrypoint-initdb.d</code> רץ <b>רק על volume ריק</b>. אחרי שינוי ב־<code>init.sql</code> מקומית: <code>docker compose down -v; docker compose up --build</code> (מוחק את הנתונים!).</li>
 <li><b>Seed</b>: <code>python -m app.seed</code> (<code>server/app/seed.py</code>) — תהליך נפרד, <b>אידמפוטנטי</b> (מפתח טבעי: email / כותרת), לא מאפס סיסמה ששונתה. יוצר 31 בוטים מ־<code>seed_data.py</code>, admin, ו־dana/yoni/maya. כל הסיסמאות: <code>demo1234</code>.</li>
 </ul>
 </div></details>

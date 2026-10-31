@@ -2,6 +2,7 @@
 <section class="topic" id="t8" data-title="Background worker">
 <div class="topic-head"><div class="n">8</div><h2>Background worker — לולאת ה־tick</h2><label class="done-toggle"><input type="checkbox" data-done="t8"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li>tick כל 15 שניות: <code>GET_LOCK</code>, חמש משימות משפט בסדר קבוע, ואז משימות תקופתיות (בוטים, מודרציה, ניקיון).</li><li>כל יחידת עבודה: <code>SKIP LOCKED</code> + UPDATE מותנה סטטוס. לכן בטוח להריץ שני workers.</li><li>אין מצב בזיכרון. הכול בשורות ב־DB, אז אפשר להפעיל מחדש בכל רגע.</li><li>בוטי מודרציה: clerk (תור דיווחים), arbiter (הסתרה ו־ban), sweeper (תוכן שלא דווח).</li></ul></div>
 <p><code>server/run_worker.py</code> → <code>worker.loop.run_forever()</code> (<code>loop.py:184</code>). השם <code>run_worker.py</code> ולא <code>worker.py</code> — כדי לא להצל על החבילה <code>worker/</code>.</p>
 <figure>
 <div class="fig-scroll"><svg class="dg" viewBox="0 0 900 470" role="img" aria-label="מבנה tick אחד: GET_LOCK, bump_tick, חמש משימות משפט לפי סדר, משימות תקופתיות, stamp_tick, RELEASE_LOCK ושינה">

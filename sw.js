@@ -8,12 +8,12 @@
      latest build, offline (or on a crawling network) the cached copy.
    - Fonts are cached the first time they load (their file URLs are not known
      in advance). */
-const VERSION = "4ba355b73bb4";
+const VERSION = "876b6cb8eefc";
 const PRECACHE = [
   "index.html",
   "manifest.webmanifest",
   "assets/css/base.css?v=2a089f171e",
-  "assets/css/components.css?v=3551763890",
+  "assets/css/components.css?v=4cb7c04ca6",
   "assets/css/tools.css?v=3639c4a1db",
   "assets/data/code-index.js?v=6d5cd3087c",
   "assets/data/seq-data.js?v=440b262b23",
@@ -49,7 +49,10 @@ self.addEventListener("activate", (event) => {
 function pageFromNetwork(request) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("slow network")), NETWORK_TIMEOUT_MS);
-    fetch(request).then((response) => {
+    // no-cache: always revalidate with the server (a cheap 304 when nothing changed).
+    // A plain fetch may be answered from the HTTP cache, which on GitHub Pages
+    // (max-age=600) would show a page up to ten minutes old after a deploy.
+    fetch(request.url, { cache: "no-cache", credentials: "same-origin" }).then((response) => {
       clearTimeout(timer);
       if (response.ok) {
         const copy = response.clone();

@@ -1,8 +1,8 @@
 <!-- ---------- run / test ---------- -->
 <div class="fx-group"><h3>הרצה, טסטים ודוקר <span class="lyr">Makefile · tests/</span></h3><div class="fx-list">
 <div class="fx" data-keys="test טסט pytest npm test הרצה אחד ספציפי"><div class="fx-q">להריץ טסט אחד מהר</div>
-<div class="fx-where"><span class="lb">שרת</span> <code>cd server &amp;&amp; python -m pytest tests/unit/test_cases_rules.py -q</code> · לפי שם: <code>-k short_title</code> · רק unit: <code>-m unit</code></div>
-<div class="fx-also"><span class="lb">לקוח</span> <code>cd client &amp;&amp; npx vitest run src/utils/format.test.ts</code> · <code>npm run lint</code></div></div>
+<div class="fx-where"><span class="lb">שרת</span> <code>cd server; python -m pytest tests/unit/test_cases_rules.py -q</code> · לפי שם: <code>-k short_title</code> · רק unit: <code>-m unit</code></div>
+<div class="fx-also"><span class="lb">לקוח</span> <code>cd client; npx vitest run src/utils/format.test.ts</code> · <code>npm run lint</code></div></div>
 
 <div class="fx" data-keys="which test טסט שבודק את זה מוצא"><div class="fx-q">איזה טסט בודק את מה ששיניתי?</div>
 <div class="fx-where"><span class="lb">שיטה</span> grep לשם הקבוע או לטקסט, עם סינון נתיב <code>tests</code>. ב־"חיפוש בכל הקוד" תוצאות של טסטים מסומנות בתגית "טסט".</div></div>

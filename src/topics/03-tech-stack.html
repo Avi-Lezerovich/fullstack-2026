@@ -2,6 +2,7 @@
 <section class="topic" id="t3" data-title="Tech stack">
 <div class="topic-head"><div class="n">3</div><h2>Tech stack — ולמה כל רכיב נבחר</h2><label class="done-toggle"><input type="checkbox" data-done="t3"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li>Frontend: React + TypeScript + MUI עם RTL. Vite בפיתוח (פורט 5174).</li><li>Backend: Flask עם SQL גולמי (PyMySQL), <b>בלי ORM</b>. gunicorn עם threads, בגלל ה־SSE.</li><li>MySQL 8: הנעילות וה־UNIQUE keys הם מה שמבטיח שלא ייווצרו כפילויות.</li><li>Auth: שורת session בטבלה + עוגייה httpOnly, <b>לא JWT</b>, כדי שאפשר יהיה לבטל sessions.</li></ul></div>
 <div class="tablewrap"><table><thead><tr><th>רכיב</th><th>בחירה</th><th>למה (כפי שמנומק בקוד/דוקים)</th></tr></thead><tbody>
 <tr><td>UI</td><td>React 18 + TypeScript + MUI 5</td><td>קומפוננטות מוכנות עם תמיכה ב־RTL (<code>direction: "rtl"</code> ב־<code>theme.ts</code>) + <code>stylis-plugin-rtl</code> שהופך את ה־CSS הפיזי. TS תופס שגיאות בזמן build (<code>tsc -b</code>).</td></tr>
 <tr><td>Build / dev</td><td>Vite</td><td>dev server מהיר על 5174 עם proxy ל־<code>/api</code> שמזרים SSE בלי buffering.</td></tr>

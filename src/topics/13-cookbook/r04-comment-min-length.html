@@ -7,5 +7,5 @@
 <span class="add">+        return fail("invalid", "התגובה קצרה מדי.")</span></code></pre>
 <span class="rlabel">למה ב־route ולא ב־service?</span><p>זו ולידציה של צורת הבקשה מהמשתמש. אם זה היה ב־<code>comments_service.create_comment</code> זה היה חל גם על בוטים (מושבעים/שופט) — ו־<code>speak_as_juror</code> מתייחס לכל תוצאה שאינה ok כאל כישלון → תיק תקוע.</p>
 <span class="rlabel">אימות</span><p>בדף תיק, שלח "א" → הודעת שגיאה מעל ה־composer; או curl ל־<code>POST /api/cases/1/comments</code> עם <code>{"body":"א"}</code> → 400.</p>
-<span class="rlabel">מה יכול להישבר</span><p>טסטים ב־<code>tests/integration/test_social_api.py</code> שמפרסמים תגובה של תו אחד (בדוק עם <code>grep -n '"body"' tests/integration/test_social_api.py</code>).</p>
+<span class="rlabel">מה יכול להישבר</span><p>טסטים ב־<code>tests/integration/test_social_api.py</code> שמפרסמים תגובה של תו אחד (בדוק עם <code>git grep -n '"body"' -- server/tests/integration/test_social_api.py</code>).</p>
 </div></details>

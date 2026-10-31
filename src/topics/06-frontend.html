@@ -2,6 +2,7 @@
 <section class="topic" id="t6" data-title="Frontend">
 <div class="topic-head"><div class="n">6</div><h2>Frontend — React + TS + MUI (RTL)</h2><label class="done-toggle"><input type="checkbox" data-done="t6"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li><code>App.tsx</code> = טבלת הנתיבים. <code>ProtectedRoute</code> עוטף דפים שרק מחוברים רואים.</li><li>כל קריאה לשרת עוברת דרך <code>api.ts</code> (עם <code>credentials: "include"</code>, ושגיאות כ־<code>ApiError</code>).</li><li>מצב גלובלי ב־2 contexts: <code>AuthContext</code> (שואל <code>/auth/me</code>) ו־<code>NotificationContext</code> (חיבור SSE אחד).</li><li><code>types.ts</code> חייב להתאים לצורה שהשרת מחזיר (<code>shape_*</code>). שינוי בצד אחד מחייב שינוי בשני.</li></ul></div>
 <details class="sub" open><summary>6.1 Bootstrapping</summary><div class="in">
 <p><code>client/src/main.tsx</code> עוטף מבחוץ פנימה: Emotion <code>CacheProvider</code> עם RTL stylis cache → <code>ThemeProvider</code> + <code>CssBaseline</code> → <code>BrowserRouter</code> → <code>AuthProvider</code> → <code>NotificationProvider</code> → <code>App</code>.</p>
 <div class="callout key"><b>למה RTL פעמיים?</b> <code>direction: "rtl"</code> ב־<code>theme.ts</code> הופך את הלוגיקה של MUI, אבל ה־CSS שנוצר עדיין צריך היפוך של properties פיזיים (margin-left ↔ right) — זה תפקיד <code>stylis-plugin-rtl</code>.</div>

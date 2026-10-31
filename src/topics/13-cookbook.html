@@ -5,14 +5,15 @@
 <div class="callout exam"><b>שיטת עבודה מול בוחן (60 שניות לפני שנוגעים בקוד)</b>
 <ol>
 <li>אמור בקול איזו <b>שכבה</b> מושפעת: UI (<code>client/</code>) / route (<code>api/</code>) / service (<code>services/</code>) / schema (<code>init.sql</code>) / config.</li>
-<li><code>grep</code> לפני עריכה — הרבה ערכים משוכפלים בין לקוח לשרת (תוויות, מינימום סיסמה, מקסימום סעיפים).</li>
+<li><b>חיפוש</b> לפני עריכה, כי הרבה ערכים כתובים פעמיים, בלקוח ובשרת (תוויות, מינימום סיסמה, מקסימום סעיפים). ב־Windows אין <code>grep</code>. משתמשים ב־<code>git grep -n</code>, ב־<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> ב־VS Code, או ב"חיפוש בכל הקוד" באתר.</li>
 <li>שנה, ואז <b>הוכח</b>: curl / דפדפן / טסט. אחר כך הרץ את הטסטים הרלוונטיים.</li>
 </ol>
-<pre><code>grep -rn "איסוף עדויות" client/src          <span class="c"># כל המופעים של טקסט</span>
-grep -rn "MIN_PASSWORD" server/app client/src
-cd server &amp;&amp; python -m pytest -m unit -q       <span class="c"># מהיר</span>
-cd client &amp;&amp; npm run lint &amp;&amp; npm test</code></pre></div>
+<pre><code>git grep -n "איסוף עדויות" -- client/src  <span class="c"># כל המופעים של טקסט</span>
+git grep -n "MIN_PASSWORD" -- server/app client/src
+cd server; python -m pytest -m unit -q       <span class="c"># מהיר</span>
+cd ..\client; npm run lint; npm test         <span class="c"># מתוך server, חוזרים למעלה</span></code></pre></div>
 
+<!-- @recipe-index -->
 <div class="drill"><button class="btn primary" type="button" id="drillRecipe">תרגיל אקראי</button><span class="hint" style="margin:0">פותח מתכון אקראי, כמו בוחן שמבקש שינוי. נסו לפתור לפני שקוראים.</span></div>
 <!-- @include 13-cookbook/r01-status-label.html -->
 

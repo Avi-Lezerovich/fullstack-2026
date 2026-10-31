@@ -3,6 +3,21 @@
 <div class="topic-head"><div class="n">16</div><h2>דף הלילה האחרון — cheat sheet</h2><label class="done-toggle"><input type="checkbox" data-done="t16"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
 <div class="cheat">
+<div class="card"><h4>8 השינויים הנפוצים ואיפה הם</h4><ul style="font-size:14px">
+<li>תווית/טקסט: <code>types.ts</code> (<code>*_LABELS</code>) או הדף ב־<code>pages/</code>, ולחפש כפילויות.</li>
+<li>ולידציה: ה־route ב־<code>server/app/api/</code>, ואם יש, גם ה־<code>inputProps</code> בטופס.</li>
+<li>מגבלה (מקסימום/מינימום): קבוע UPPER_CASE ב־service, ובלקוח עוד עותק.</li>
+<li>צבע/פונט: <code>theme.ts</code>. הסרגל העליון כתוב שם ישירות.</li>
+<li>נתיב/דף: <code>App.tsx</code> + <code>pages/</code> + <code>NAV_LINKS</code>.</li>
+<li>הרשאה: <code>@require_auth/admin</code> בשרת, <code>user?.is_admin</code> בלקוח.</li>
+<li>זמנים: <code>config.py</code> <b>וגם</b> <code>docker-compose.yml</code>.</li>
+<li>שדה חדש: מתכון 11 (7 מקומות + איפוס DB).</li></ul></div>
+<div class="card"><h4>כלי האתר במבחן</h4><ul style="font-size:14px">
+<li><kbd>Ctrl</kbd>+<kbd>K</kbd>: חיפוש בכל המדריך ובשמות בקוד.</li>
+<li>לחיצה על נתיב ↗ פותחת את הקוד. <b>Alt</b>+לחיצה פותחת ב־VS Code.</li>
+<li>בחלונית הקוד: לחיצה על שם = איפה עוד משתמשים בו.</li>
+<li>"חיפוש בכל הקוד" = grep, וטסטים מסומנים.</li>
+<li>האתר עובד גם בלי אינטרנט (בסרגל הצד כתוב ✓).</li></ul></div>
 <div class="card"><h4>פורטים</h4><div class="tablewrap"><table><tbody>
 <tr><td>web (nginx)</td><td><code>8080</code> ציבורי</td></tr>
 <tr><td>API</td><td><code>5002</code> (loopback)</td></tr>
@@ -14,15 +29,21 @@ docker compose ps            # make ps
 docker compose logs -f server
 docker compose down -v       # make clean (wipe)
 make seed · make db-shell · make shell</code></pre></div>
-<div class="card"><h4>Native</h4><pre><code>cp .env.example .env
+<div class="card"><h4>Native (Windows)</h4><pre><code>copy .env.example .env
 docker compose up -d db
-cd server &amp;&amp; source .venv/bin/activate
-python -m app.seed &amp;&amp; python run.py
-python run_worker.py
-cd client &amp;&amp; npm run dev</code></pre></div>
-<div class="card"><h4>טסטים</h4><pre><code>cd server &amp;&amp; python -m pytest --cov
-python -m pytest -m unit
-cd client &amp;&amp; npm test &amp;&amp; npm run lint
+cd server
+.venv\Scripts\activate
+python -m app.seed
+python run.py          # טרמינל 2
+python run_worker.py   # טרמינל 3
+cd client
+npm run dev            # טרמינל 4 → :5174</code></pre></div>
+<div class="card"><h4>טסטים</h4><pre><code>cd server
+python -m pytest -m unit   # מהיר, בלי DB
+python -m pytest --cov     # הכול, צריך DB
+cd ..\client
+npm test
+npm run lint
 curl -s localhost:5002/api/health</code></pre></div>
 <div class="card"><h4>קבצים שחייבים לזכור</h4><ul style="font-size:14px">
 <li><code>server/app/__init__.py</code> — factory</li>

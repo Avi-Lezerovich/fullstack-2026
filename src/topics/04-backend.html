@@ -2,6 +2,7 @@
 <section class="topic" id="t4" data-title="Backend">
 <div class="topic-head"><div class="n">4</div><h2>Backend — Flask API</h2><label class="done-toggle"><input type="checkbox" data-done="t4"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li>route: קורא את הבקשה → decorator בודק הרשאה → קורא ל־service <b>אחד</b> → ממפה את התוצאה לסטטוס HTTP.</li><li>services מחזירים מחרוזת (<code>"ok"</code>, <code>"forbidden"</code>), לא זורקים. <code>errors.py</code> הופך אותה ל־400/403/404…</li><li>שלושה decorators ב־<code>security.py</code>: <code>require_auth</code>, <code>require_admin</code>, <code>optional_auth</code>.</li><li>ולידציה של צורת הבקשה ב־route. כלל עסקי ב־service. <code>clean()</code> <b>חותך</b> טקסט ארוך, הוא לא דוחה.</li></ul></div>
 
 <details class="sub" open><summary>4.1 נקודת כניסה ו־factory</summary><div class="in">
 <ul>

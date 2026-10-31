@@ -9,5 +9,5 @@
 <span class="del">-            &lt;TextField {...params} label="סעיפי האישום" helperText="עד חמישה סעיפים" /&gt;</span>
 <span class="add">+            &lt;TextField {...params} label="סעיפי האישום" helperText="עד שלושה סעיפים" /&gt;</span></code></pre>
 <span class="rlabel">אימות</span><p>הגש תביעה עם 5 סעיפים ב־curl → בתשובה <code>charges</code> יש רק 3. בטופס — לא ניתן לבחור יותר מ־3.</p>
-<span class="rlabel">מה יכול להישבר</span><p>טסט שבודק 5 סעיפים (<code>grep -rn "MAX_CHARGES\|charges" server/tests | head</code>). תביעות בוטים: <code>LAWSUIT_SCHEMA</code> כבר מגביל 1–3.</p>
+<span class="rlabel">מה יכול להישבר</span><p>טסט שבודק 5 סעיפים (<code>git grep -n -e MAX_CHARGES -e charges -- server/tests</code>). תביעות בוטים: <code>LAWSUIT_SCHEMA</code> כבר מגביל 1–3.</p>
 </div></details>

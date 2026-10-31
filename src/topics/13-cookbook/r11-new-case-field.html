@@ -23,7 +23,7 @@
          witness_deadline_offset(),</code></pre>
 <span class="rlabel">להחיל על ה־DB המקומי</span>
 <pre><code><span class="c"># אפשרות א — מוחק את כל הנתונים:</span>
-docker compose down -v &amp;&amp; docker compose up --build
+docker compose down -v; docker compose up --build
 <span class="c"># אפשרות ב — שומר נתונים:</span>
 make db-shell
 mysql&gt; ALTER TABLE cases ADD COLUMN location VARCHAR(120) NULL;</code></pre>

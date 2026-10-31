@@ -4,7 +4,7 @@
 <pre><code> SEVERE_TERMS: dict[str, float] = {
      "מטומטם": 0.75,
 <span class="add">+    "טמבל": 0.75,</span></code></pre>
-<span class="rlabel">אימות</span><pre><code>cd server &amp;&amp; python -c "from app.brain import sentiment; print(sentiment.scan('אתה טמבל'))"
+<span class="rlabel">אימות</span><pre><code>cd server; python -c "from app.brain import sentiment; print(sentiment.scan('אתה טמבל'))"
 <span class="c"># Scan(label='toxic', ...) → תגובה כזו תחזיר 422 "התגובה נחסמה..."</span></code></pre>
 <span class="rlabel">מה יכול להישבר</span><p>התאמה לפי גבולות מילה; ציונים מצטברים עד 1.0. ≥0.70 → <code>rejected</code> (422), ≥0.35 → <code>flagged</code> (נשאר ציבורי). דברי בית המשפט (מושבעים/שופט) לא נסרקים (<code>screen=False</code>). הרץ <code>pytest -m unit</code> — יש טסטים על המילון.</p>
 </div></details>

@@ -23,7 +23,7 @@
   <div class="card"><h4>כשמקבלים משימה: 5 צעדים</h4>
   <ol>
     <li><b>שכבה:</b> UI (<code>client/src</code>), route (<code>api/</code>), service (<code>services/</code>), סכמה (<code>init.sql</code>) או config?</li>
-    <li><b>מצא</b> כאן או ב־<kbd>Ctrl</kbd>+<kbd>K</kbd>. אחרי זה <b>grep לערך עצמו</b>, כי הרבה ערכים כתובים פעמיים (לקוח ושרת).</li>
+    <li><b>מצא</b> כאן או ב־<kbd>Ctrl</kbd>+<kbd>K</kbd>. אחרי זה <b>מחפשים את הערך עצמו</b> (בחלונית הקוד: לחיצה על השם, או <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> ב־VS Code), כי הרבה ערכים כתובים פעמיים, בלקוח ובשרת.</li>
     <li><b>שנה</b> את המינימום שצריך. לא משנים שמות של ENUM או מפתחות API.</li>
     <li><b>הוכח:</b> דפדפן, curl או DevTools → Network. בדוקר צריך rebuild לשירות ששונה.</li>
     <li><b>טסטים + <code>git diff</code></b>, ותסביר לבוחן מה עוד הושפע.</li>
@@ -36,6 +36,15 @@
     <li><b>init.sql</b> רץ רק על DB ריק: <code>docker compose down -v</code> או <code>ALTER TABLE</code>.</li>
     <li><b>.env / compose:</b> restart לשירות.</li>
   </ul></div>
+  <div class="card"><h4>מסלול לימוד להערב (בערך שעתיים)</h4>
+  <ol>
+    <li><b>15 דק׳:</b> <a href="#t1" data-go="t1">נושא 1</a> (התמונה הגדולה) ותיבות ה"בקצרה" בנושאים 2–6.</li>
+    <li><b>20 דק׳:</b> <a href="#t18" data-go="t18">נושא 18</a>. עוברים על לייק ועל הגשת תביעה עם הקוד פתוח לידם.</li>
+    <li><b>45 דק׳:</b> <a href="#t20" data-go="t20">תרגול תחת שעון</a>: 3 משימות (קל, קל, בינוני) <b>בפרויקט עצמו</b>, ואחרי כל אחת <code>git checkout .</code></li>
+    <li><b>15 דק׳:</b> <a href="#t19" data-go="t19">תקלות נפוצות</a>, כדי לזהות אותן מהר מחר.</li>
+    <li><b>20 דק׳:</b> <a href="#t14" data-go="t14">שאלות מבחן</a>. עונים בקול לפני שפותחים.</li>
+    <li><b>5 דק׳:</b> <a href="#t16" data-go="t16">דף הלילה האחרון</a>, ולישון.</li>
+  </ol></div>
 </div>
 
 <div class="fx-tools"><input class="search" id="fxFilter" type="search" placeholder="סינון הרשימה: צבע, סיסמה, פורט, לייק, מושבעים…" aria-label="סינון רשומות"><span class="fx-count" id="fxCount" aria-live="polite"></span></div>

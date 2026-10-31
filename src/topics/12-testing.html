@@ -2,17 +2,19 @@
 <section class="topic" id="t12" data-title="Testing">
 <div class="topic-head"><div class="n">12</div><h2>Testing — מה קיים, איך מריצים, מה שבור</h2><label class="done-toggle"><input type="checkbox" data-done="t12"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li>בשרת יש 3 סוגים: <code>unit</code> (בלי DB), ו־<code>integration</code> ו־<code>worker</code> שצריכים MySQL על 3307.</li><li>הטסטים בונים DB זמני מ־<code>init.sql</code>, אז שינוי סכמה נבדק מיד.</li><li>בלקוח: <code>npm test</code> (vitest) ו־<code>npm run lint</code>, שהוא בעצם <code>tsc</code>, כולל איסור על imports מיותרים.</li><li>בלי MySQL טסטי integration מדלגים (skipped), הם לא נכשלים.</li></ul></div>
 <div class="tablewrap"><table><thead><tr><th>שכבה</th><th>marker</th><th>כמות (TESTING.md)</th><th>צריך</th></tr></thead><tbody>
 <tr><td>Unit</td><td><code>unit</code></td><td>564</td><td>כלום</td></tr>
 <tr><td>Integration</td><td><code>integration</code></td><td>491</td><td>MySQL על 3307</td></tr>
 <tr><td>Worker</td><td><code>worker</code> (+integration)</td><td>69</td><td>MySQL</td></tr>
 <tr><td>Frontend</td><td>—</td><td>~157</td><td>כלום (vitest + jsdom)</td></tr>
 </tbody></table></div>
-<pre><code>docker compose up -d db                 <span class="c"># integration + worker צריכים MySQL</span>
-cd server &amp;&amp; python -m pytest --cov     <span class="c"># כל ה־backend + gate של 85% (server/.coveragerc)</span>
-cd server &amp;&amp; python -m pytest -m unit   <span class="c"># מהיר, בלי DB</span>
-cd server &amp;&amp; python -m pytest tests/integration/test_cases_api.py -q
-cd client &amp;&amp; npm test &amp;&amp; npm run lint   <span class="c"># vitest, ואז tsc --noEmit (אין ESLint)</span></code></pre>
+<pre><code><span class="c"># כל שורה היא חלופה נפרדת, ורצה מתיקיית הפרויקט הראשית</span>
+docker compose up -d db                 <span class="c"># integration + worker צריכים MySQL</span>
+cd server; python -m pytest --cov     <span class="c"># כל ה־backend + gate של 85% (server/.coveragerc)</span>
+cd server; python -m pytest -m unit   <span class="c"># מהיר, בלי DB</span>
+cd server; python -m pytest tests/integration/test_cases_api.py -q
+cd client; npm test; npm run lint   <span class="c"># vitest, ואז tsc --noEmit (אין ESLint)</span></code></pre>
 <ul>
 <li><b>Harness</b> (<code>server/tests/conftest.py</code>): מתחבר כ־root, יוצר DB זמני <code>lolsuit_test</code>, מריץ את <code>database/init.sql</code> (מפצל לפי <code>;</code>), מגדיר <code>BCRYPT_ROUNDS=4</code>, <code>MAIL_BACKEND=console</code>, <code>BRAIN_FORCE_OFFLINE=1</code>, יום משפט של דקה; מריץ <code>app.seed</code> פעם אחת; מוחק הכל חוץ מה־cast לפני כל טסט. ה־DB האמיתי <code>lolsuit</code> לא נגוע.</li>
 <li><b>בלי MySQL</b> — טסטי integration/worker מדלגים (skip עם סיבה), לא נכשלים.</li>

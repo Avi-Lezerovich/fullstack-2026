@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=David+Libre:wght@400;700&amp;family=Frank+Ruhl+Libre:wght@500;700&amp;family=Heebo:wght@400;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap">
 <link rel="stylesheet" href="assets/css/base.css?v=2a089f171e">
-<link rel="stylesheet" href="assets/css/components.css?v=3551763890">
+<link rel="stylesheet" href="assets/css/components.css?v=4cb7c04ca6">
 <link rel="stylesheet" href="assets/css/tools.css?v=3639c4a1db">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#3C3489">
@@ -83,7 +83,7 @@
   <div class="card"><h4>כשמקבלים משימה: 5 צעדים</h4>
   <ol>
     <li><b>שכבה:</b> UI (<code>client/src</code>), route (<code>api/</code>), service (<code>services/</code>), סכמה (<code>init.sql</code>) או config?</li>
-    <li><b>מצא</b> כאן או ב־<kbd>Ctrl</kbd>+<kbd>K</kbd>. אחרי זה <b>grep לערך עצמו</b>, כי הרבה ערכים כתובים פעמיים (לקוח ושרת).</li>
+    <li><b>מצא</b> כאן או ב־<kbd>Ctrl</kbd>+<kbd>K</kbd>. אחרי זה <b>מחפשים את הערך עצמו</b> (בחלונית הקוד: לחיצה על השם, או <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> ב־VS Code), כי הרבה ערכים כתובים פעמיים, בלקוח ובשרת.</li>
     <li><b>שנה</b> את המינימום שצריך. לא משנים שמות של ENUM או מפתחות API.</li>
     <li><b>הוכח:</b> דפדפן, curl או DevTools → Network. בדוקר צריך rebuild לשירות ששונה.</li>
     <li><b>טסטים + <code>git diff</code></b>, ותסביר לבוחן מה עוד הושפע.</li>
@@ -96,6 +96,15 @@
     <li><b>init.sql</b> רץ רק על DB ריק: <code>docker compose down -v</code> או <code>ALTER TABLE</code>.</li>
     <li><b>.env / compose:</b> restart לשירות.</li>
   </ul></div>
+  <div class="card"><h4>מסלול לימוד להערב (בערך שעתיים)</h4>
+  <ol>
+    <li><b>15 דק׳:</b> <a href="#t1" data-go="t1">נושא 1</a> (התמונה הגדולה) ותיבות ה"בקצרה" בנושאים 2–6.</li>
+    <li><b>20 דק׳:</b> <a href="#t18" data-go="t18">נושא 18</a>. עוברים על לייק ועל הגשת תביעה עם הקוד פתוח לידם.</li>
+    <li><b>45 דק׳:</b> <a href="#t20" data-go="t20">תרגול תחת שעון</a>: 3 משימות (קל, קל, בינוני) <b>בפרויקט עצמו</b>, ואחרי כל אחת <code>git checkout .</code></li>
+    <li><b>15 דק׳:</b> <a href="#t19" data-go="t19">תקלות נפוצות</a>, כדי לזהות אותן מהר מחר.</li>
+    <li><b>20 דק׳:</b> <a href="#t14" data-go="t14">שאלות מבחן</a>. עונים בקול לפני שפותחים.</li>
+    <li><b>5 דק׳:</b> <a href="#t16" data-go="t16">דף הלילה האחרון</a>, ולישון.</li>
+  </ol></div>
 </div>
 
 <div class="fx-tools"><input class="search" id="fxFilter" type="search" placeholder="סינון הרשימה: צבע, סיסמה, פורט, לייק, מושבעים…" aria-label="סינון רשומות"><span class="fx-count" id="fxCount" aria-live="polite"></span></div>
@@ -346,7 +355,7 @@
 
 <div class="fx" data-keys="seed demo users משתמשי דמו dana yoni maya admin סיסמה demo1234"><div class="fx-q">משתמשי דמו / הסיסמה שלהם</div>
 <div class="fx-where"><span class="lb">איפה</span> <code>server/app/seed_data.py:793</code> <code>DEMO_HUMANS</code> · <code>:787</code> <code>ADMIN</code> · <code>:74</code> <code>DEMO_PASSWORD</code></div>
-<div class="fx-check"><span class="lb">להריץ</span> <code>make seed</code> או <code>cd server &amp;&amp; python -m app.seed</code>. אפשר להריץ שוב ושוב (upsert).</div></div>
+<div class="fx-check"><span class="lb">להריץ</span> <code>make seed</code> או <code>cd server; python -m app.seed</code>. אפשר להריץ שוב ושוב (upsert).</div></div>
 
 <div class="fx" data-keys="bots בוטים מושבעים שופטים אישיות personality"><div class="fx-q">הבוטים (מושבעים / שופטים / מנחים) והאישיות שלהם</div>
 <div class="fx-where"><span class="lb">איפה</span> <code>server/app/seed_data.py:134</code> <code>JURORS</code> · <code>:536</code> <code>JUDGES</code> · <code>:701</code> <code>MODERATORS</code></div></div>
@@ -420,8 +429,8 @@
 <!-- ---------- run / test ---------- -->
 <div class="fx-group"><h3>הרצה, טסטים ודוקר <span class="lyr">Makefile · tests/</span></h3><div class="fx-list">
 <div class="fx" data-keys="test טסט pytest npm test הרצה אחד ספציפי"><div class="fx-q">להריץ טסט אחד מהר</div>
-<div class="fx-where"><span class="lb">שרת</span> <code>cd server &amp;&amp; python -m pytest tests/unit/test_cases_rules.py -q</code> · לפי שם: <code>-k short_title</code> · רק unit: <code>-m unit</code></div>
-<div class="fx-also"><span class="lb">לקוח</span> <code>cd client &amp;&amp; npx vitest run src/utils/format.test.ts</code> · <code>npm run lint</code></div></div>
+<div class="fx-where"><span class="lb">שרת</span> <code>cd server; python -m pytest tests/unit/test_cases_rules.py -q</code> · לפי שם: <code>-k short_title</code> · רק unit: <code>-m unit</code></div>
+<div class="fx-also"><span class="lb">לקוח</span> <code>cd client; npx vitest run src/utils/format.test.ts</code> · <code>npm run lint</code></div></div>
 
 <div class="fx" data-keys="which test טסט שבודק את זה מוצא"><div class="fx-q">איזה טסט בודק את מה ששיניתי?</div>
 <div class="fx-where"><span class="lb">שיטה</span> grep לשם הקבוע או לטקסט, עם סינון נתיב <code>tests</code>. ב־"חיפוש בכל הקוד" תוצאות של טסטים מסומנות בתגית "טסט".</div></div>
@@ -440,6 +449,7 @@
 <section class="topic" id="t1" data-title="התמונה הגדולה">
 <div class="topic-head"><div class="n">1</div><h2>התמונה הגדולה — מה הפרויקט עושה</h2><label class="done-toggle"><input type="checkbox" data-done="t1"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li>4 שכבות: React → nginx → Flask API → MySQL. בנפרד יש <b>worker</b>, תהליך Python שמקדם משפטים.</li><li>ה־API וה־worker לא מדברים ישירות. <b>MySQL הוא המצב המשותף היחיד</b>, גם להתראות החיות.</li><li>הגשת תביעה = ה־API כותב שורה עם סטטוס ו־deadline. את כל השאר עושה ה־worker כשה־deadline עובר.</li><li>31 בוטים (20 מושבעים, 8 שופטים, 3 מנחי תוכן). מה שהם אומרים בא מה־brain: offline או LLM.</li></ul></div>
 <p><b>LolSuit</b> היא רשת חברתית סאטירית בעברית: משתמשים מגישים "תביעות" מצחיקות (נגד אדם רשום או נגד משהו מופשט כמו "יום שני"), וכל תביעה עוברת <b>משפט אמיתי</b>: זימון עדים, חבר מושבעים של 7 בוטים עם אישיות, ושופט שפוסק. 31 בוטים (20 מושבעים, 8 שופטים, 3 מנחי תוכן) גם מגיבים, עושים לייק, עונים להודעות ותובעים זה את זה.</p>
 
 <div class="callout key"><b>רעיון מרכזי — 4 שכבות, 2 תהליכי Python, מצב משותף אחד</b>
@@ -506,6 +516,7 @@
 <section class="topic" id="t2" data-title="מפת ה־repo">
 <div class="topic-head"><div class="n">2</div><h2>מפת ה־repo — סיור תיקייה־תיקייה</h2><label class="done-toggle"><input type="checkbox" data-done="t2"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li><code>client/src</code>: <code>pages/</code> (דף לכל נתיב), <code>components/</code>, <code>api.ts</code> (כל הקריאות לשרת), <code>types.ts</code> (טיפוסים ותוויות בעברית).</li><li><code>server/app</code>: <code>api/</code> (routes דקים) → <code>services/</code> (כל ה־SQL והכללים) → <code>db.py</code>.</li><li><code>server/worker</code> = לולאת ה־tick. <code>database/init.sql</code> = כל הסכמה. <code>docker-compose.yml</code> = 5 שירותים.</li><li>הטבלה למטה היא גרסה מקוצרת של נושא 0. במבחן עדיף נושא 0 או <kbd>Ctrl</kbd>+<kbd>K</kbd>.</li></ul></div>
 <pre><code>.
 ├── client/                  React + TS (Vite). Dockerfile: node builds → nginx serves
 │   ├── nginx.conf.template  SPA fallback + /api proxy + SSE + upload size
@@ -572,6 +583,7 @@
 <section class="topic" id="t3" data-title="Tech stack">
 <div class="topic-head"><div class="n">3</div><h2>Tech stack — ולמה כל רכיב נבחר</h2><label class="done-toggle"><input type="checkbox" data-done="t3"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li>Frontend: React + TypeScript + MUI עם RTL. Vite בפיתוח (פורט 5174).</li><li>Backend: Flask עם SQL גולמי (PyMySQL), <b>בלי ORM</b>. gunicorn עם threads, בגלל ה־SSE.</li><li>MySQL 8: הנעילות וה־UNIQUE keys הם מה שמבטיח שלא ייווצרו כפילויות.</li><li>Auth: שורת session בטבלה + עוגייה httpOnly, <b>לא JWT</b>, כדי שאפשר יהיה לבטל sessions.</li></ul></div>
 <div class="tablewrap"><table><thead><tr><th>רכיב</th><th>בחירה</th><th>למה (כפי שמנומק בקוד/דוקים)</th></tr></thead><tbody>
 <tr><td>UI</td><td>React 18 + TypeScript + MUI 5</td><td>קומפוננטות מוכנות עם תמיכה ב־RTL (<code>direction: "rtl"</code> ב־<code>theme.ts</code>) + <code>stylis-plugin-rtl</code> שהופך את ה־CSS הפיזי. TS תופס שגיאות בזמן build (<code>tsc -b</code>).</td></tr>
 <tr><td>Build / dev</td><td>Vite</td><td>dev server מהיר על 5174 עם proxy ל־<code>/api</code> שמזרים SSE בלי buffering.</td></tr>
@@ -593,6 +605,7 @@
 <section class="topic" id="t4" data-title="Backend">
 <div class="topic-head"><div class="n">4</div><h2>Backend — Flask API</h2><label class="done-toggle"><input type="checkbox" data-done="t4"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li>route: קורא את הבקשה → decorator בודק הרשאה → קורא ל־service <b>אחד</b> → ממפה את התוצאה לסטטוס HTTP.</li><li>services מחזירים מחרוזת (<code>"ok"</code>, <code>"forbidden"</code>), לא זורקים. <code>errors.py</code> הופך אותה ל־400/403/404…</li><li>שלושה decorators ב־<code>security.py</code>: <code>require_auth</code>, <code>require_admin</code>, <code>optional_auth</code>.</li><li>ולידציה של צורת הבקשה ב־route. כלל עסקי ב־service. <code>clean()</code> <b>חותך</b> טקסט ארוך, הוא לא דוחה.</li></ul></div>
 
 <details class="sub" open><summary>4.1 נקודת כניסה ו־factory</summary><div class="in">
 <ul>
@@ -724,6 +737,7 @@ db.py                  thin helper over PyMySQL: query_all / query_one / query_v
 <section class="topic" id="t5" data-title="Database">
 <div class="topic-head"><div class="n">5</div><h2>Database — סכמה, קשרים, migrations, seed</h2><label class="done-toggle"><input type="checkbox" data-done="t5"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li>24 טבלאות ב־<code>database/init.sql</code>, והקובץ רץ <b>רק על DB ריק</b>.</li><li><code>users</code> = בני אדם וגם בוטים. <code>comments</code> = כל מה שנאמר בתיק, מובחן לפי <code>role</code>.</li><li><code>dedupe_key</code> ו־PK של <code>jury_panels</code> מונעים כפילויות אם worker קרס באמצע.</li><li>שלבים: <code>witness_phase → jury_deliberation → verdict_reached → closed</code>. "יום" במשפט = <code>PHASE_MINUTES</code>.</li></ul></div>
 <p>MySQL 8, InnoDB, <code>utf8mb4</code>. קובץ אמת אחד: <code>database/init.sql</code> — <b>24 טבלאות</b>, כולן <code>CREATE TABLE IF NOT EXISTS</code>, בלי triggers/procedures/<code>DELIMITER</code> (הטסטים מריצים את הקובץ עצמו). כל timestamp הוא <code>DATETIME</code> ב־UTC נאיבי שנכתב ע"י <code>UTC_TIMESTAMP()</code>.</p>
 
 <figure>
@@ -813,7 +827,7 @@ db.py                  thin helper over PyMySQL: query_all / query_one / query_v
 <details class="sub"><summary>5.3 Migrations ו־seed</summary><div class="in">
 <ul>
 <li><b>אין framework של migrations.</b> DB חדש מקבל את <code>init.sql</code> (כבר כולל הכל). <code>prod/migrations/001–004</code> מיועדים ל־RDS קיים עם נתונים: 001 agent_events/agent_memories, 002 case_follows/case_activity, 003 brain_calls, 004 <code>ALTER</code> ל־brain_calls (<b>לא אידמפוטנטי</b>).</li>
-<li><code>/docker-entrypoint-initdb.d</code> רץ <b>רק על volume ריק</b>. אחרי שינוי ב־<code>init.sql</code> מקומית: <code>docker compose down -v &amp;&amp; docker compose up --build</code> (מוחק את הנתונים!).</li>
+<li><code>/docker-entrypoint-initdb.d</code> רץ <b>רק על volume ריק</b>. אחרי שינוי ב־<code>init.sql</code> מקומית: <code>docker compose down -v; docker compose up --build</code> (מוחק את הנתונים!).</li>
 <li><b>Seed</b>: <code>python -m app.seed</code> (<code>server/app/seed.py</code>) — תהליך נפרד, <b>אידמפוטנטי</b> (מפתח טבעי: email / כותרת), לא מאפס סיסמה ששונתה. יוצר 31 בוטים מ־<code>seed_data.py</code>, admin, ו־dana/yoni/maya. כל הסיסמאות: <code>demo1234</code>.</li>
 </ul>
 </div></details>
@@ -823,6 +837,7 @@ db.py                  thin helper over PyMySQL: query_all / query_one / query_v
 <section class="topic" id="t6" data-title="Frontend">
 <div class="topic-head"><div class="n">6</div><h2>Frontend — React + TS + MUI (RTL)</h2><label class="done-toggle"><input type="checkbox" data-done="t6"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li><code>App.tsx</code> = טבלת הנתיבים. <code>ProtectedRoute</code> עוטף דפים שרק מחוברים רואים.</li><li>כל קריאה לשרת עוברת דרך <code>api.ts</code> (עם <code>credentials: "include"</code>, ושגיאות כ־<code>ApiError</code>).</li><li>מצב גלובלי ב־2 contexts: <code>AuthContext</code> (שואל <code>/auth/me</code>) ו־<code>NotificationContext</code> (חיבור SSE אחד).</li><li><code>types.ts</code> חייב להתאים לצורה שהשרת מחזיר (<code>shape_*</code>). שינוי בצד אחד מחייב שינוי בשני.</li></ul></div>
 <details class="sub" open><summary>6.1 Bootstrapping</summary><div class="in">
 <p><code>client/src/main.tsx</code> עוטף מבחוץ פנימה: Emotion <code>CacheProvider</code> עם RTL stylis cache → <code>ThemeProvider</code> + <code>CssBaseline</code> → <code>BrowserRouter</code> → <code>AuthProvider</code> → <code>NotificationProvider</code> → <code>App</code>.</p>
 <div class="callout key"><b>למה RTL פעמיים?</b> <code>direction: "rtl"</code> ב־<code>theme.ts</code> הופך את הלוגיקה של MUI, אבל ה־CSS שנוצר עדיין צריך היפוך של properties פיזיים (margin-left ↔ right) — זה תפקיד <code>stylis-plugin-rtl</code>.</div>
@@ -884,6 +899,7 @@ db.py                  thin helper over PyMySQL: query_all / query_one / query_v
 <section class="topic" id="t7" data-title="ה־Brain (LLM)">
 <div class="topic-head"><div class="n">7</div><h2>ה"מוח" — LLM, offline, credential chain</h2><label class="done-toggle"><input type="checkbox" data-done="t7"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li><code>server/app/brain/</code> הוא המקום היחיד שיודע ש־LLM קיים. <code>generate()</code> לא זורק ולא מחזיר ריק.</li><li>בלי LLM (ברירת המחדל בדוקר) הכול עובד <b>offline</b>, עם טקסט דטרמיניסטי.</li><li>credential chain: מנסים credentials לפי סדר. 429 של קצב = מנוחה 60 שניות, מכסה = עד חצות, כל שגיאה אחרת = 120 שניות.</li><li>למבחן זה פחות סביר כיעד לשינוי. מספיק להבין את העיקרון ולדעת איפה המשקולות (<code>decide.py</code>) והסינון (<code>sentiment.py</code>).</li></ul></div>
 <details class="sub" open><summary>7.1 ארגון החבילה <code>server/app/brain/</code></summary><div class="in">
 <pre><code>__init__.py   public surface: generate / deliberate / invent_lawsuit / remember / status
               + routing, LAST_CALL, _log_call → brain_calls
@@ -1001,6 +1017,7 @@ sentiment.py  moderation lexicon — deliberately NOT a model</code></pre>
 <section class="topic" id="t8" data-title="Background worker">
 <div class="topic-head"><div class="n">8</div><h2>Background worker — לולאת ה־tick</h2><label class="done-toggle"><input type="checkbox" data-done="t8"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li>tick כל 15 שניות: <code>GET_LOCK</code>, חמש משימות משפט בסדר קבוע, ואז משימות תקופתיות (בוטים, מודרציה, ניקיון).</li><li>כל יחידת עבודה: <code>SKIP LOCKED</code> + UPDATE מותנה סטטוס. לכן בטוח להריץ שני workers.</li><li>אין מצב בזיכרון. הכול בשורות ב־DB, אז אפשר להפעיל מחדש בכל רגע.</li><li>בוטי מודרציה: clerk (תור דיווחים), arbiter (הסתרה ו־ban), sweeper (תוכן שלא דווח).</li></ul></div>
 <p><code>server/run_worker.py</code> → <code>worker.loop.run_forever()</code> (<code>loop.py:184</code>). השם <code>run_worker.py</code> ולא <code>worker.py</code> — כדי לא להצל על החבילה <code>worker/</code>.</p>
 <figure>
 <div class="fig-scroll"><svg class="dg" viewBox="0 0 900 470" role="img" aria-label="מבנה tick אחד: GET_LOCK, bump_tick, חמש משימות משפט לפי סדר, משימות תקופתיות, stamp_tick, RELEASE_LOCK ושינה">
@@ -1058,6 +1075,7 @@ sentiment.py  moderation lexicon — deliberately NOT a model</code></pre>
 <section class="topic" id="t9" data-title="Docker / infra">
 <div class="topic-head"><div class="n">9</div><h2>Docker / infra — שירותים, פורטים, volumes</h2><label class="done-toggle"><input type="checkbox" data-done="t9"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li>5 שירותים: <code>db</code>, <code>seed</code>, <code>server</code>, <code>worker</code>, <code>web</code>. server, worker ו־seed בנויים מאותו image.</li><li>רק 8080 פתוח החוצה. 5002 (API) ו־3307 (MySQL) פתוחים רק ל־localhost.</li><li>הקוד <b>אפוי ב־image</b>: שינוי קוד מחייב <code>--build</code>. <code>init.sql</code> רץ רק על volume ריק.</li><li>קונטיינר רואה רק משתנים שרשומים ב־<code>environment:</code> שלו ב־compose.</li></ul></div>
 <figure>
 <div class="fig-scroll"><svg class="dg" viewBox="0 0 940 420" role="img" aria-label="טופולוגיית Docker: חמישה שירותים ברשת ברירת המחדל של compose, פורט 8080 ציבורי, 5002 ו־3307 על loopback, ו־volumes db-data ו־uploads">
   <rect class="zone" x="10" y="10" width="920" height="400" rx="14"/><text x="24" y="32" class="sm">host (your laptop)</text>
@@ -1103,24 +1121,27 @@ sentiment.py  moderation lexicon — deliberately NOT a model</code></pre>
 <li><b>env allowlist</b>: קונטיינר רואה רק משתנים שרשומים ב־<code>environment:</code> של השירות שלו. משתנה ב־<code>.env</code> שלא רשום — לא קיים בקונטיינר.</li>
 </ul>
 </div></details>
-<details class="sub" open><summary>9.2 איך מריצים ומוודאים מקומית</summary><div class="in">
 <pre><code><span class="c"># הכל בדוקר (build קר לוקח כמה דקות — npm ci + vite)</span>
 docker compose up --build            <span class="c"># או: make up  (detached)</span>
-open http://localhost:8080
+start http://localhost:8080          <span class="c"># פותח בדפדפן (Windows)</span>
 docker compose ps                    <span class="c"># או make ps — health של כל שירות</span>
 curl -s localhost:5002/api/health    <span class="c"># ישירות לשרת</span>
 curl -s localhost:8080/api/health    <span class="c"># דרך nginx</span>
 docker compose logs -f server        <span class="c"># make logs S=server</span>
 docker compose down                  <span class="c"># עוצר, שומר volumes</span>
 docker compose down -v               <span class="c"># מוחק DB + uploads (make clean)</span></code></pre>
-<pre><code><span class="c"># DB בדוקר, קוד native (לולאת עריכה מהירה)</span>
-cp .env.example .env                  <span class="c"># חובה! ברירות המחדל בקוד (root/lolsuit-dev) לא עובדות מול ה־DB של compose</span>
+<pre><code><span class="c"># DB בדוקר, קוד native (לולאת עריכה מהירה) — Windows / PowerShell</span>
+copy .env.example .env                <span class="c"># חובה! ברירות המחדל בקוד (root/lolsuit-dev) לא עובדות מול ה־DB של compose</span>
 docker compose up -d db               <span class="c"># MySQL על 127.0.0.1:3307</span>
-cd server &amp;&amp; source .venv/bin/activate
+cd server
+.venv\Scripts\activate
 python -m app.seed                    <span class="c"># פעם ראשונה</span>
 python run.py                         <span class="c"># API על 5002</span>
 python run_worker.py                  <span class="c"># טרמינל נוסף, אופציונלי</span>
-cd client &amp;&amp; npm install &amp;&amp; npm run dev   <span class="c"># http://localhost:5174, proxy /api → 5002</span></code></pre>
+cd ..\client
+npm install                           <span class="c"># פעם ראשונה</span>
+npm run dev                           <span class="c"># http://localhost:5174, proxy /api → 5002</span></code></pre>
+<p>ב־Mac/Linux אותו דבר עם <code>cp</code>, <code>source .venv/bin/activate</code> ו־<code>open</code>. ההוראות המלאות ל־Windows בנושא 17.</p>
 <div class="callout exam"><b>טריק להדגמה</b> <code>PHASE_MINUTES=2</code> ב־<code>.env</code> → כל המשפט (7 "ימים") לוקח 14 דקות. compose מעביר אותו גם ל־server וגם ל־worker.</div>
 <p><b>Production</b> (<code>prod/</code>): EC2 אחד (nginx + API + worker) מול Amazon RDS; images נמשכים מ־Docker Hub (<code>release.sh</code> בונה <code>linux/amd64</code> עם buildx; <code>deploy.sh</code> pull → recreate → בודק <code>/api/health</code> → rollback אוטומטי). <code>${VAR:?}</code> לסודות במקום ברירות מחדל.</p>
 </div></details>
@@ -1130,6 +1151,7 @@ cd client &amp;&amp; npm install &amp;&amp; npm run dev   <span class="c"># http
 <section class="topic" id="t10" data-title="זרימות End-to-end">
 <div class="topic-head"><div class="n">10</div><h2>זרימות End-to-end — sequence diagrams</h2><label class="done-toggle"><input type="checkbox" data-done="t10"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li>חמש זרימות כ־sequence diagrams: התחברות, הגשת תביעה, תגובה עם התראה חיה, מנוע המשפט, ובוט שמגיש תביעה.</li><li>"צעד הבא" מתחת לכל תרשים עובר עליו צעד אחר צעד.</li><li>את אותן זרימות, עם <code>קובץ:שורה</code> לחיץ בכל צעד, אפשר למצוא בנושא 18.</li></ul></div>
 <p>חמש הזרימות החשובות, עם הקבצים והפונקציות המדויקים בכל צעד. חיצים מקווקווים = תשובה. (התרשימים מצוירים כ־SVG ע"י סקריפט קטן בתוך הקובץ, מנתונים שכתובים ידנית.)</p>
 
 <details class="sub" open><summary>10.1 התחברות (Login)</summary><div class="in">
@@ -1192,6 +1214,7 @@ cd client &amp;&amp; npm install &amp;&amp; npm run dev   <span class="c"># http
 <section class="topic" id="t11" data-title="Configuration">
 <div class="topic-head"><div class="n">11</div><h2>Configuration ומשתני סביבה</h2><label class="done-toggle"><input type="checkbox" data-done="t11"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li><code>config.py</code>: <code>Settings</code> (קפוא) + <code>get_settings()</code>, שקורא את הסביבה מחדש בכל קריאה.</li><li>native: <code>.env</code> נטען אוטומטית. בלי <code>.env</code> החיבור ל־DB נכשל, כי הסיסמה בקוד לא מתאימה.</li><li>בדוקר compose <b>דורס</b> חלק מהערכים (<code>PHASE_MINUTES</code>) ו<b>לא מעביר</b> אחרים (<code>UPLOAD_MAX_BYTES</code>).</li><li><code>BRAIN_FORCE_OFFLINE</code> כבוי בקוד, אבל דולק (1) ב־compose.</li></ul></div>
 <div class="callout key"><b>איך ערכים מגיעים</b>
 <p><b>מחוץ לדוקר</b>: <code>config.py</code> קורא <code>load_dotenv</code> על <code>.env</code> בשורש ה־repo (לא דורס משתנה שכבר מוגדר); חסר → ברירת המחדל בקוד. <code>get_settings()</code> (<code>config.py:324</code>) קורא את הסביבה <b>בכל קריאה</b> — אין singleton, ו־<code>Settings</code> הוא frozen dataclass.</p>
 <p><b>בדוקר</b>: compose קורא <code>.env</code> רק להחלפת <code>${VAR}</code>. קונטיינר רואה רק את מה שב־<code>environment:</code> של השירות שלו.</p></div>
@@ -1229,17 +1252,19 @@ cd client &amp;&amp; npm install &amp;&amp; npm run dev   <span class="c"># http
 <section class="topic" id="t12" data-title="Testing">
 <div class="topic-head"><div class="n">12</div><h2>Testing — מה קיים, איך מריצים, מה שבור</h2><label class="done-toggle"><input type="checkbox" data-done="t12"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li>בשרת יש 3 סוגים: <code>unit</code> (בלי DB), ו־<code>integration</code> ו־<code>worker</code> שצריכים MySQL על 3307.</li><li>הטסטים בונים DB זמני מ־<code>init.sql</code>, אז שינוי סכמה נבדק מיד.</li><li>בלקוח: <code>npm test</code> (vitest) ו־<code>npm run lint</code>, שהוא בעצם <code>tsc</code>, כולל איסור על imports מיותרים.</li><li>בלי MySQL טסטי integration מדלגים (skipped), הם לא נכשלים.</li></ul></div>
 <div class="tablewrap"><table><thead><tr><th>שכבה</th><th>marker</th><th>כמות (TESTING.md)</th><th>צריך</th></tr></thead><tbody>
 <tr><td>Unit</td><td><code>unit</code></td><td>564</td><td>כלום</td></tr>
 <tr><td>Integration</td><td><code>integration</code></td><td>491</td><td>MySQL על 3307</td></tr>
 <tr><td>Worker</td><td><code>worker</code> (+integration)</td><td>69</td><td>MySQL</td></tr>
 <tr><td>Frontend</td><td>—</td><td>~157</td><td>כלום (vitest + jsdom)</td></tr>
 </tbody></table></div>
-<pre><code>docker compose up -d db                 <span class="c"># integration + worker צריכים MySQL</span>
-cd server &amp;&amp; python -m pytest --cov     <span class="c"># כל ה־backend + gate של 85% (server/.coveragerc)</span>
-cd server &amp;&amp; python -m pytest -m unit   <span class="c"># מהיר, בלי DB</span>
-cd server &amp;&amp; python -m pytest tests/integration/test_cases_api.py -q
-cd client &amp;&amp; npm test &amp;&amp; npm run lint   <span class="c"># vitest, ואז tsc --noEmit (אין ESLint)</span></code></pre>
+<pre><code><span class="c"># כל שורה היא חלופה נפרדת, ורצה מתיקיית הפרויקט הראשית</span>
+docker compose up -d db                 <span class="c"># integration + worker צריכים MySQL</span>
+cd server; python -m pytest --cov     <span class="c"># כל ה־backend + gate של 85% (server/.coveragerc)</span>
+cd server; python -m pytest -m unit   <span class="c"># מהיר, בלי DB</span>
+cd server; python -m pytest tests/integration/test_cases_api.py -q
+cd client; npm test; npm run lint   <span class="c"># vitest, ואז tsc --noEmit (אין ESLint)</span></code></pre>
 <ul>
 <li><b>Harness</b> (<code>server/tests/conftest.py</code>): מתחבר כ־root, יוצר DB זמני <code>lolsuit_test</code>, מריץ את <code>database/init.sql</code> (מפצל לפי <code>;</code>), מגדיר <code>BCRYPT_ROUNDS=4</code>, <code>MAIL_BACKEND=console</code>, <code>BRAIN_FORCE_OFFLINE=1</code>, יום משפט של דקה; מריץ <code>app.seed</code> פעם אחת; מוחק הכל חוץ מה־cast לפני כל טסט. ה־DB האמיתי <code>lolsuit</code> לא נגוע.</li>
 <li><b>בלי MySQL</b> — טסטי integration/worker מדלגים (skip עם סיבה), לא נכשלים.</li>
@@ -1263,14 +1288,15 @@ cd client &amp;&amp; npm test &amp;&amp; npm run lint   <span class="c"># vitest
 <div class="callout exam"><b>שיטת עבודה מול בוחן (60 שניות לפני שנוגעים בקוד)</b>
 <ol>
 <li>אמור בקול איזו <b>שכבה</b> מושפעת: UI (<code>client/</code>) / route (<code>api/</code>) / service (<code>services/</code>) / schema (<code>init.sql</code>) / config.</li>
-<li><code>grep</code> לפני עריכה — הרבה ערכים משוכפלים בין לקוח לשרת (תוויות, מינימום סיסמה, מקסימום סעיפים).</li>
+<li><b>חיפוש</b> לפני עריכה, כי הרבה ערכים כתובים פעמיים, בלקוח ובשרת (תוויות, מינימום סיסמה, מקסימום סעיפים). ב־Windows אין <code>grep</code>. משתמשים ב־<code>git grep -n</code>, ב־<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> ב־VS Code, או ב"חיפוש בכל הקוד" באתר.</li>
 <li>שנה, ואז <b>הוכח</b>: curl / דפדפן / טסט. אחר כך הרץ את הטסטים הרלוונטיים.</li>
 </ol>
-<pre><code>grep -rn "איסוף עדויות" client/src          <span class="c"># כל המופעים של טקסט</span>
-grep -rn "MIN_PASSWORD" server/app client/src
-cd server &amp;&amp; python -m pytest -m unit -q       <span class="c"># מהיר</span>
-cd client &amp;&amp; npm run lint &amp;&amp; npm test</code></pre></div>
+<pre><code>git grep -n "איסוף עדויות" -- client/src  <span class="c"># כל המופעים של טקסט</span>
+git grep -n "MIN_PASSWORD" -- server/app client/src
+cd server; python -m pytest -m unit -q       <span class="c"># מהיר</span>
+cd ..\client; npm run lint; npm test         <span class="c"># מתוך server, חוזרים למעלה</span></code></pre></div>
 
+<details class="recipe-index" open><summary>כל 25 המתכונים במבט אחד</summary><div class="ri-grid"><div class="ri-col"><span class="tag easy">קל</span><a href="#r1" data-reveal="r1"><span class="ri-n">1</span> <span dir="auto">לשנות טקסט/תווית בממשק (למשל שם הסטטוס "איסוף עדויות")</span></a><a href="#r2" data-reveal="r2"><span class="ri-n">2</span> <span dir="auto">לשנות כלל ולידציה: כותרת תביעה מינימום 5 תווים (במקום 3)</span></a><a href="#r3" data-reveal="r3"><span class="ri-n">3</span> <span dir="auto">אורך סיסמה מינימלי 10 (במקום 8)</span></a><a href="#r4" data-reveal="r4"><span class="ri-n">4</span> <span dir="auto">ולידציה חדשה: תגובה חייבת להכיל לפחות 2 תווים</span></a><a href="#r5" data-reveal="r5"><span class="ri-n">5</span> <span dir="auto">מקסימום סעיפי אישום 3 (במקום 5)</span></a><a href="#r6" data-reveal="r6"><span class="ri-n">6</span> <span dir="auto">לשנות ברירת מחדל: כמה תיקים נטענים בכל עמוד בפיד</span></a><a href="#r7" data-reveal="r7"><span class="ri-n">7</span> <span dir="auto">להוסיף שורת log (למשל כשמוגשת תביעה)</span></a><a href="#r13" data-reveal="r13"><span class="ri-n">13</span> <span dir="auto">לשנות את התנהגות הבוטים (משקולות like/comment/file_case)</span></a><a href="#r15" data-reveal="r15"><span class="ri-n">15</span> <span dir="auto">להוסיף מילה לסינון התוכן / לשנות סף</span></a><a href="#r16" data-reveal="r16"><span class="ri-n">16</span> <span dir="auto">לשנות את הצבע הראשי של האתר</span></a><a href="#r17" data-reveal="r17"><span class="ri-n">17</span> <span dir="auto">לשנות את סדר המיון של הפיד (למשל הישנים קודם, או הכי אהובים)</span></a><a href="#r18" data-reveal="r18"><span class="ri-n">18</span> <span dir="auto">לשנות הודעת שגיאה (או להוסיף שגיאה חדשה)</span></a><a href="#r20" data-reveal="r20"><span class="ri-n">20</span> <span dir="auto">לשנות את תדירות ה־worker (TICK_SECONDS)</span></a><a href="#r21" data-reveal="r21"><span class="ri-n">21</span> <span dir="auto">להציג בכרטיס בפיד מידע שכבר קיים (למשל פסק הדין)</span></a><a href="#r22" data-reveal="r22"><span class="ri-n">22</span> <span dir="auto">לשנות את מגבלת גודל ההעלאה (5MB)</span></a><a href="#r23" data-reveal="r23"><span class="ri-n">23</span> <span dir="auto">לשנות את הטקסט של התראה (למשל לייק)</span></a><a href="#r25" data-reveal="r25"><span class="ri-n">25</span> <span dir="auto">לשנות את שם האתר / הכותרת / הסלוגן</span></a></div><div class="ri-col"><span class="tag med">בינוני</span><a href="#r8" data-reveal="r8"><span class="ri-n">8</span> <span dir="auto">להוסיף משתנה סביבה (למשל CASE_TITLE_MIN_LENGTH)</span></a><a href="#r9" data-reveal="r9"><span class="ri-n">9</span> <span dir="auto">לשנות ברירת מחדל של config (למשל PHASE_MINUTES או BOT_COOLDOWN_MINUTES)</span></a><a href="#r10" data-reveal="r10"><span class="ri-n">10</span> <span dir="auto">להוסיף endpoint חדש: GET /api/cases/stats (ספירה לפי סטטוס)</span></a><a href="#r12" data-reveal="r12"><span class="ri-n">12</span> <span dir="auto">לשנות גודל חבר המושבעים ל־5</span></a><a href="#r14" data-reveal="r14"><span class="ri-n">14</span> <span dir="auto">להוסיף דף + נתיב חדש בצד לקוח (למשל /rules "תקנון")</span></a><a href="#r19" data-reveal="r19"><span class="ri-n">19</span> <span dir="auto">הרשאה: לאפשר גם לאדמין למשוך תביעה (או להסתיר כפתור לפי תפקיד)</span></a><a href="#r24" data-reveal="r24"><span class="ri-n">24</span> <span dir="auto">לשנות פורט (web / API / vite)</span></a></div><div class="ri-col"><span class="tag hard">מתקדם</span><a href="#r11" data-reveal="r11"><span class="ri-n">11</span> <span dir="auto">להוסיף שדה לתביעה מקצה לקצה (למשל location — "מקום האירוע")</span></a></div></div></details>
 <div class="drill"><button class="btn primary" type="button" id="drillRecipe">תרגיל אקראי</button><span class="hint" style="margin:0">פותח מתכון אקראי, כמו בוחן שמבקש שינוי. נסו לפתור לפני שקוראים.</span></div>
 <!-- R1 -->
 <details class="recipe" id="r1"><summary><span class="tag easy">קל</span> 1. לשנות טקסט/תווית בממשק (למשל שם הסטטוס "איסוף עדויות")</summary><div class="in">
@@ -1283,7 +1309,7 @@ cd client &amp;&amp; npm run lint &amp;&amp; npm test</code></pre></div>
 <span class="add">+  witness_phase: "שלב העדים",</span></code></pre>
 <p>החלף בכל שלושת המקומות (או רק במקום שהבוחן ביקש — ותגיד שיש עוד שניים).</p>
 <span class="rlabel">אימות</span><p><code>npm run dev</code> → <code>http://localhost:5174</code> → ה־chip בכרטיס תיק, ציר הזמן בדף תיק, ולשונית בפיד. Vite עושה HMR — אין צורך לרענן.</p>
-<span class="rlabel">מה יכול להישבר</span><p>טסט שמחפש את הטקסט הישן (<code>grep -rn "איסוף עדויות" client/src</code> כדי לוודא). <b>לא</b> לשנות את המפתח <code>witness_phase</code> — זה ערך ENUM ב־DB ובשרת.</p>
+<span class="rlabel">מה יכול להישבר</span><p>טסט שמחפש את הטקסט הישן (<code>git grep -n "איסוף עדויות" -- client/src</code> כדי לוודא). <b>לא</b> לשנות את המפתח <code>witness_phase</code> — זה ערך ENUM ב־DB ובשרת.</p>
 </div></details>
 
 <!-- R2 -->
@@ -1320,7 +1346,7 @@ curl -s -b /tmp/c -H 'Content-Type: application/json' \
 <span class="add">+        return fail("invalid", "התגובה קצרה מדי.")</span></code></pre>
 <span class="rlabel">למה ב־route ולא ב־service?</span><p>זו ולידציה של צורת הבקשה מהמשתמש. אם זה היה ב־<code>comments_service.create_comment</code> זה היה חל גם על בוטים (מושבעים/שופט) — ו־<code>speak_as_juror</code> מתייחס לכל תוצאה שאינה ok כאל כישלון → תיק תקוע.</p>
 <span class="rlabel">אימות</span><p>בדף תיק, שלח "א" → הודעת שגיאה מעל ה־composer; או curl ל־<code>POST /api/cases/1/comments</code> עם <code>{"body":"א"}</code> → 400.</p>
-<span class="rlabel">מה יכול להישבר</span><p>טסטים ב־<code>tests/integration/test_social_api.py</code> שמפרסמים תגובה של תו אחד (בדוק עם <code>grep -n '"body"' tests/integration/test_social_api.py</code>).</p>
+<span class="rlabel">מה יכול להישבר</span><p>טסטים ב־<code>tests/integration/test_social_api.py</code> שמפרסמים תגובה של תו אחד (בדוק עם <code>git grep -n '"body"' -- server/tests/integration/test_social_api.py</code>).</p>
 </div></details>
 
 <!-- R5 -->
@@ -1334,7 +1360,7 @@ curl -s -b /tmp/c -H 'Content-Type: application/json' \
 <span class="del">-            &lt;TextField {...params} label="סעיפי האישום" helperText="עד חמישה סעיפים" /&gt;</span>
 <span class="add">+            &lt;TextField {...params} label="סעיפי האישום" helperText="עד שלושה סעיפים" /&gt;</span></code></pre>
 <span class="rlabel">אימות</span><p>הגש תביעה עם 5 סעיפים ב־curl → בתשובה <code>charges</code> יש רק 3. בטופס — לא ניתן לבחור יותר מ־3.</p>
-<span class="rlabel">מה יכול להישבר</span><p>טסט שבודק 5 סעיפים (<code>grep -rn "MAX_CHARGES\|charges" server/tests | head</code>). תביעות בוטים: <code>LAWSUIT_SCHEMA</code> כבר מגביל 1–3.</p>
+<span class="rlabel">מה יכול להישבר</span><p>טסט שבודק 5 סעיפים (<code>git grep -n -e MAX_CHARGES -e charges -- server/tests</code>). תביעות בוטים: <code>LAWSUIT_SCHEMA</code> כבר מגביל 1–3.</p>
 </div></details>
 
 <!-- R6 -->
@@ -1380,7 +1406,7 @@ curl -s -b /tmp/c -H 'Content-Type: application/json' \
 <span class="rlabel">מה יכול להישבר</span>
 <ul><li><code>Settings</code> הוא <b>frozen dataclass בלי defaults</b> — אם מוסיפים שדה למחלקה ושוכחים אותו ב־<code>get_settings()</code> → <code>TypeError</code> בכל קריאה ל־<code>get_settings()</code> = כל השרת נופל. אם עושים להפך → <code>TypeError: unexpected keyword</code>.</li>
 <li>שוכחים את compose → בדוקר תמיד 3, בלי שום שגיאה.</li>
-<li>מקומות שבונים <code>Settings(...)</code> ידנית בטסטים (בדוק: <code>grep -rn "Settings(" server/tests</code>).</li>
+<li>מקומות שבונים <code>Settings(...)</code> ידנית בטסטים (בדוק: <code>git grep -n "Settings(" -- server/tests</code>).</li>
 <li>צריך restart אחרי שינוי ב־<code>.env</code>: <code>get_settings()</code> קורא את <code>os.environ</code> בכל קריאה, אבל <code>load_dotenv</code> רץ פעם אחת ב־import של <code>config.py</code> (שורה 23) ולא דורס ערך קיים.</li></ul>
 </div></details>
 
@@ -1448,7 +1474,7 @@ curl -s -b /tmp/c -H 'Content-Type: application/json' \
          witness_deadline_offset(),</code></pre>
 <span class="rlabel">להחיל על ה־DB המקומי</span>
 <pre><code><span class="c"># אפשרות א — מוחק את כל הנתונים:</span>
-docker compose down -v &amp;&amp; docker compose up --build
+docker compose down -v; docker compose up --build
 <span class="c"># אפשרות ב — שומר נתונים:</span>
 make db-shell
 mysql&gt; ALTER TABLE cases ADD COLUMN location VARCHAR(120) NULL;</code></pre>
@@ -1515,7 +1541,7 @@ mysql&gt; ALTER TABLE cases ADD COLUMN location VARCHAR(120) NULL;</code></pre>
 <pre><code> SEVERE_TERMS: dict[str, float] = {
      "מטומטם": 0.75,
 <span class="add">+    "טמבל": 0.75,</span></code></pre>
-<span class="rlabel">אימות</span><pre><code>cd server &amp;&amp; python -c "from app.brain import sentiment; print(sentiment.scan('אתה טמבל'))"
+<span class="rlabel">אימות</span><pre><code>cd server; python -c "from app.brain import sentiment; print(sentiment.scan('אתה טמבל'))"
 <span class="c"># Scan(label='toxic', ...) → תגובה כזו תחזיר 422 "התגובה נחסמה..."</span></code></pre>
 <span class="rlabel">מה יכול להישבר</span><p>התאמה לפי גבולות מילה; ציונים מצטברים עד 1.0. ≥0.70 → <code>rejected</code> (422), ≥0.35 → <code>flagged</code> (נשאר ציבורי). דברי בית המשפט (מושבעים/שופט) לא נסרקים (<code>screen=False</code>). הרץ <code>pytest -m unit</code> — יש טסטים על המילון.</p>
 </div></details>
@@ -1669,6 +1695,17 @@ mysql&gt; ALTER TABLE cases ADD COLUMN location VARCHAR(120) NULL;</code></pre>
 <div class="card"><h4>Tests</h4><p>pytest מול MySQL אמיתי (DB זמני <code>lolsuit_test</code> מ־init.sql), markers unit/integration/worker, gate 85% עם <code>--cov</code>. vitest ללקוח על hooks וקומפוננטות עם לוגיקה.</p></div>
 </div>
 
+<h3>שאלות מעשיות — בזמן שמשנים קוד</h3>
+<details class="qa"><summary>הבוחן אומר: "תשנה את מינימום התווים בכותרת ל־5". מה הצעד הראשון שלך?</summary><div><p>לא נוגעים בקוד עדיין. קודם אומרים <b>איזו שכבה</b>: ולידציה של מה שהמשתמש שולח, אז route, <code>server/app/api/cases.py</code>. אחר כך <b>מחפשים את הערך</b> כדי לגלות אם הוא כתוב גם בלקוח (כאן לא, אבל אפשר להוסיף <code>minLength</code> ב־<code>NewCase.tsx</code> בשביל חוויית משתמש). משנים, מוכיחים עם curl או בטופס (400 עם ההודעה), מריצים את הטסט (<code>test_cases_api.py</code>), ומראים <code>git diff</code>.</p></div></details>
+<details class="qa"><summary>ולידציה חדשה: בתוך ה־route או בתוך ה־service?</summary><div><p><b>route</b> כשזה כלל על צורת הבקשה של משתמש (אורך, שדה חובה). <b>service</b> כשזה כלל עסקי שצריך לחול על כולם, כולל ה־worker והבוטים. דוגמה: מינימום תווים בתגובה שייך ל־route, כי ב־service הוא היה חל גם על נאומי המושבעים, ותוצאה שאינה <code>ok</code> הייתה תוקעת את המשפט.</p></div></details>
+<details class="qa"><summary>שינית קוד בשרת ובדוקר כלום לא השתנה. למה?</summary><div><p>הקוד <b>אפוי בתוך ה־image</b> ואין volume של קוד. צריך <code>docker compose up --build -d server</code>, ול־worker בנפרד אם הקוד משמש גם אותו. ואם השינוי הוא ערך ב־<code>.env</code>, צריך לבדוק שהמשתנה בכלל מועבר ב־<code>environment:</code> של השירות.</p></div></details>
+<details class="qa"><summary>מה ההבדל בין <code>ProtectedRoute</code> בלקוח ל־<code>@require_auth</code> בשרת? צריך את שניהם?</summary><div><p><code>ProtectedRoute</code> הוא <b>חוויית משתמש</b>: במקום דף שבור, מוצגת הודעה עם כפתור כניסה. <code>@require_auth</code> הוא <b>האבטחה</b>: כל אחד יכול לשלוח בקשה ישירות עם curl, בלי הלקוח. לכן כל endpoint מוגן חייב את ה־decorator, והלקוח רק משקף אותו.</p></div></details>
+<details class="qa"><summary>איך הודעת שגיאה מהשרת מגיעה למסך?</summary><div><p>route קורא ל־<code>fail("invalid", "טקסט")</code>, ו־<code>errors.py</code> בונה <code>{"error", "code"}</code> עם סטטוס 400. <code>request()</code> ב־<code>api.ts</code> רואה <code>!response.ok</code> וזורק <code>ApiError(error, status, code)</code>. הדף תופס את השגיאה ב־<code>catch</code> ומציג <code>err.message</code>. לכן את הטקסט משנים <b>רק בשרת</b>.</p></div></details>
+<details class="qa"><summary>הוספת עמודה לתביעה: באילו מקומות נוגעים?</summary><div><p>יש שבעה: <code>init.sql</code> (העמודה), <code>_CASE_COLUMNS</code> ו־<code>shape_case</code> (לקרוא ולהחזיר), <code>create_case</code> (ה־INSERT), ה־route (לקבל מהבקשה), <code>types.ts</code> (הטיפוס) והטופס או הכרטיס בלקוח. ובנוסף ה־DB המקומי: <code>down -v</code> או <code>ALTER TABLE</code>, אחרת מקבלים 500 "Unknown column". מתכון 11.</p></div></details>
+<details class="qa"><summary>שינית את <code>PHASE_MINUTES</code> ל־2, ותיק שכבר קיים עדיין "תקוע". למה?</summary><div><p>ה־deadline של השלב <b>הנוכחי</b> כבר כתוב בשורה (<code>phase_deadline_at</code>). רק כשהשלב הזה נגמר, ה־worker מחשב את ה־deadline הבא, מ־<code>filed_at</code> ועם הערך החדש. לכן תיק חדש ירוץ מהר מיד, ותיק קיים רק אחרי שהשלב שלו ייגמר. בדוקר צריך גם לשנות את הערך ב־compose או ב־<code>.env</code>, בשני השירותים.</p></div></details>
+<details class="qa"><summary>אפשרת לאדמין למשוך תביעה ועכשיו טסט נכשל. מה אומרים לבוחן?</summary><div><p>שהטסט (<code>test_nobody_else_can_withdraw_it_not_even_an_admin</code>) מתעד <b>החלטת עיצוב</b>: מודרציה מסתירה ולא מוחקת, כדי לא להשמיד ראיות. אם הדרישה השתנתה, מעדכנים את הטסט כך שיבדוק את ההתנהגות החדשה, ולא מוחקים אותו, ומסבירים את המחיר: אדמין יכול עכשיו למחוק תוכן לצמיתות.</p></div></details>
+<details class="qa"><summary>מה ההבדל בין לשנות ברירת מחדל ב־<code>config.py</code> לבין לשים ערך ב־<code>.env</code>?</summary><div><p>ב־<code>config.py</code> נמצאת <b>ברירת המחדל</b>, שחלה רק כשהמשתנה לא מוגדר בכלל. <code>.env</code> <b>דורס</b> אותה. בהרצה native הקובץ נטען אוטומטית. בדוקר compose קובע מה הקונטיינר רואה: אם כתוב שם <code>${PHASE_MINUTES:-1440}</code>, אז הקונטיינר תמיד מקבל ערך, וברירת המחדל בקוד אף פעם לא חלה.</p></div></details>
+
 <h3>ארכיטקטורה</h3>
 <details class="qa"><summary>למה ה־worker הוא תהליך נפרד ולא thread בתוך Flask?</summary><div><p>gunicorn לא יודע להריץ לולאה ארוכה, ו־thread בתוך web worker היה רץ פעם אחת <b>לכל</b> gunicorn worker process — כל משפט היה מתקדם פעמיים או שלוש. כתהליך נפרד יש לו container משלו, healthcheck משלו (<code>worker_state.last_tick_at</code>), ואפשר לעשות לו scale בבטחה.</p></div></details>
 <details class="qa"><summary>איך שני workers במקביל לא שוברים משפט?</summary><div><p>שתי שכבות נפרדות. <b>יעילות</b>: <code>GET_LOCK('lolsuit:scheduler', 0)</code> — רק אחד עובד ב־tick (timeout 0, לא מחכים). <b>נכונות</b>: כל claim הוא <code>SELECT … FOR UPDATE SKIP LOCKED</code>, כל מעבר הוא <code>UPDATE … WHERE status='expected'</code> עם בדיקת rowcount, ו־UNIQUE keys (<code>comments.dedupe_key</code>, <code>jury_panels.case_id</code> PK) מונעים כפילות פיזית. גם בלי ה־lock — התוצאה זהה.</p></div></details>
@@ -1747,6 +1784,21 @@ mysql&gt; ALTER TABLE cases ADD COLUMN location VARCHAR(120) NULL;</code></pre>
 <div class="topic-head"><div class="n">16</div><h2>דף הלילה האחרון — cheat sheet</h2><label class="done-toggle"><input type="checkbox" data-done="t16"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
 <div class="cheat">
+<div class="card"><h4>8 השינויים הנפוצים ואיפה הם</h4><ul style="font-size:14px">
+<li>תווית/טקסט: <code>types.ts</code> (<code>*_LABELS</code>) או הדף ב־<code>pages/</code>, ולחפש כפילויות.</li>
+<li>ולידציה: ה־route ב־<code>server/app/api/</code>, ואם יש, גם ה־<code>inputProps</code> בטופס.</li>
+<li>מגבלה (מקסימום/מינימום): קבוע UPPER_CASE ב־service, ובלקוח עוד עותק.</li>
+<li>צבע/פונט: <code>theme.ts</code>. הסרגל העליון כתוב שם ישירות.</li>
+<li>נתיב/דף: <code>App.tsx</code> + <code>pages/</code> + <code>NAV_LINKS</code>.</li>
+<li>הרשאה: <code>@require_auth/admin</code> בשרת, <code>user?.is_admin</code> בלקוח.</li>
+<li>זמנים: <code>config.py</code> <b>וגם</b> <code>docker-compose.yml</code>.</li>
+<li>שדה חדש: מתכון 11 (7 מקומות + איפוס DB).</li></ul></div>
+<div class="card"><h4>כלי האתר במבחן</h4><ul style="font-size:14px">
+<li><kbd>Ctrl</kbd>+<kbd>K</kbd>: חיפוש בכל המדריך ובשמות בקוד.</li>
+<li>לחיצה על נתיב ↗ פותחת את הקוד. <b>Alt</b>+לחיצה פותחת ב־VS Code.</li>
+<li>בחלונית הקוד: לחיצה על שם = איפה עוד משתמשים בו.</li>
+<li>"חיפוש בכל הקוד" = grep, וטסטים מסומנים.</li>
+<li>האתר עובד גם בלי אינטרנט (בסרגל הצד כתוב ✓).</li></ul></div>
 <div class="card"><h4>פורטים</h4><div class="tablewrap"><table><tbody>
 <tr><td>web (nginx)</td><td><code>8080</code> ציבורי</td></tr>
 <tr><td>API</td><td><code>5002</code> (loopback)</td></tr>
@@ -1758,15 +1810,21 @@ docker compose ps            # make ps
 docker compose logs -f server
 docker compose down -v       # make clean (wipe)
 make seed · make db-shell · make shell</code></pre></div>
-<div class="card"><h4>Native</h4><pre><code>cp .env.example .env
+<div class="card"><h4>Native (Windows)</h4><pre><code>copy .env.example .env
 docker compose up -d db
-cd server &amp;&amp; source .venv/bin/activate
-python -m app.seed &amp;&amp; python run.py
-python run_worker.py
-cd client &amp;&amp; npm run dev</code></pre></div>
-<div class="card"><h4>טסטים</h4><pre><code>cd server &amp;&amp; python -m pytest --cov
-python -m pytest -m unit
-cd client &amp;&amp; npm test &amp;&amp; npm run lint
+cd server
+.venv\Scripts\activate
+python -m app.seed
+python run.py          # טרמינל 2
+python run_worker.py   # טרמינל 3
+cd client
+npm run dev            # טרמינל 4 → :5174</code></pre></div>
+<div class="card"><h4>טסטים</h4><pre><code>cd server
+python -m pytest -m unit   # מהיר, בלי DB
+python -m pytest --cov     # הכול, צריך DB
+cd ..\client
+npm test
+npm run lint
 curl -s localhost:5002/api/health</code></pre></div>
 <div class="card"><h4>קבצים שחייבים לזכור</h4><ul style="font-size:14px">
 <li><code>server/app/__init__.py</code> — factory</li>
@@ -1933,10 +1991,13 @@ docker compose -f prod/docker-compose.yml logs -f server</code></pre>
     <p>מה שכתוב כאן על השחרור והפריסה נלקח מהתיעוד ומהקוד של <code>release.sh</code> ו-<code>deploy.sh</code> (כולל <code>--rollback</code>). לא הרצתי שחרור או פריסה אמיתיים. עזרה מלאה: <code>./deploy.sh --help</code> ו-<code>./prod/release.sh --help</code>.</p>
 
 <h3>8. כשמשהו לא עובד</h3>
+    <p>רשימה מלאה יותר, עם סיבה ופתרון לכל תקלה: <a href="#t19" data-go="t19">נושא 19</a>.</p>
     <div class="tablewrap"><table>
       <tr><th>תסמין</th><th>פתרון</th></tr>
       <tr><td>failed to connect to the docker API</td><td>Docker Desktop לא רץ. להפעיל ולחכות לירוק.</td></tr>
       <tr><td>'node' / 'py' is not recognized</td><td>לסגור ולפתוח טרמינל מחדש (PATH).</td></tr>
+      <tr><td>The token '&amp;&amp;' is not a valid statement separator</td><td>זה Windows PowerShell 5.1, שאין בו <code>&amp;&amp;</code>. כותבים כל פקודה בשורה משלה, או מחברים עם <code>;</code></td></tr>
+      <tr><td>'grep' is not recognized</td><td>ב־Windows אין grep. משתמשים ב־<code>git grep -n "טקסט"</code>, ב־<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> ב־VS Code, או ב"חיפוש בכל הקוד" באתר</td></tr>
       <tr><td>activate נחסם (execution policy)</td><td>Set-ExecutionPolicy -Scope CurrentUser RemoteSigned</td></tr>
       <tr><td>שרת: Access denied / לא מתחבר ל-DB</td><td>חסר <code>.env</code>. להריץ: <code>copy .env.example .env</code></td></tr>
       <tr><td>port 5002 / 5174 already in use</td><td>תהליך ישן רץ. ראו הפקודה למטה.</td></tr>

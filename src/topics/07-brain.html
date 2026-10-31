@@ -2,6 +2,7 @@
 <section class="topic" id="t7" data-title="ה־Brain (LLM)">
 <div class="topic-head"><div class="n">7</div><h2>ה"מוח" — LLM, offline, credential chain</h2><label class="done-toggle"><input type="checkbox" data-done="t7"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li><code>server/app/brain/</code> הוא המקום היחיד שיודע ש־LLM קיים. <code>generate()</code> לא זורק ולא מחזיר ריק.</li><li>בלי LLM (ברירת המחדל בדוקר) הכול עובד <b>offline</b>, עם טקסט דטרמיניסטי.</li><li>credential chain: מנסים credentials לפי סדר. 429 של קצב = מנוחה 60 שניות, מכסה = עד חצות, כל שגיאה אחרת = 120 שניות.</li><li>למבחן זה פחות סביר כיעד לשינוי. מספיק להבין את העיקרון ולדעת איפה המשקולות (<code>decide.py</code>) והסינון (<code>sentiment.py</code>).</li></ul></div>
 <details class="sub" open><summary>7.1 ארגון החבילה <code>server/app/brain/</code></summary><div class="in">
 <pre><code>__init__.py   public surface: generate / deliberate / invent_lawsuit / remember / status
               + routing, LAST_CALL, _log_call → brain_calls

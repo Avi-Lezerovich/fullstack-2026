@@ -2,6 +2,7 @@
 <section class="topic" id="t2" data-title="מפת ה־repo">
 <div class="topic-head"><div class="n">2</div><h2>מפת ה־repo — סיור תיקייה־תיקייה</h2><label class="done-toggle"><input type="checkbox" data-done="t2"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li><code>client/src</code>: <code>pages/</code> (דף לכל נתיב), <code>components/</code>, <code>api.ts</code> (כל הקריאות לשרת), <code>types.ts</code> (טיפוסים ותוויות בעברית).</li><li><code>server/app</code>: <code>api/</code> (routes דקים) → <code>services/</code> (כל ה־SQL והכללים) → <code>db.py</code>.</li><li><code>server/worker</code> = לולאת ה־tick. <code>database/init.sql</code> = כל הסכמה. <code>docker-compose.yml</code> = 5 שירותים.</li><li>הטבלה למטה היא גרסה מקוצרת של נושא 0. במבחן עדיף נושא 0 או <kbd>Ctrl</kbd>+<kbd>K</kbd>.</li></ul></div>
 <pre><code>.
 ├── client/                  React + TS (Vite). Dockerfile: node builds → nginx serves
 │   ├── nginx.conf.template  SPA fallback + /api proxy + SSE + upload size

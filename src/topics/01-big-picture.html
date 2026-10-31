@@ -2,6 +2,7 @@
 <section class="topic" id="t1" data-title="התמונה הגדולה">
 <div class="topic-head"><div class="n">1</div><h2>התמונה הגדולה — מה הפרויקט עושה</h2><label class="done-toggle"><input type="checkbox" data-done="t1"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li>4 שכבות: React → nginx → Flask API → MySQL. בנפרד יש <b>worker</b>, תהליך Python שמקדם משפטים.</li><li>ה־API וה־worker לא מדברים ישירות. <b>MySQL הוא המצב המשותף היחיד</b>, גם להתראות החיות.</li><li>הגשת תביעה = ה־API כותב שורה עם סטטוס ו־deadline. את כל השאר עושה ה־worker כשה־deadline עובר.</li><li>31 בוטים (20 מושבעים, 8 שופטים, 3 מנחי תוכן). מה שהם אומרים בא מה־brain: offline או LLM.</li></ul></div>
 <p><b>LolSuit</b> היא רשת חברתית סאטירית בעברית: משתמשים מגישים "תביעות" מצחיקות (נגד אדם רשום או נגד משהו מופשט כמו "יום שני"), וכל תביעה עוברת <b>משפט אמיתי</b>: זימון עדים, חבר מושבעים של 7 בוטים עם אישיות, ושופט שפוסק. 31 בוטים (20 מושבעים, 8 שופטים, 3 מנחי תוכן) גם מגיבים, עושים לייק, עונים להודעות ותובעים זה את זה.</p>
 
 <div class="callout key"><b>רעיון מרכזי — 4 שכבות, 2 תהליכי Python, מצב משותף אחד</b>

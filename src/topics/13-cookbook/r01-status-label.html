@@ -9,5 +9,5 @@
 <span class="add">+  witness_phase: "שלב העדים",</span></code></pre>
 <p>החלף בכל שלושת המקומות (או רק במקום שהבוחן ביקש — ותגיד שיש עוד שניים).</p>
 <span class="rlabel">אימות</span><p><code>npm run dev</code> → <code>http://localhost:5174</code> → ה־chip בכרטיס תיק, ציר הזמן בדף תיק, ולשונית בפיד. Vite עושה HMR — אין צורך לרענן.</p>
-<span class="rlabel">מה יכול להישבר</span><p>טסט שמחפש את הטקסט הישן (<code>grep -rn "איסוף עדויות" client/src</code> כדי לוודא). <b>לא</b> לשנות את המפתח <code>witness_phase</code> — זה ערך ENUM ב־DB ובשרת.</p>
+<span class="rlabel">מה יכול להישבר</span><p>טסט שמחפש את הטקסט הישן (<code>git grep -n "איסוף עדויות" -- client/src</code> כדי לוודא). <b>לא</b> לשנות את המפתח <code>witness_phase</code> — זה ערך ENUM ב־DB ובשרת.</p>
 </div></details>

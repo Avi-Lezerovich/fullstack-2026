@@ -2,6 +2,7 @@
 <section class="topic" id="t9" data-title="Docker / infra">
 <div class="topic-head"><div class="n">9</div><h2>Docker / infra — שירותים, פורטים, volumes</h2><label class="done-toggle"><input type="checkbox" data-done="t9"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
 <div class="topic-body">
+<div class="callout tldr"><b>בקצרה</b><ul><li>5 שירותים: <code>db</code>, <code>seed</code>, <code>server</code>, <code>worker</code>, <code>web</code>. server, worker ו־seed בנויים מאותו image.</li><li>רק 8080 פתוח החוצה. 5002 (API) ו־3307 (MySQL) פתוחים רק ל־localhost.</li><li>הקוד <b>אפוי ב־image</b>: שינוי קוד מחייב <code>--build</code>. <code>init.sql</code> רץ רק על volume ריק.</li><li>קונטיינר רואה רק משתנים שרשומים ב־<code>environment:</code> שלו ב־compose.</li></ul></div>
 <figure>
 <div class="fig-scroll"><svg class="dg" viewBox="0 0 940 420" role="img" aria-label="טופולוגיית Docker: חמישה שירותים ברשת ברירת המחדל של compose, פורט 8080 ציבורי, 5002 ו־3307 על loopback, ו־volumes db-data ו־uploads">
   <rect class="zone" x="10" y="10" width="920" height="400" rx="14"/><text x="24" y="32" class="sm">host (your laptop)</text>
@@ -47,24 +48,27 @@
 <li><b>env allowlist</b>: קונטיינר רואה רק משתנים שרשומים ב־<code>environment:</code> של השירות שלו. משתנה ב־<code>.env</code> שלא רשום — לא קיים בקונטיינר.</li>
 </ul>
 </div></details>
-<details class="sub" open><summary>9.2 איך מריצים ומוודאים מקומית</summary><div class="in">
 <pre><code><span class="c"># הכל בדוקר (build קר לוקח כמה דקות — npm ci + vite)</span>
 docker compose up --build            <span class="c"># או: make up  (detached)</span>
-open http://localhost:8080
+start http://localhost:8080          <span class="c"># פותח בדפדפן (Windows)</span>
 docker compose ps                    <span class="c"># או make ps — health של כל שירות</span>
 curl -s localhost:5002/api/health    <span class="c"># ישירות לשרת</span>
 curl -s localhost:8080/api/health    <span class="c"># דרך nginx</span>
 docker compose logs -f server        <span class="c"># make logs S=server</span>
 docker compose down                  <span class="c"># עוצר, שומר volumes</span>
 docker compose down -v               <span class="c"># מוחק DB + uploads (make clean)</span></code></pre>
-<pre><code><span class="c"># DB בדוקר, קוד native (לולאת עריכה מהירה)</span>
-cp .env.example .env                  <span class="c"># חובה! ברירות המחדל בקוד (root/lolsuit-dev) לא עובדות מול ה־DB של compose</span>
+<pre><code><span class="c"># DB בדוקר, קוד native (לולאת עריכה מהירה) — Windows / PowerShell</span>
+copy .env.example .env                <span class="c"># חובה! ברירות המחדל בקוד (root/lolsuit-dev) לא עובדות מול ה־DB של compose</span>
 docker compose up -d db               <span class="c"># MySQL על 127.0.0.1:3307</span>
-cd server &amp;&amp; source .venv/bin/activate
+cd server
+.venv\Scripts\activate
 python -m app.seed                    <span class="c"># פעם ראשונה</span>
 python run.py                         <span class="c"># API על 5002</span>
 python run_worker.py                  <span class="c"># טרמינל נוסף, אופציונלי</span>
-cd client &amp;&amp; npm install &amp;&amp; npm run dev   <span class="c"># http://localhost:5174, proxy /api → 5002</span></code></pre>
+cd ..\client
+npm install                           <span class="c"># פעם ראשונה</span>
+npm run dev                           <span class="c"># http://localhost:5174, proxy /api → 5002</span></code></pre>
+<p>ב־Mac/Linux אותו דבר עם <code>cp</code>, <code>source .venv/bin/activate</code> ו־<code>open</code>. ההוראות המלאות ל־Windows בנושא 17.</p>
 <div class="callout exam"><b>טריק להדגמה</b> <code>PHASE_MINUTES=2</code> ב־<code>.env</code> → כל המשפט (7 "ימים") לוקח 14 דקות. compose מעביר אותו גם ל־server וגם ל־worker.</div>
 <p><b>Production</b> (<code>prod/</code>): EC2 אחד (nginx + API + worker) מול Amazon RDS; images נמשכים מ־Docker Hub (<code>release.sh</code> בונה <code>linux/amd64</code> עם buildx; <code>deploy.sh</code> pull → recreate → בודק <code>/api/health</code> → rollback אוטומטי). <code>${VAR:?}</code> לסודות במקום ברירות מחדל.</p>
 </div></details>
