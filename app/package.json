@@ -1,0 +1,28 @@
+{
+  "name": "lolsuit-guide",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "description": "LolSuit exam guide: a study window and an exam-tools window, published to GitHub Pages from the branch root.",
+  "scripts": {
+    "data": "node scripts/build-data.mjs",
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && node scripts/clean-root.mjs && vite build && node scripts/write-sw.mjs",
+    "preview": "vite preview --outDir .. --port 4173 --strictPort"
+  },
+  "dependencies": {
+    "highlight.js": "11.10.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-router-dom": "6.26.2"
+  },
+  "devDependencies": {
+    "@types/node": "20.16.11",
+    "@types/react": "18.3.11",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "4.3.2",
+    "typescript": "5.6.3",
+    "vite": "5.4.10"
+  }
+}

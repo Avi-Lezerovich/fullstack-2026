@@ -10,6 +10,6 @@
   "background_color": "#FAF6E9",
   "theme_color": "#3C3489",
   "icons": [
-    { "src": "assets/img/lolsuit-seal.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    { "src": "img/lolsuit-seal.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]
 }
