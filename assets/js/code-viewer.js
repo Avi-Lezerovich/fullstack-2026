@@ -89,15 +89,8 @@
         '<button class="btn cp-copy" type="button" title="מדביקים ב־Ctrl+P ב־VS Code וקופצים ישר לשורה">העתק נתיב:שורה</button>' +
         '<button class="btn primary cp-vscode" type="button" title="פותח את הקובץ, בשורה הזו, ב־VS Code במחשב שלך">פתח ב־VS Code</button>' +
         '<a class="btn cp-gh" target="_blank" rel="noopener">GitHub ↗</a>' +
-        '<button class="btn cp-cfg" type="button" title="איפה הפרויקט נמצא במחשב שלך" aria-label="הגדרת תיקיית הפרויקט">⚙</button>' +
         '<span class="cp-find"><input class="search" type="search" placeholder="חיפוש בקובץ (Enter = הבא)" aria-label="חיפוש בקובץ"><span class="cp-find-info"></span></span>' +
       '</div>' +
-      '<form class="cp-local" hidden>' +
-        '<label for="cpRoot">תיקיית הפרויקט במחשב הזה (נשמר רק בדפדפן הזה):</label>' +
-        '<input class="search" id="cpRoot" type="text" dir="ltr" spellcheck="false" placeholder="C:\\Users\\you\\Documents\\GitHub\\fullstack-2026">' +
-        '<button class="btn primary" type="submit">שמור</button>' +
-        '<span class="cp-local-hint">אחרי השמירה, "פתח ב־VS Code" (או Alt+לחיצה על כל נתיב במדריך) פותח את הקובץ בשורה הנכונה. בפעם הראשונה הדפדפן ישאל אם לפתוח את VS Code. איך משיגים את הנתיב: ב־VS Code, לחיצה ימנית על תיקייה בסייר ואז Copy Path.</span>' +
-      '</form>' +
       '<div class="cp-code" tabindex="0"><div class="cp-empty">טוען קוד…</div></div>' +
     '</div>' +
     '<div class="cp-view" data-view="files" hidden>' +
@@ -212,33 +205,10 @@
   });
 
   /* open in the local VS Code: vscode://file/<absolute path>:<line>:<column> */
-  var ROOT_KEY = "lolsuit-local-root";
-  // The exam laptop's checkout; ⚙ overrides it per browser.
-  var DEFAULT_ROOT = "C:\\Users\\lzr\\Documents\\GitHub\\fullstack-2026";
-  var localForm = $(".cp-local", pane), rootIn = $("#cpRoot", pane);
-  function localRoot() { try { return localStorage.getItem(ROOT_KEY) || DEFAULT_ROOT; } catch (e) { return DEFAULT_ROOT; } }
-  function showLocal(on) {
-    localForm.hidden = !on;
-    if (on) { rootIn.value = localRoot(); setTimeout(function () { rootIn.focus(); }, 0); }
-  }
+  var LOCAL_ROOT = "C:/Users/lzr/Documents/GitHub/fullstack-2026"; // the exam laptop's checkout
   function openInVSCode(path, line) {
-    var root = localRoot().trim().replace(/\\/g, "/").replace(/\/+$/, "").replace(/^\/+/, "");
-    if (!root) {
-      if (pane.hidden) openPane("file");
-      showLocal(true);
-      toast("קודם מדביקים את נתיב תיקיית הפרויקט במחשב");
-      return;
-    }
-    window.location.href = "vscode://file/" + encodeURI(root + "/" + path) + (line ? ":" + line + ":1" : "");
+    window.location.href = "vscode://file/" + encodeURI(LOCAL_ROOT + "/" + path) + (line ? ":" + line + ":1" : "");
   }
-  localForm.addEventListener("submit", function (e) {
-    e.preventDefault();
-    var v = rootIn.value.trim().replace(/^"|"$/g, "");
-    try { if (v) localStorage.setItem(ROOT_KEY, v); else localStorage.removeItem(ROOT_KEY); } catch (err) { /* storage blocked */ }
-    localForm.hidden = true;
-    toast(v ? "נשמר. עכשיו אפשר לפתוח ב־VS Code" : "חזרה לתיקיית ברירת המחדל");
-  });
-  $(".cp-cfg", pane).addEventListener("click", function () { showLocal(localForm.hidden); });
   $(".cp-vscode", pane).addEventListener("click", function () {
     if (cur.path) openInVSCode(cur.path, cur.line);
   });
@@ -376,7 +346,6 @@
       // Alt+click skips the viewer and opens the file in the local VS Code
       if (e.altKey) openInVSCode(c.dataset.path, Number(c.dataset.line)); else follow(c);
     }
-    if (e.target.closest && e.target.closest("[data-local-setup]")) { e.preventDefault(); openPane("file"); showLocal(true); }
     var g = e.target.closest && e.target.closest("[data-grep]");
     if (g) { e.preventDefault(); openGrep(g.dataset.grep); }
     var r = e.target.closest && e.target.closest("[data-reveal]");
