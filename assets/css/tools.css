@@ -123,3 +123,73 @@ dialog.palette::backdrop { background: rgba(21, 18, 31, .55); }
 .exam-day ol, .exam-day ul { padding-inline-start: 20px; font-family: var(--font-ui); font-size: 15px; }
 .big-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
 .big-actions .btn { font-size: 15px; padding: 9px 16px; }
+
+/* offline status in the sidebar */
+.offline-state { font-size: 12.5px; color: var(--muted); margin: 10px 0 0; min-height: 18px; }
+.offline-state.ok { color: var(--acquit); font-weight: 600; }
+
+/* find usages bar above the code */
+.cp-usage { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 6px 10px; border-bottom: 1px solid var(--rule); font-size: 12.5px; color: var(--muted); min-height: 36px; }
+.cp-usage.on { background: var(--court-soft); color: var(--ink); }
+.cp-usage .btn { font-size: 12.5px; padding: 3px 10px; }
+.cp-uword { font-size: 13px; font-weight: 600; }
+.cp-src { cursor: text; }
+
+/* feature traces (topic 18) */
+.layer { display: inline-block; min-width: 52px; text-align: center; font-family: var(--font-ui); font-size: 11.5px; font-weight: 700; padding: 1px 8px; border-radius: 99px; margin-inline-end: 6px; vertical-align: 1px; }
+.l-client { background: var(--info-soft); color: var(--info); }
+.l-api { background: var(--court-soft); color: var(--court); }
+.l-svc { background: var(--brass-soft); color: var(--brass); }
+.l-db { background: var(--acquit-soft); color: var(--acquit); }
+.l-worker { background: var(--verdict-soft); color: var(--verdict); }
+.trace-legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+ol.trace { list-style: none; padding: 0; margin: 10px 0; counter-reset: step; }
+ol.trace > li { counter-increment: step; position: relative; padding: 8px 12px 8px 12px; padding-inline-start: 42px; margin: 0; border-inline-start: 2px solid var(--rule); margin-inline-start: 14px; font-size: 17px; line-height: 1.65; }
+ol.trace > li::before { content: counter(step); position: absolute; inset-inline-start: -14px; top: 9px; width: 26px; height: 26px; border-radius: 50%; background: var(--paper); border: 2px solid var(--brass-line); color: var(--brass); font-family: var(--font-ui); font-size: 12.5px; font-weight: 700; display: grid; place-items: center; }
+
+/* troubleshooting (topic 19) */
+.ts { border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; margin: 10px 0 18px; font-family: var(--font-ui); font-size: 14.5px; line-height: 1.55; }
+.ts-row { display: grid; grid-template-columns: 1.1fr 1fr 1.3fr; border-top: 1px solid var(--rule); }
+.ts-row:first-child { border-top: 0; }
+.ts-row > div { padding: 9px 12px; min-width: 0; }
+.ts-s { font-weight: 700; background: var(--verdict-soft); }
+.ts-c { color: var(--muted); }
+.ts-f { background: var(--acquit-soft); }
+.ts-s::before { content: "סימפטום"; } .ts-c::before { content: "סיבה"; } .ts-f::before { content: "פתרון"; }
+.ts-row > div::before { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; color: var(--muted); margin-bottom: 2px; }
+@media (max-width: 760px) { .ts-row { grid-template-columns: 1fr; } }
+
+/* practice (topic 20) */
+.practice { border: 1px solid var(--rule); border-radius: 10px; background: var(--bg); padding: 14px 16px; margin: 14px 0; font-family: var(--font-ui); }
+.pr-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.pr-controls .btn.primary { font-size: 15px; padding: 8px 18px; }
+.pr-task { margin-top: 14px; border-top: 1px dashed var(--rule); padding-top: 12px; }
+.pr-task[hidden] { display: none; }
+.pr-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pr-timer { font-family: var(--font-mono); font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--court); direction: ltr; }
+.pr-target { font-size: 13px; color: var(--muted); }
+.pr-meter { height: 6px; border-radius: 9px; background: var(--paper-2); overflow: hidden; margin: 8px 0 4px; }
+.pr-meter i { display: block; height: 100%; width: 0; background: var(--acquit); transition: width .9s linear; }
+.pr-task.over .pr-meter i { background: var(--verdict); }
+.pr-task.over .pr-timer { color: var(--verdict); }
+.pr-task.finished .pr-timer { color: var(--acquit); }
+.pr-ask { margin: 10px 0 0; font-size: 13px; color: var(--muted); font-weight: 600; letter-spacing: .04em; }
+.pr-title { margin: 2px 0 4px; font-size: 22px; }
+.pr-brief { margin: 0 0 10px; font-size: 15px; color: var(--muted); }
+.pr-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pr-actions .grow { flex: 1; }
+.pr-hint { margin-top: 12px; border: 1px solid var(--rule); border-radius: 8px; padding: 10px 14px; background: var(--paper); font-family: var(--font-body); font-size: 17px; }
+.pr-hint-title { font-family: var(--font-ui); font-size: 12.5px; font-weight: 700; letter-spacing: .06em; color: var(--brass); margin-bottom: 4px; }
+.pr-result { margin-top: 12px; padding: 10px 14px; border-radius: 8px; background: var(--acquit-soft); color: var(--ink); font-weight: 600; }
+.pr-task.over .pr-result { background: var(--brass-soft); }
+.pr-check { display: grid; gap: 4px; margin-top: 14px; padding: 10px 12px; border-radius: 8px; background: var(--paper-2); font-size: 14px; }
+.pr-check label { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
+.pr-check input { accent-color: var(--acquit); }
+.pr-history { margin-top: 16px; border-top: 1px dashed var(--rule); padding-top: 10px; }
+.pr-stats { font-size: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pr-stats .btn { font-size: 12px; padding: 2px 9px; }
+.pr-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.pr-chip { font-family: var(--font-ui); font-size: 12.5px; border: 1px solid var(--rule); background: var(--paper); color: var(--ink); border-radius: 99px; padding: 3px 10px; cursor: pointer; font-variant-numeric: tabular-nums; }
+.pr-chip:hover { border-color: var(--court); color: var(--court); }
+.pr-chip.ok { background: var(--acquit-soft); border-color: var(--acquit); }
+.pr-chip.slow { background: var(--brass-soft); border-color: var(--brass-line); }

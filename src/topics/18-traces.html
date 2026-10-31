@@ -1,0 +1,61 @@
+<!-- ============================ 18 FEATURE TRACES ============================ -->
+<section class="topic" id="t18" data-title="עוקבים אחרי פיצ'ר">
+<div class="topic-head"><div class="n">18</div><h2>עוקבים אחרי פיצ'ר — מהכפתור ועד ה־DB, שורה אחר שורה</h2><label class="done-toggle"><input type="checkbox" data-done="t18"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
+<div class="topic-body">
+<p>כשבוחן מבקש לשנות פיצ'ר, צריך לדעת <b>באיזה צעד</b> בשרשרת השינוי יושב. כאן ארבעה פיצ'רים מרכזיים, כל צעד עם הקובץ והשורה. לוחצים על נתיב והקוד נפתח, Alt+לחיצה פותחת ב־VS Code. מומלץ לעבור על אחד מהם עם הקוד פתוח לידו.</p>
+<div class="trace-legend"><span class="layer l-client">לקוח</span><span class="layer l-api">route</span><span class="layer l-svc">service</span><span class="layer l-db">DB</span><span class="layer l-worker">worker</span></div>
+
+<details class="sub" open><summary>1. לייק לתביעה (כולל ההתראה שמגיעה בזמן אמת)</summary><div class="in">
+<ol class="trace">
+<li><span class="layer l-client">לקוח</span> לחיצה על הכפתור מריצה את <code>toggle</code> ב־<code>client/src/components/case/LikeButton.tsx:53</code>, שקורא ל־<code>api.toggleLike</code> (שורה 58).</li>
+<li><span class="layer l-client">לקוח</span> <code>client/src/api.ts:162</code> שולח <code>POST /api/cases/&lt;id&gt;/like</code> עם העוגייה (<code>credentials: "include"</code>).</li>
+<li><span class="layer l-api">route</span> <code>server/app/api/social.py:15</code>: <code>@security.require_auth</code> מוודא שיש משתמש, וה־route קורא ל־service אחד בלבד (שורה 20).</li>
+<li><span class="layer l-svc">service</span> <code>server/app/services/likes_service.py:15</code> <code>toggle_like</code>: קודם <code>DELETE</code> (שורה 31), ואם לא נמחק כלום אז <code>INSERT</code> (שורה 37). ככה לחיצה כפולה לא יוצרת שני לייקים.</li>
+<li><span class="layer l-db">DB</span> אחרי ה־INSERT נקרא <code>notifications_service.notify</code> (שורה 43, ההגדרה ב־<code>server/app/services/notifications_service.py:57</code>), שכותב שורה לטבלת <code>notifications</code>. התראה לעצמך מושמטת.</li>
+<li><span class="layer l-api">route</span> הדפדפן של בעל התביעה מחזיק חיבור SSE פתוח: <code>server/app/api/notifications.py:91</code>. הוא בודק שורות חדשות (שורה 148) ושולח אותן כ־<code>event: notification</code> (שורה 155).</li>
+<li><span class="layer l-client">לקוח</span> <code>client/src/hooks/useNotificationStream.ts:76</code> פותח <code>EventSource</code> ומאזין לאירוע (שורה 78). <code>client/src/context/NotificationContext.tsx:96</code> שומר את הרשימה.</li>
+<li><span class="layer l-client">לקוח</span> <code>client/src/components/layout/NotificationBell.tsx:34</code> <code>describe()</code> הופך את השורה למשפט בעברית.</li>
+</ol>
+<div class="callout exam"><b>למבחן</b> טקסט ההתראה = צעד 8 (<a href="#r23" data-reveal="r23">מתכון 23</a>). מי מקבל התראה = צעד 5. מה הכפתור מציג = צעד 1. מספר הלייקים בכרטיס מגיע מ־<code>like_count</code> בתשובת השרת.</div>
+</div></details>
+
+<details class="sub"><summary>2. הגשת תביעה, ומה ה־worker עושה איתה אחר כך</summary><div class="in">
+<ol class="trace">
+<li><span class="layer l-client">לקוח</span> <code>client/src/pages/NewCase.tsx:45</code> <code>submit</code> קורא ל־<code>api.createCase</code> (שורה 50), ובהצלחה מנווט לדף התיק (שורה 58).</li>
+<li><span class="layer l-client">לקוח</span> <code>client/src/api.ts:153</code> שולח <code>POST /api/cases</code>.</li>
+<li><span class="layer l-api">route</span> <code>server/app/api/cases.py:65</code> <code>create_case</code>: ולידציה של צורת הבקשה (כותרת בשורה 75, גוף בשורה 77, נתבע), ואז קריאה ל־service.</li>
+<li><span class="layer l-svc">service</span> <code>server/app/services/cases_service.py:246</code> <code>create_case</code>: סינון תוכן (<code>moderation_service.screen</code>, שורה 282), <code>INSERT</code> עם <code>status='witness_phase'</code> ו־deadline (שורה 288), ומעקב אוטומטי של המגיש (שורה 326).</li>
+<li><span class="layer l-worker">worker</span> מכאן ה־API כבר לא מעורב. כל 15 שניות <code>server/worker/loop.py:91</code> <code>tick()</code> מחפש תיקים שה־deadline שלהם עבר.</li>
+<li><span class="layer l-worker">worker</span> סוף שלב העדים: <code>server/worker/trial_tasks.py:79</code> → <code>server/app/services/trial_service.py:151</code> <code>advance_to_deliberation</code>, שבוחר ומושיב חבר מושבעים (<code>jury_service.select_panel</code>, שורה 174).</li>
+<li><span class="layer l-worker">worker</span> המושבעים מדברים ומצביעים: <code>speak_as_juror</code> ב־<code>server/app/services/trial_service.py:210</code>.</li>
+<li><span class="layer l-worker">worker</span> פסק דין: <code>advance_to_verdict</code> (<code>trial_service.py:311</code>) סופר קולות עם <code>jury_service.tally</code> (שורה 350) ושולח התראה (<code>_notify_verdict</code>, שורה 417).</li>
+<li><span class="layer l-worker">worker</span> סגירה: <code>close_case</code> ב־<code>server/app/services/trial_service.py:442</code>.</li>
+</ol>
+<div class="callout exam"><b>למבחן</b> ולידציה על מה שהמשתמש שולח = צעד 3. כלל עסקי שחל גם על בוטים = צעד 4. כל מה שקשור לזמנים ולשלבים = צעדים 5–9 (worker), ובדוקר צריך rebuild ל־<code>worker</code>, לא רק ל־<code>server</code>.</div>
+</div></details>
+
+<details class="sub"><summary>3. התחברות, ואיך השרת יודע מי אתה בכל בקשה</summary><div class="in">
+<ol class="trace">
+<li><span class="layer l-client">לקוח</span> <code>client/src/pages/Login.tsx:25</code> <code>submit</code> קורא ל־<code>signIn</code> (שורה 30).</li>
+<li><span class="layer l-client">לקוח</span> <code>client/src/context/AuthContext.tsx:51</code> <code>signIn</code> קורא ל־<code>api.login</code> ושומר את המשתמש ב־context. כל הדפים קוראים ממנו דרך <code>useAuth()</code>.</li>
+<li><span class="layer l-client">לקוח</span> <code>client/src/api.ts:109</code> שולח <code>POST /api/auth/login</code>.</li>
+<li><span class="layer l-api">route</span> <code>server/app/api/auth.py:51</code> <code>login</code>: מחפש לפי אימייל, בודק סיסמה עם bcrypt. אותה הודעה ל"אין משתמש" ול"סיסמה שגויה" (שורה 62), כדי שלא יהיה אפשר לגלות אילו אימיילים רשומים.</li>
+<li><span class="layer l-svc">service</span> <code>server/app/api/auth.py:16</code> <code>_authenticated_response</code> → <code>server/app/services/auth_service.py:36</code> <code>create_session</code>: טוקן אקראי. ב־DB נשמר רק ה־hash שלו.</li>
+<li><span class="layer l-api">route</span> <code>server/app/security.py:82</code> <code>set_session_cookie</code>: עוגייה <code>session_id</code>, <code>httponly</code>, כך ש־JavaScript לא יכול לקרוא אותה.</li>
+<li><span class="layer l-api">route</span> בכל בקשה אחרי זה: <code>@require_auth</code> (<code>server/app/security.py:137</code>) → <code>_load_user</code> (שורה 108) → <code>auth_service.resolve_session</code> (<code>server/app/services/auth_service.py:54</code>), שמחשב hash לטוקן ומחפש אותו.</li>
+<li><span class="layer l-client">לקוח</span> ברענון הדף הלקוח שואל "מי אני" דרך <code>GET /api/auth/me</code> (<code>client/src/api.ts:114</code>), כי את העוגייה עצמה הוא לא יכול לקרוא.</li>
+</ol>
+<div class="callout exam"><b>למבחן</b> כמה זמן session חי = <code>SESSION_TTL_DAYS</code>. כללי סיסמה = <code>password_problem</code> (רק ב־signup וב־reset, לא ב־login). דף שרק מחוברים רואים = <code>ProtectedRoute</code> בלקוח <b>וגם</b> <code>require_auth</code> בשרת.</div>
+</div></details>
+
+<details class="sub"><summary>4. תגובה על תיק (כולל סינון תוכן)</summary><div class="in">
+<ol class="trace">
+<li><span class="layer l-client">לקוח</span> <code>client/src/components/comments/CommentComposer.tsx:38</code> <code>submit</code> קורא ל־<code>onSubmit</code>, ש־<code>client/src/pages/CasePage.tsx:77</code> מעביר ל־<code>api.createComment</code>.</li>
+<li><span class="layer l-client">לקוח</span> <code>client/src/api.ts:182</code> שולח <code>POST /api/cases/&lt;id&gt;/comments</code>.</li>
+<li><span class="layer l-api">route</span> <code>server/app/api/social.py:98</code> <code>create_comment</code>: תגובה ריקה נדחית (שורה 105). ה־route הזה יוצר רק <code>role='user'</code>.</li>
+<li><span class="layer l-svc">service</span> <code>server/app/services/comments_service.py:79</code> <code>create_comment</code>: <code>moderation_service.screen</code> (שורה 114). אם התוכן פוגעני, התשובה היא 422 והתגובה לא מתפרסמת. אחרת יש INSERT והתראה לבעל התיק (שורה 216).</li>
+<li><span class="layer l-client">לקוח</span> בשגיאה, <code>ApiError</code> מ־<code>client/src/api.ts:54</code> מגיע ל־composer, וההודעה מהשרת מוצגת מעליו.</li>
+</ol>
+<div class="callout exam"><b>למבחן</b> ולידציה חדשה על תגובות = צעד 3, כי בצעד 4 היא הייתה חלה גם על הבוטים ותוקעת משפטים (<a href="#r4" data-reveal="r4">מתכון 4</a>). מילים חסומות = <code>server/app/brain/sentiment.py</code> (<a href="#r15" data-reveal="r15">מתכון 15</a>).</div>
+</div></details>
+</div></section>

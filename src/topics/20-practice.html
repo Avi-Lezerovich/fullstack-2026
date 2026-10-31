@@ -1,0 +1,65 @@
+<!-- ============================ 20 PRACTICE ============================ -->
+<section class="topic" id="t20" data-title="תרגול תחת שעון">
+<div class="topic-head"><div class="n">20</div><h2>תרגול תחת שעון — בדיוק כמו במבחן</h2><label class="done-toggle"><input type="checkbox" data-done="t20"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
+<div class="topic-body">
+<p>במבחן מקבלים משימה קטנה ועושים אותה בפרויקט האמיתי, בלי AI, עם האתר הזה. כאן מתרגלים בדיוק את זה: משימה אקראית, שעון, ופתרון מוסתר. כל תרגול נשמר בדפדפן, אז רואים התקדמות.</p>
+<div class="callout exam"><b>איך מתרגלים</b>
+<ol>
+<li>בוחרים רמה ולוחצים <b>"משימה חדשה"</b>. השעון מתחיל.</li>
+<li>עובדים ב־VS Code על הפרויקט המקומי. מותר הכול באתר (<kbd>Ctrl</kbd>+<kbd>K</kbd>, הקוד, ה־grep), חוץ מלפתוח את המתכון עצמו.</li>
+<li>תקועים? <b>רמז 1</b> מראה איפה, <b>רמז 2</b> מראה את השינוי. כל רמז נספר.</li>
+<li>כשזה עובד: טסטים, <code>git diff</code>, ולוחצים <b>"סיימתי"</b>.</li>
+<li>מחזירים את הקוד למצב נקי: <code>git checkout .</code> (וקבצים חדשים מוחקים).</li>
+</ol></div>
+
+<div class="practice" id="practice">
+  <div class="pr-controls">
+    <div class="seg" id="prLevel" role="group" aria-label="רמה">
+      <button type="button" data-level="all" aria-pressed="true">הכול</button>
+      <button type="button" data-level="easy" aria-pressed="false">קל</button>
+      <button type="button" data-level="med" aria-pressed="false">בינוני</button>
+      <button type="button" data-level="hard" aria-pressed="false">מתקדם</button>
+    </div>
+    <button class="btn primary" type="button" id="prNew">משימה חדשה ▸</button>
+  </div>
+
+  <div class="pr-task" id="prTask" hidden>
+    <div class="pr-head">
+      <span class="tag" id="prTag"></span>
+      <span class="pr-timer" id="prTimer" aria-live="off">00:00</span>
+      <span class="pr-target" id="prTarget"></span>
+    </div>
+    <div class="pr-meter" aria-hidden="true"><i id="prBar"></i></div>
+    <p class="pr-ask">הבוחן מבקש:</p>
+    <h3 class="pr-title" id="prTitle"></h3>
+    <p class="pr-brief">בצע את השינוי בפרויקט, הראה שהוא עובד, ותגיד מה עוד הוא משפיע עליו.</p>
+    <div class="pr-actions">
+      <button class="btn" type="button" id="prHint1">רמז 1: איפה?</button>
+      <button class="btn" type="button" id="prHint2">רמז 2: מה משנים?</button>
+      <button class="btn" type="button" id="prSolve">הצג פתרון מלא</button>
+      <span class="grow"></span>
+      <button class="btn primary" type="button" id="prDone">✓ סיימתי</button>
+      <button class="btn" type="button" id="prSkip">דלג</button>
+    </div>
+    <div class="pr-hints" id="prHints"></div>
+    <div class="pr-check">
+      <b>לפני שלוחצים "סיימתי":</b>
+      <label><input type="checkbox"> מצאתי את <b>כל</b> המקומות (grep לערך עצמו, בלקוח ובשרת)</label>
+      <label><input type="checkbox"> אימתתי בדפדפן / curl / DevTools</label>
+      <label><input type="checkbox"> הרצתי את הטסטים הרלוונטיים</label>
+      <label><input type="checkbox"> <code>git diff</code> מראה רק את מה שהתכוונתי</label>
+      <label><input type="checkbox"> יודע להסביר מה עוד מושפע (דוקר, טסט, מקום כפול)</label>
+    </div>
+  </div>
+
+  <div class="pr-history" id="prHistory"></div>
+</div>
+
+<h3>איך מסבירים לבוחן (30 שניות)</h3>
+<ol>
+<li><b>איפה:</b> "השינוי בשכבת ה־service, ב־<code>cases_service.py</code>, כי הכלל צריך לחול גם על…"</li>
+<li><b>מה עוד:</b> "הערך הזה מופיע גם בלקוח (<code>NewCase.tsx</code>), אז עדכנתי גם שם, אחרת הטופס והשרת לא מסכימים."</li>
+<li><b>הוכחה:</b> "בדקתי עם curl, קיבלתי 400 עם ההודעה החדשה, והטסטים עוברים."</li>
+<li><b>מה צריך לדעת:</b> "בדוקר צריך <code>--build</code>, ותיקים קיימים לא משתנים כי הערך כבר כתוב בשורה."</li>
+</ol>
+</div></section>

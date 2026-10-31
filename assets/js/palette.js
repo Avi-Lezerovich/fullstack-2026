@@ -53,8 +53,29 @@
       items.push({ type: "code", title: s[0], sub: s[2] + ":" + s[3] + " · " + s[1], keys: s[2], path: s[2], line: s[3], test: isTest(s[2]) });
     });
     FILES.forEach(function (f) { items.push({ type: "file", title: f.split("/").pop(), sub: f, keys: f, path: f, test: isTest(f) }); });
-    items.forEach(function (it) { it.nt = norm(it.title); it.hay = norm(it.title + " " + it.sub + " " + it.keys); });
+    items.forEach(function (it, i) {
+      it.nt = norm(it.title); it.hay = norm(it.title + " " + it.sub + " " + it.keys);
+      if (it.el && !it.el.id) it.el.id = "pal-" + i; // so "recent" can find it again after a reload
+    });
     return items;
+  }
+
+  /* recently opened, newest first, kept in this browser */
+  var RECENT_KEY = "lolsuit-recent-v1", RECENT_MAX = 6;
+  function loadRecent() { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]") || []; } catch (e) { return []; } }
+  function remember(it) {
+    if (it.action) return;
+    var rec = { type: it.type, title: it.title, sub: (it.sub || "").replace(/^אחרון · /, ""), path: it.path, line: it.line, q: it.q, elId: it.el ? it.el.id : null };
+    var list = loadRecent().filter(function (r) { return !(r.type === rec.type && r.title === rec.title && r.sub === rec.sub); });
+    list.unshift(rec);
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, RECENT_MAX))); } catch (e) { /* storage blocked */ }
+  }
+  function recentItems() {
+    return loadRecent().map(function (r) {
+      var it = { type: r.type, title: r.title, sub: "אחרון · " + (r.sub || ""), path: r.path, line: r.line, q: r.q };
+      if (r.elId) { it.el = document.getElementById(r.elId); if (!it.el) return null; }
+      return it;
+    }).filter(Boolean);
   }
   var LIMIT = { finder: 8, recipe: 5, guide: 6, qa: 3, code: 8, file: 5 };
   function score(it, q, toks) {
@@ -71,12 +92,14 @@
     var raw = palQ.value.trim(), q = norm(raw), toks = q.split(" ").filter(Boolean);
     if (!ITEMS) ITEMS = buildItems();
     if (!q) {
-      shown = [
+      shown = recentItems().concat([
         { type: "guide", title: "מצב מבחן — איפה זה?", sub: "אינדקס: ביקשו לשנות X, איפה זה", el: document.getElementById("t0") },
         { type: "guide", title: "Small change cookbook", sub: "מתכונים צעד־אחר־צעד", el: document.getElementById("t13") },
+        { type: "guide", title: "תרגול תחת שעון", sub: "משימה אקראית, טיימר ופתרון מוסתר", el: document.getElementById("t20") },
+        { type: "guide", title: "תקלות נפוצות", sub: "משהו לא עובד? פתרונות מהירים", el: document.getElementById("t19") },
         { type: "file", title: "כל הקבצים", sub: "עץ הקבצים של הפרויקט", action: "files" },
         { type: "grep", title: "חיפוש בכל הקוד", sub: "כמו grep -rn, בתוך הדפדפן", action: "grep" }
-      ].filter(function (it) { return it.el !== null; });
+      ].filter(function (it) { return it.el !== null; }));
     } else {
       var scored = ITEMS.map(function (it) { return [score(it, q, toks), it]; }).filter(function (x) { return x[0] !== null; });
       scored.sort(function (a, b) { return a[0] - b[0]; });
@@ -106,6 +129,7 @@
   function choose(i) {
     var it = shown[i]; if (!it) return;
     closePalette();
+    remember(it);
     if (it.action === "files") Guide.openPane("files");
     else if (it.action === "grep") Guide.openPane("grep");
     else if (it.type === "grep") Guide.openGrep(it.q);

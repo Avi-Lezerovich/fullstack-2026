@@ -11,7 +11,9 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=David+Libre:wght@400;700&amp;family=Frank+Ruhl+Libre:wght@500;700&amp;family=Heebo:wght@400;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap">
 <link rel="stylesheet" href="assets/css/base.css?v=2a089f171e">
 <link rel="stylesheet" href="assets/css/components.css?v=3551763890">
-<link rel="stylesheet" href="assets/css/tools.css?v=712eb1284a">
+<link rel="stylesheet" href="assets/css/tools.css?v=3639c4a1db">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#3C3489">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%233C3489' stroke='%23B8860B' stroke-width='2'/%3E%3Cpath d='M9 12h14M16 9v14M11 12l-3 6h6zM21 12l-3 6h6zM12 23h8' stroke='%23FAF6E9' stroke-width='1.6' fill='none'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -42,6 +44,7 @@
   <ol class="toc" id="toc"></ol>
   <div class="tools"><button class="btn" id="modeBtn" type="button">הצג את כל הנושאים ברצף</button><button class="btn" id="expandAll" type="button">פתח את כל תתי־הסעיפים</button></div>
   <p class="hint"><kbd>Ctrl</kbd>+<kbd>K</kbd> או <kbd>/</kbd> חיפוש מהיר · <kbd>←</kbd> הנושא הבא · <kbd>→</kbd> הקודם · <kbd>Esc</kbd> סגירה. כל <code>נתיב ↗</code> נפתח בקוד, ו־Alt+לחיצה פותחת ב־VS Code. ההתקדמות נשמרת בדפדפן הזה בלבד.</p>
+  <p class="offline-state" id="offlineState" aria-live="polite"></p>
 </nav>
 <main id="main"><div class="wrap">
 
@@ -65,6 +68,8 @@
   <button class="btn" type="button" data-open-code="grep">חיפוש בכל הקוד (grep)</button>
   <button class="btn" type="button" data-open-code="files">כל הקבצים</button>
   <a class="btn" href="#t13" data-go="t13">מתכוני שינוי (Cookbook)</a>
+  <a class="btn" href="#t19" data-go="t19">משהו לא עובד? תקלות נפוצות</a>
+  <a class="btn" href="#t20" data-go="t20">⏱ תרגול תחת שעון</a>
 </div>
 
 <div class="exam-day">
@@ -1960,6 +1965,186 @@ cd ..\client
 npm install</code></pre>
 </div></section>
 
+<!-- ============================ 18 FEATURE TRACES ============================ -->
+<section class="topic" id="t18" data-title="עוקבים אחרי פיצ'ר">
+<div class="topic-head"><div class="n">18</div><h2>עוקבים אחרי פיצ'ר — מהכפתור ועד ה־DB, שורה אחר שורה</h2><label class="done-toggle"><input type="checkbox" data-done="t18"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
+<div class="topic-body">
+<p>כשבוחן מבקש לשנות פיצ'ר, צריך לדעת <b>באיזה צעד</b> בשרשרת השינוי יושב. כאן ארבעה פיצ'רים מרכזיים, כל צעד עם הקובץ והשורה. לוחצים על נתיב והקוד נפתח, Alt+לחיצה פותחת ב־VS Code. מומלץ לעבור על אחד מהם עם הקוד פתוח לידו.</p>
+<div class="trace-legend"><span class="layer l-client">לקוח</span><span class="layer l-api">route</span><span class="layer l-svc">service</span><span class="layer l-db">DB</span><span class="layer l-worker">worker</span></div>
+
+<details class="sub" open><summary>1. לייק לתביעה (כולל ההתראה שמגיעה בזמן אמת)</summary><div class="in">
+<ol class="trace">
+<li><span class="layer l-client">לקוח</span> לחיצה על הכפתור מריצה את <code>toggle</code> ב־<code>client/src/components/case/LikeButton.tsx:53</code>, שקורא ל־<code>api.toggleLike</code> (שורה 58).</li>
+<li><span class="layer l-client">לקוח</span> <code>client/src/api.ts:162</code> שולח <code>POST /api/cases/&lt;id&gt;/like</code> עם העוגייה (<code>credentials: "include"</code>).</li>
+<li><span class="layer l-api">route</span> <code>server/app/api/social.py:15</code>: <code>@security.require_auth</code> מוודא שיש משתמש, וה־route קורא ל־service אחד בלבד (שורה 20).</li>
+<li><span class="layer l-svc">service</span> <code>server/app/services/likes_service.py:15</code> <code>toggle_like</code>: קודם <code>DELETE</code> (שורה 31), ואם לא נמחק כלום אז <code>INSERT</code> (שורה 37). ככה לחיצה כפולה לא יוצרת שני לייקים.</li>
+<li><span class="layer l-db">DB</span> אחרי ה־INSERT נקרא <code>notifications_service.notify</code> (שורה 43, ההגדרה ב־<code>server/app/services/notifications_service.py:57</code>), שכותב שורה לטבלת <code>notifications</code>. התראה לעצמך מושמטת.</li>
+<li><span class="layer l-api">route</span> הדפדפן של בעל התביעה מחזיק חיבור SSE פתוח: <code>server/app/api/notifications.py:91</code>. הוא בודק שורות חדשות (שורה 148) ושולח אותן כ־<code>event: notification</code> (שורה 155).</li>
+<li><span class="layer l-client">לקוח</span> <code>client/src/hooks/useNotificationStream.ts:76</code> פותח <code>EventSource</code> ומאזין לאירוע (שורה 78). <code>client/src/context/NotificationContext.tsx:96</code> שומר את הרשימה.</li>
+<li><span class="layer l-client">לקוח</span> <code>client/src/components/layout/NotificationBell.tsx:34</code> <code>describe()</code> הופך את השורה למשפט בעברית.</li>
+</ol>
+<div class="callout exam"><b>למבחן</b> טקסט ההתראה = צעד 8 (<a href="#r23" data-reveal="r23">מתכון 23</a>). מי מקבל התראה = צעד 5. מה הכפתור מציג = צעד 1. מספר הלייקים בכרטיס מגיע מ־<code>like_count</code> בתשובת השרת.</div>
+</div></details>
+
+<details class="sub"><summary>2. הגשת תביעה, ומה ה־worker עושה איתה אחר כך</summary><div class="in">
+<ol class="trace">
+<li><span class="layer l-client">לקוח</span> <code>client/src/pages/NewCase.tsx:45</code> <code>submit</code> קורא ל־<code>api.createCase</code> (שורה 50), ובהצלחה מנווט לדף התיק (שורה 58).</li>
+<li><span class="layer l-client">לקוח</span> <code>client/src/api.ts:153</code> שולח <code>POST /api/cases</code>.</li>
+<li><span class="layer l-api">route</span> <code>server/app/api/cases.py:65</code> <code>create_case</code>: ולידציה של צורת הבקשה (כותרת בשורה 75, גוף בשורה 77, נתבע), ואז קריאה ל־service.</li>
+<li><span class="layer l-svc">service</span> <code>server/app/services/cases_service.py:246</code> <code>create_case</code>: סינון תוכן (<code>moderation_service.screen</code>, שורה 282), <code>INSERT</code> עם <code>status='witness_phase'</code> ו־deadline (שורה 288), ומעקב אוטומטי של המגיש (שורה 326).</li>
+<li><span class="layer l-worker">worker</span> מכאן ה־API כבר לא מעורב. כל 15 שניות <code>server/worker/loop.py:91</code> <code>tick()</code> מחפש תיקים שה־deadline שלהם עבר.</li>
+<li><span class="layer l-worker">worker</span> סוף שלב העדים: <code>server/worker/trial_tasks.py:79</code> → <code>server/app/services/trial_service.py:151</code> <code>advance_to_deliberation</code>, שבוחר ומושיב חבר מושבעים (<code>jury_service.select_panel</code>, שורה 174).</li>
+<li><span class="layer l-worker">worker</span> המושבעים מדברים ומצביעים: <code>speak_as_juror</code> ב־<code>server/app/services/trial_service.py:210</code>.</li>
+<li><span class="layer l-worker">worker</span> פסק דין: <code>advance_to_verdict</code> (<code>trial_service.py:311</code>) סופר קולות עם <code>jury_service.tally</code> (שורה 350) ושולח התראה (<code>_notify_verdict</code>, שורה 417).</li>
+<li><span class="layer l-worker">worker</span> סגירה: <code>close_case</code> ב־<code>server/app/services/trial_service.py:442</code>.</li>
+</ol>
+<div class="callout exam"><b>למבחן</b> ולידציה על מה שהמשתמש שולח = צעד 3. כלל עסקי שחל גם על בוטים = צעד 4. כל מה שקשור לזמנים ולשלבים = צעדים 5–9 (worker), ובדוקר צריך rebuild ל־<code>worker</code>, לא רק ל־<code>server</code>.</div>
+</div></details>
+
+<details class="sub"><summary>3. התחברות, ואיך השרת יודע מי אתה בכל בקשה</summary><div class="in">
+<ol class="trace">
+<li><span class="layer l-client">לקוח</span> <code>client/src/pages/Login.tsx:25</code> <code>submit</code> קורא ל־<code>signIn</code> (שורה 30).</li>
+<li><span class="layer l-client">לקוח</span> <code>client/src/context/AuthContext.tsx:51</code> <code>signIn</code> קורא ל־<code>api.login</code> ושומר את המשתמש ב־context. כל הדפים קוראים ממנו דרך <code>useAuth()</code>.</li>
+<li><span class="layer l-client">לקוח</span> <code>client/src/api.ts:109</code> שולח <code>POST /api/auth/login</code>.</li>
+<li><span class="layer l-api">route</span> <code>server/app/api/auth.py:51</code> <code>login</code>: מחפש לפי אימייל, בודק סיסמה עם bcrypt. אותה הודעה ל"אין משתמש" ול"סיסמה שגויה" (שורה 62), כדי שלא יהיה אפשר לגלות אילו אימיילים רשומים.</li>
+<li><span class="layer l-svc">service</span> <code>server/app/api/auth.py:16</code> <code>_authenticated_response</code> → <code>server/app/services/auth_service.py:36</code> <code>create_session</code>: טוקן אקראי. ב־DB נשמר רק ה־hash שלו.</li>
+<li><span class="layer l-api">route</span> <code>server/app/security.py:82</code> <code>set_session_cookie</code>: עוגייה <code>session_id</code>, <code>httponly</code>, כך ש־JavaScript לא יכול לקרוא אותה.</li>
+<li><span class="layer l-api">route</span> בכל בקשה אחרי זה: <code>@require_auth</code> (<code>server/app/security.py:137</code>) → <code>_load_user</code> (שורה 108) → <code>auth_service.resolve_session</code> (<code>server/app/services/auth_service.py:54</code>), שמחשב hash לטוקן ומחפש אותו.</li>
+<li><span class="layer l-client">לקוח</span> ברענון הדף הלקוח שואל "מי אני" דרך <code>GET /api/auth/me</code> (<code>client/src/api.ts:114</code>), כי את העוגייה עצמה הוא לא יכול לקרוא.</li>
+</ol>
+<div class="callout exam"><b>למבחן</b> כמה זמן session חי = <code>SESSION_TTL_DAYS</code>. כללי סיסמה = <code>password_problem</code> (רק ב־signup וב־reset, לא ב־login). דף שרק מחוברים רואים = <code>ProtectedRoute</code> בלקוח <b>וגם</b> <code>require_auth</code> בשרת.</div>
+</div></details>
+
+<details class="sub"><summary>4. תגובה על תיק (כולל סינון תוכן)</summary><div class="in">
+<ol class="trace">
+<li><span class="layer l-client">לקוח</span> <code>client/src/components/comments/CommentComposer.tsx:38</code> <code>submit</code> קורא ל־<code>onSubmit</code>, ש־<code>client/src/pages/CasePage.tsx:77</code> מעביר ל־<code>api.createComment</code>.</li>
+<li><span class="layer l-client">לקוח</span> <code>client/src/api.ts:182</code> שולח <code>POST /api/cases/&lt;id&gt;/comments</code>.</li>
+<li><span class="layer l-api">route</span> <code>server/app/api/social.py:98</code> <code>create_comment</code>: תגובה ריקה נדחית (שורה 105). ה־route הזה יוצר רק <code>role='user'</code>.</li>
+<li><span class="layer l-svc">service</span> <code>server/app/services/comments_service.py:79</code> <code>create_comment</code>: <code>moderation_service.screen</code> (שורה 114). אם התוכן פוגעני, התשובה היא 422 והתגובה לא מתפרסמת. אחרת יש INSERT והתראה לבעל התיק (שורה 216).</li>
+<li><span class="layer l-client">לקוח</span> בשגיאה, <code>ApiError</code> מ־<code>client/src/api.ts:54</code> מגיע ל־composer, וההודעה מהשרת מוצגת מעליו.</li>
+</ol>
+<div class="callout exam"><b>למבחן</b> ולידציה חדשה על תגובות = צעד 3, כי בצעד 4 היא הייתה חלה גם על הבוטים ותוקעת משפטים (<a href="#r4" data-reveal="r4">מתכון 4</a>). מילים חסומות = <code>server/app/brain/sentiment.py</code> (<a href="#r15" data-reveal="r15">מתכון 15</a>).</div>
+</div></details>
+</div></section>
+
+<!-- ============================ 19 TROUBLESHOOTING ============================ -->
+<section class="topic" id="t19" data-title="תקלות נפוצות">
+<div class="topic-head"><div class="n">19</div><h2>תקלות נפוצות בזמן המבחן — סימפטום, סיבה, פתרון</h2><label class="done-toggle"><input type="checkbox" data-done="t19"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
+<div class="topic-body">
+<p>רוב הזמן שהולך לאיבוד במבחן הוא לא על השינוי עצמו, אלא על "למה אני לא רואה אותו". קודם מחפשים כאן את הסימפטום (או ב־<kbd>Ctrl</kbd>+<kbd>K</kbd>), ורק אחר כך מתחילים לנחש.</p>
+
+<div class="callout key"><b>בדיקה ראשונה תמיד</b> <code>curl -s localhost:5002/api/health</code> (או בדפדפן). מה רואים שם: האם ה־DB למעלה (<code>database</code>), מה ה־<code>phase_minutes</code>, ומתי ה־worker תיקתק לאחרונה (<code>worker.seconds_since_tick</code>). בדוקר אפשר גם דרך nginx: <code>localhost:8080/api/health</code>.</div>
+
+<h3>השינוי שלי לא מופיע</h3>
+<div class="ts">
+<div class="ts-row"><div class="ts-s">שיניתי קוד, ובדוקר כלום לא השתנה</div><div class="ts-c">הקוד <b>אפוי בתוך ה־image</b>. אין volume של קוד.</div><div class="ts-f"><code>docker compose up --build -d server</code> (שרת) / <code>web</code> (לקוח, nginx) / <code>worker</code>. שינוי ב־<code>app/</code> שה־worker משתמש בו מחייב rebuild לשניהם.</div></div>
+<div class="ts-row"><div class="ts-s">שיניתי קוד שרת, ו־native כלום לא השתנה</div><div class="ts-c"><code>python run.py</code> לא נטען מחדש לבד.</div><div class="ts-f">Ctrl+C ומריצים שוב. גם ה־worker (<code>python run_worker.py</code>) צריך restart.</div></div>
+<div class="ts-row"><div class="ts-s">שיניתי UI והדפדפן מראה את הישן</div><div class="ts-c">מטמון, או שפתחת את 8080 (דוקר) במקום 5174 (vite).</div><div class="ts-f">רענון קשיח: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>. ב־native עובדים על <code>http://localhost:5174</code> (HMR מיידי).</div></div>
+<div class="ts-row"><div class="ts-s">שיניתי ערך ב־<code>.env</code> ובדוקר אין השפעה</div><div class="ts-c">compose מעביר לקונטיינר רק משתנים שמופיעים ב־<code>environment</code>. לא מועברים: <code>UPLOAD_MAX_BYTES</code>, <code>SESSION_TTL_DAYS</code>, <code>RESET_TTL_MINUTES</code>, <code>SSE_*</code>, <code>BOT_COOLDOWN_MINUTES</code> ועוד.</div><div class="ts-f">מוסיפים ל־<code>environment:</code> של השירות ב־<code>docker-compose.yml</code>, או משנים את ברירת המחדל ב־<code>server/app/config.py</code>. אחרי זה <code>docker compose up -d server</code>.</div></div>
+<div class="ts-row"><div class="ts-s">שיניתי ברירת מחדל ב־<code>config.py</code> ובדוקר אין השפעה</div><div class="ts-c">compose <b>דורס</b> אותה, למשל <code>PHASE_MINUTES: ${PHASE_MINUTES:-1440}</code>.</div><div class="ts-f">משנים את הערך ב־<code>docker-compose.yml</code> (בשני השירותים), או ב־<code>.env</code>. ראו <a href="#r9" data-reveal="r9">מתכון 9</a>.</div></div>
+<div class="ts-row"><div class="ts-s">שיניתי את <code>init.sql</code> ושום דבר לא קרה</div><div class="ts-c">MySQL מריץ את <code>init.sql</code> רק כשה־volume <b>ריק</b>.</div><div class="ts-f">מוחק נתונים: <code>docker compose down -v</code> ואז <code>docker compose up --build</code>. שומר נתונים: <code>make db-shell</code> ואז <code>ALTER TABLE …</code></div></div>
+</div>
+
+<h3>השרת או ה־DB לא עולים</h3>
+<div class="ts">
+<div class="ts-row"><div class="ts-s"><code>Cannot connect to the Docker daemon</code> / <code>error during connect</code></div><div class="ts-c">Docker Desktop לא רץ.</div><div class="ts-f">פותחים את Docker Desktop, מחכים שהלוויתן יהיה ירוק, ומריצים שוב.</div></div>
+<div class="ts-row"><div class="ts-s"><code>port is already allocated</code> / <code>address already in use</code></div><div class="ts-c">משהו אחר כבר תופס את 8080 / 5002 / 3307 / 5174, למשל הרצה קודמת שלא נסגרה.</div><div class="ts-f"><code>netstat -ano | findstr :5002</code> ואז <code>taskkill /PID &lt;מספר&gt; /F</code>. או לשנות פורט (<a href="#r24" data-reveal="r24">מתכון 24</a>).</div></div>
+<div class="ts-row"><div class="ts-s">native: <code>Access denied for user 'root'</code> / <code>Can't connect to MySQL</code></div><div class="ts-c">אין <code>.env</code>. ברירות המחדל בקוד (<code>lolsuit-dev</code>) לא תואמות לסיסמת הקונטיינר. או שה־DB למטה.</div><div class="ts-f"><code>copy .env.example .env</code> ואז <code>docker compose up -d db</code>. ה־DB זמין ב־<code>127.0.0.1:3307</code>.</div></div>
+<div class="ts-row"><div class="ts-s">500 על כל דף תיק: <code>Unknown column</code></div><div class="ts-c">הקוד מצפה לעמודה שלא קיימת ב־DB, למשל אחרי שהוספת עמודה ל־<code>init.sql</code>.</div><div class="ts-f">כמו ב־<code>init.sql</code> למעלה: <code>down -v</code> או <code>ALTER TABLE</code>. מה בדיוק נכשל רואים ב־<code>docker compose logs -f server</code>.</div></div>
+<div class="ts-row"><div class="ts-s">השרת נופל מיד: <code>TypeError … Settings</code></div><div class="ts-c">הוספת שדה ל־<code>class Settings</code> אבל לא ל־<code>get_settings()</code>, או להפך.</div><div class="ts-f">מוסיפים בשני המקומות ב־<code>server/app/config.py</code> (<a href="#r8" data-reveal="r8">מתכון 8</a>).</div></div>
+<div class="ts-row"><div class="ts-s">בדפדפן: "שגיאת רשת. ודא שהשרת פעיל"</div><div class="ts-c">ה־API לא רץ, או שה־proxy של vite מכוון לפורט אחר.</div><div class="ts-f">בודקים <code>curl localhost:5002/api/health</code>. ה־proxy מוגדר ב־<code>client/vite.config.ts:17</code>.</div></div>
+</div>
+
+<h3>המשפט לא מתקדם / הבוטים לא עושים כלום</h3>
+<div class="ts">
+<div class="ts-row"><div class="ts-s">תיק תקוע ב"איסוף עדויות"</div><div class="ts-c">זה תקין: עם <code>PHASE_MINUTES=1440</code>, "יום" במשפט הוא יום אמיתי.</div><div class="ts-f">ב־<code>.env</code>: <code>PHASE_MINUTES=2</code>, ואז restart ל־server ול־worker. רק תיקים <b>חדשים</b> יקבלו את הקצב החדש.</div></div>
+<div class="ts-row"><div class="ts-s">שום דבר לא זז</div><div class="ts-c">ה־worker לא רץ. ב־native הוא תהליך נפרד.</div><div class="ts-f"><code>/api/health</code> → <code>worker.seconds_since_tick</code>. native: <code>python run_worker.py</code>. דוקר: <code>make logs S=worker</code>.</div></div>
+<div class="ts-row"><div class="ts-s">הבוטים לא מגישים תביעות</div><div class="ts-c">במצב offline (ברירת המחדל בדוקר) הגשה דורשת LLM (<code>require_llm=True</code>).</div><div class="ts-f">זה מתוכנן ככה. לייקים ותגובות של בוטים כן עובדים offline.</div></div>
+</div>
+
+<h3>טסטים ובדיקות</h3>
+<div class="ts">
+<div class="ts-row"><div class="ts-s">הרבה טסטים "skipped"</div><div class="ts-c">טסטי <code>integration</code> ו־<code>worker</code> צריכים MySQL על 3307 (הם יוצרים DB זמני <code>lolsuit_test</code>).</div><div class="ts-f"><code>docker compose up -d db</code> ומריצים שוב. טסטי <code>unit</code> רצים גם בלי DB.</div></div>
+<div class="ts-row"><div class="ts-s"><code>ModuleNotFoundError: No module named 'app'</code></div><div class="ts-c">הרצת pytest מהתיקייה הלא נכונה, או בלי ה־venv.</div><div class="ts-f"><code>cd server</code> ואז <code>.venv\Scripts\python -m pytest -q</code>. זה עובד גם בלי "activate".</div></div>
+<div class="ts-row"><div class="ts-s"><code>npm run lint</code> נכשל</div><div class="ts-c">זה <code>tsc --noEmit</code> עם <code>noUnusedLocals</code>: import מיותר, טיפוס חסר, או <code>Record&lt;CaseStatus,…&gt;</code> בלי מפתח חדש.</div><div class="ts-f">קוראים את השורה בשגיאה, מוחקים import מיותר, או משלימים את המפתח החסר.</div></div>
+<div class="ts-row"><div class="ts-s">טסט שבודק טקסט נכשל אחרי שינוי טקסט</div><div class="ts-c">הטסט משווה את הנוסח הישן.</div><div class="ts-f">עושים grep לטקסט הישן עם סינון נתיב <code>tests</code>, מעדכנים את הטסט, ומספרים לבוחן.</div></div>
+</div>
+
+<h3>git: לחזור אחורה</h3>
+<pre><code>git status                <span class="c"># מה שונה</span>
+git diff                  <span class="c"># השינוי עצמו, את זה מראים לבוחן</span>
+git checkout -- path/file <span class="c"># לבטל שינוי בקובץ אחד</span>
+git checkout .            <span class="c"># לבטל את כל השינויים בקבצים קיימים</span>
+git stash                 <span class="c"># להחביא שינויים (git stash pop מחזיר)</span></code></pre>
+<p>קבצים <b>חדשים</b> לא חוזרים עם <code>git checkout .</code>. מוחקים אותם ידנית, או עם <code>git clean -fd</code>, שמוחק <b>לצמיתות</b> כל קובץ שלא נמצא ב־git, אז קודם מסתכלים ב־<code>git clean -n</code> מה הוא היה מוחק.</p>
+</div></section>
+
+<!-- ============================ 20 PRACTICE ============================ -->
+<section class="topic" id="t20" data-title="תרגול תחת שעון">
+<div class="topic-head"><div class="n">20</div><h2>תרגול תחת שעון — בדיוק כמו במבחן</h2><label class="done-toggle"><input type="checkbox" data-done="t20"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
+<div class="topic-body">
+<p>במבחן מקבלים משימה קטנה ועושים אותה בפרויקט האמיתי, בלי AI, עם האתר הזה. כאן מתרגלים בדיוק את זה: משימה אקראית, שעון, ופתרון מוסתר. כל תרגול נשמר בדפדפן, אז רואים התקדמות.</p>
+<div class="callout exam"><b>איך מתרגלים</b>
+<ol>
+<li>בוחרים רמה ולוחצים <b>"משימה חדשה"</b>. השעון מתחיל.</li>
+<li>עובדים ב־VS Code על הפרויקט המקומי. מותר הכול באתר (<kbd>Ctrl</kbd>+<kbd>K</kbd>, הקוד, ה־grep), חוץ מלפתוח את המתכון עצמו.</li>
+<li>תקועים? <b>רמז 1</b> מראה איפה, <b>רמז 2</b> מראה את השינוי. כל רמז נספר.</li>
+<li>כשזה עובד: טסטים, <code>git diff</code>, ולוחצים <b>"סיימתי"</b>.</li>
+<li>מחזירים את הקוד למצב נקי: <code>git checkout .</code> (וקבצים חדשים מוחקים).</li>
+</ol></div>
+
+<div class="practice" id="practice">
+  <div class="pr-controls">
+    <div class="seg" id="prLevel" role="group" aria-label="רמה">
+      <button type="button" data-level="all" aria-pressed="true">הכול</button>
+      <button type="button" data-level="easy" aria-pressed="false">קל</button>
+      <button type="button" data-level="med" aria-pressed="false">בינוני</button>
+      <button type="button" data-level="hard" aria-pressed="false">מתקדם</button>
+    </div>
+    <button class="btn primary" type="button" id="prNew">משימה חדשה ▸</button>
+  </div>
+
+  <div class="pr-task" id="prTask" hidden>
+    <div class="pr-head">
+      <span class="tag" id="prTag"></span>
+      <span class="pr-timer" id="prTimer" aria-live="off">00:00</span>
+      <span class="pr-target" id="prTarget"></span>
+    </div>
+    <div class="pr-meter" aria-hidden="true"><i id="prBar"></i></div>
+    <p class="pr-ask">הבוחן מבקש:</p>
+    <h3 class="pr-title" id="prTitle"></h3>
+    <p class="pr-brief">בצע את השינוי בפרויקט, הראה שהוא עובד, ותגיד מה עוד הוא משפיע עליו.</p>
+    <div class="pr-actions">
+      <button class="btn" type="button" id="prHint1">רמז 1: איפה?</button>
+      <button class="btn" type="button" id="prHint2">רמז 2: מה משנים?</button>
+      <button class="btn" type="button" id="prSolve">הצג פתרון מלא</button>
+      <span class="grow"></span>
+      <button class="btn primary" type="button" id="prDone">✓ סיימתי</button>
+      <button class="btn" type="button" id="prSkip">דלג</button>
+    </div>
+    <div class="pr-hints" id="prHints"></div>
+    <div class="pr-check">
+      <b>לפני שלוחצים "סיימתי":</b>
+      <label><input type="checkbox"> מצאתי את <b>כל</b> המקומות (grep לערך עצמו, בלקוח ובשרת)</label>
+      <label><input type="checkbox"> אימתתי בדפדפן / curl / DevTools</label>
+      <label><input type="checkbox"> הרצתי את הטסטים הרלוונטיים</label>
+      <label><input type="checkbox"> <code>git diff</code> מראה רק את מה שהתכוונתי</label>
+      <label><input type="checkbox"> יודע להסביר מה עוד מושפע (דוקר, טסט, מקום כפול)</label>
+    </div>
+  </div>
+
+  <div class="pr-history" id="prHistory"></div>
+</div>
+
+<h3>איך מסבירים לבוחן (30 שניות)</h3>
+<ol>
+<li><b>איפה:</b> "השינוי בשכבת ה־service, ב־<code>cases_service.py</code>, כי הכלל צריך לחול גם על…"</li>
+<li><b>מה עוד:</b> "הערך הזה מופיע גם בלקוח (<code>NewCase.tsx</code>), אז עדכנתי גם שם, אחרת הטופס והשרת לא מסכימים."</li>
+<li><b>הוכחה:</b> "בדקתי עם curl, קיבלתי 400 עם ההודעה החדשה, והטסטים עוברים."</li>
+<li><b>מה צריך לדעת:</b> "בדוקר צריך <code>--build</code>, ותיקים קיימים לא משתנים כי הערך כבר כתוב בשורה."</li>
+</ol>
+</div></section>
+
 </div></main>
 </div>
 <footer class="site-foot">
@@ -1976,7 +2161,9 @@ npm install</code></pre>
 <script src="assets/data/code-index.js?v=6d5cd3087c"></script>
 <script src="assets/js/diagrams.js?v=3c99f4aa60"></script>
 <script src="assets/js/core.js?v=fbbd8be7c5"></script>
-<script src="assets/js/code-viewer.js?v=00f3728536"></script>
-<script src="assets/js/palette.js?v=1e8ced01ab"></script>
+<script src="assets/js/code-viewer.js?v=25b85199d0"></script>
+<script src="assets/js/palette.js?v=d87ad9556c"></script>
+<script src="assets/js/practice.js?v=9b00526017"></script>
+<script src="assets/js/offline.js?v=19f03362a7"></script>
 </body>
 </html>

@@ -79,23 +79,38 @@ def build() -> str:
     return ASSET.sub(version, html)
 
 
+def service_worker(html: str) -> str:
+    """src/sw.js with the list of files to keep offline and a version that changes with them."""
+    index_js = (ROOT / "assets" / "data" / "code-index.js").read_text(encoding="utf-8")
+    commit = re.search(r'"commit":"(\w+)"', index_js).group(1)
+    viewer = (ROOT / "assets" / "js" / "code-viewer.js").read_text(encoding="utf-8")
+    hljs = re.search(r'HLJS_URL = "([^"]+)"', viewer).group(1)
+    assets = sorted(set(re.findall(r'(?:src|href)="(assets/[^"]+\?v=\w+)"', html)))
+    precache = ["index.html", "manifest.webmanifest", *assets, f"assets/data/code.js?v={commit}", hljs]
+    version = hashlib.sha256((html + "\n".join(precache)).encode("utf-8")).hexdigest()[:12]
+    template = (SRC / "sw.js").read_text(encoding="utf-8")
+    return template.replace("@VERSION@", version).replace("@PRECACHE@", json.dumps(precache, indent=2))
+
+
 def main() -> int:
     html = build()
     problems = check_refs(html)
     if problems:
         print("broken code references:\n  " + "\n  ".join(problems))
         return 1
-    out = ROOT / "index.html"
+    sw = service_worker(html)
+    outputs = {ROOT / "index.html": html, ROOT / "sw.js": sw}
     if "--check" in sys.argv:
-        current = out.read_text(encoding="utf-8") if out.exists() else ""
-        if current != html:
-            print("index.html is out of date: run python tools/build.py")
+        stale = [p.name for p, text in outputs.items() if (p.read_text(encoding="utf-8") if p.exists() else "") != text]
+        if stale:
+            print(f"{', '.join(stale)} out of date: run python tools/build.py")
             return 1
-        print("index.html is up to date")
+        print("index.html and sw.js are up to date")
         return 0
-    out.write_text(html, encoding="utf-8", newline="\n")
+    for path, text in outputs.items():
+        path.write_text(text, encoding="utf-8", newline="\n")
     topics = len(list((SRC / "topics").glob("*.html")))
-    print(f"index.html: {len(html) // 1024} KB from {topics} topics, all code references resolve")
+    print(f"index.html: {len(html) // 1024} KB from {topics} topics, all code references resolve; sw.js written")
     return 0
 
 

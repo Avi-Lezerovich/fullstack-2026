@@ -91,7 +91,8 @@
         '<a class="btn cp-gh" target="_blank" rel="noopener">GitHub ↗</a>' +
         '<span class="cp-find"><input class="search" type="search" placeholder="חיפוש בקובץ (Enter = הבא)" aria-label="חיפוש בקובץ"><span class="cp-find-info"></span></span>' +
       '</div>' +
-      '<div class="cp-code" tabindex="0"><div class="cp-empty">טוען קוד…</div></div>' +
+      '<div class="cp-usage" aria-live="polite"><span class="cp-usage-hint">טיפ: לחיצה על שם בקוד (פונקציה, קבוע, משתנה) מראה איפה עוד משתמשים בו</span></div>' +
+      '<div class="cp-code" tabindex="0" title="לחיצה על שם: איפה עוד משתמשים בו"><div class="cp-empty">טוען קוד…</div></div>' +
     '</div>' +
     '<div class="cp-view" data-view="files" hidden>' +
       '<input class="search cp-filter" type="search" placeholder="סינון קבצים, למשל NewCase או api/cases" aria-label="סינון קבצים">' +
@@ -170,11 +171,13 @@
     if (cur.line) { $(".cp-inner", codeBox).appendChild(band("cp-band", cur.line, cur.end)); scrollToLine(cur.line); }
     ghEl.href = IDX.repo + "/blob/" + IDX.commit + "/" + cur.path + (cur.line ? "#L" + cur.line + (cur.end > cur.line ? "-L" + cur.end : "") : "");
   }
-  function openFile(path, line, end) {
+  // `term` (optional) is highlighted on every line it appears on, e.g. the grep query.
+  function openFile(path, line, end, term) {
     openPane("file");
     cur.path = path;
     pathEl.textContent = path + (line ? ":" + line : "");
     findIn.value = ""; findInfo.textContent = "";
+    resetUsage();
     codeBox.innerHTML = '<div class="cp-empty">טוען קוד…</div>';
     withCode(function () {
       if (cur.path !== path) return;
@@ -190,16 +193,60 @@
         '</div><pre class="cp-src"><code class="hljs">' + (html || esc(text)) + "</code></pre></div>";
       setLine(line, end);
       if (!line) codeBox.scrollTop = 0;
+      if (term) { findIn.value = term; runFind(line); }
     });
   }
   codeBox.addEventListener("click", function (e) {
     var ln = e.target.closest && e.target.closest("[data-ln]");
-    if (!ln) return;
-    var n = Number(ln.dataset.ln);
-    setLine(n, n);
-    pathEl.textContent = cur.path + ":" + n;
-    copy(cur.path + ":" + n);
+    if (ln) {
+      var n = Number(ln.dataset.ln);
+      setLine(n, n);
+      pathEl.textContent = cur.path + ":" + n;
+      copy(cur.path + ":" + n);
+      return;
+    }
+    if (e.target.closest && e.target.closest(".cp-src") && !String(window.getSelection() || "")) showUsage(wordAt(e));
   });
+
+  /* find usages: click a name in the code */
+  var usageBar = $(".cp-usage", pane), usageHint = usageBar.innerHTML;
+  function resetUsage() { usageBar.innerHTML = usageHint; usageBar.classList.remove("on"); }
+  function wordAt(e) {
+    var node = null, off = 0;
+    if (document.caretRangeFromPoint) {
+      var r = document.caretRangeFromPoint(e.clientX, e.clientY);
+      if (r) { node = r.startContainer; off = r.startOffset; }
+    } else if (document.caretPositionFromPoint) {
+      var p = document.caretPositionFromPoint(e.clientX, e.clientY);
+      if (p) { node = p.offsetNode; off = p.offset; }
+    }
+    if (!node || node.nodeType !== 3) return "";
+    var t = node.nodeValue, a = off, b = off;
+    while (a > 0 && /\w/.test(t[a - 1])) a--;
+    while (b < t.length && /\w/.test(t[b])) b++;
+    return t.slice(a, b);
+  }
+  function showUsage(word) {
+    if (!word || word.length < 3 || /^\d/.test(word) || !CODE) { resetUsage(); return; }
+    var rx = new RegExp("\\b" + word + "\\b"), uses = 0, files = 0;
+    ORDERED.forEach(function (f) {
+      var hits = (CODE[f] || "").split("\n").filter(function (l) { return rx.test(l); }).length;
+      if (hits) { uses += hits; files++; }
+    });
+    var d = defOf(word);
+    usageBar.innerHTML = '<code class="cp-uword">' + esc(word) + "</code>" +
+      '<span class="cp-ucount">' + uses + " שורות ב־" + files + " קבצים</span>" +
+      (d ? '<button class="btn" type="button" data-u="def">הגדרה: ' + esc(d[2].split("/").pop() + ":" + d[3]) + "</button>" : "") +
+      '<button class="btn primary" type="button" data-u="all">הצג את כל השימושים</button>' +
+      '<button class="btn" type="button" data-u="x" aria-label="סגור">✕</button>';
+    usageBar.classList.add("on");
+    usageBar.onclick = function (ev) {
+      var b = ev.target.closest("[data-u]"); if (!b) return;
+      if (b.dataset.u === "def") openFile(d[2], d[3], d[3], word);
+      else if (b.dataset.u === "all") openGrep("\\b" + word + "\\b", { regex: true, caseSensitive: true });
+      else resetUsage();
+    };
+  }
   $(".cp-copy", pane).addEventListener("click", function () {
     if (cur.path) copy(cur.path + (cur.line ? ":" + cur.line : ""));
   });
@@ -215,7 +262,8 @@
 
   /* in-file find */
   var finds = [], findAt = -1;
-  function runFind() {
+  // preferLine: start on that match (opening a grep result) instead of the first one
+  function runFind(preferLine) {
     $$(".cp-hit", codeBox).forEach(function (b) { b.remove(); });
     finds = []; findAt = -1;
     var q = findIn.value.toLowerCase(), inner = $(".cp-inner", codeBox);
@@ -223,6 +271,8 @@
     CODE[cur.path].split("\n").forEach(function (l, i) {
       if (l.toLowerCase().indexOf(q) >= 0) { finds.push(i + 1); inner.appendChild(band("cp-hit", i + 1, i + 1)); }
     });
+    var at = typeof preferLine === "number" ? finds.indexOf(preferLine) : -1;
+    findAt = at > 0 ? at - 1 : -1;
     stepFind(1);
   }
   function stepFind(dir) {
@@ -308,9 +358,19 @@
   gres.addEventListener("click", function (e) {
     var b = e.target.closest("[data-open]"); if (!b) return;
     var n = Number(b.dataset.ln || 0);
-    openFile(b.dataset.open, n, n);
+    // highlight what was searched for; a regex query is reduced to its literal part (\bNAME\b -> NAME)
+    var term = $(".cp-regex", pane).checked ? gq.value.replace(/\\b/g, "") : gq.value;
+    openFile(b.dataset.open, n, n, /^[\w֐-׿ .-]+$/.test(term) ? term : "");
   });
-  function openGrep(q) { openPane("grep"); gq.value = q; runGrep(); }
+  // opts.regex / opts.caseSensitive set the checkboxes; a plain call clears them
+  function openGrep(q, opts) {
+    opts = opts || {};
+    openPane("grep");
+    $(".cp-regex", pane).checked = !!opts.regex;
+    $(".cp-case", pane).checked = !!opts.caseSensitive;
+    gq.value = q;
+    runGrep();
+  }
 
   /* ---------- link every file and symbol mention in the guide to the code ---------- */
   var PATH_RX = /^([\w.\/-]+\.(?:py|tsx?|sql|ya?ml|template|sh|md|txt|ini|json|html)|Makefile|\.env\.example)(?::(\d+)(?:[–-](\d+))?)?$/;
