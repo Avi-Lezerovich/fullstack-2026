@@ -25,7 +25,7 @@
   <img class="seal-img" src="assets/lolsuit-seal.svg" alt="" width="36" height="36">
   <div class="name">LolSuit<small>מדריך למבחן · Full Stack RUNI 2026</small></div>
   <div class="grow"></div>
-  <div class="status"><span class="chip" id="progChip">הוגשה · 0/16</span><span class="meter" aria-hidden="true"><i id="progBar"></i></span></div>
+  <div class="status"><span class="chip" id="progChip">הוגשה · 0/17</span><span class="meter" aria-hidden="true"><i id="progBar"></i></span></div>
   <button class="iconbtn" id="themeBtn" type="button" title="מצב כהה/בהיר" aria-label="החלפת מצב כהה/בהיר">◐</button>
 </header>
 <div class="layout">
@@ -1288,6 +1288,168 @@ curl -s localhost:5002/api/health</code></pre></div>
 </div></section>
 
 
+
+<!-- ============================ 17 COMMANDS ============================ -->
+<section class="topic" id="t17" data-title="פקודות הרצה ושחרור">
+<div class="topic-head"><div class="n">17</div><h2>פקודות — הרצה, בדיקות, git ושחרור (Windows 11)</h2><label class="done-toggle"><input type="checkbox" data-done="t17"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
+<div class="topic-body">
+<p>כל הפקודות במקום אחד, מותאמות ל־Windows 11 ול־PowerShell. כל בלוק קוד עם כפתור "העתק". נתיב הפרויקט: <code>C:\Users\lzr\Documents\GitHub\fullstack-2026</code></p>
+<h3>1. הרצה יומיומית (הדרך המהירה)</h3>
+    <p>קודם כל: להפעיל <b>Docker Desktop</b> ולחכות שיהיה ירוק. אחר כך <b>3 טרמינלים</b>, כולם מתיקיית הפרויקט.</p>
+    <p><b>טרמינל 1 - מסד נתונים (פעם אחת בכל הפעלה)</b></p>
+<pre><code>docker compose up -d db</code></pre>
+    <p><b>טרמינל 2 - שרת (פורט 5002)</b></p>
+<pre><code>cd server
+.venv\Scripts\activate
+python run.py</code></pre>
+    <p><b>טרמינל 3 - קליינט (פורט 5174)</b></p>
+<pre><code>cd client
+npm run dev</code></pre>
+    <p><b>טרמינל 4 (אופציונלי) - worker, רק כדי שמשפטים יתקדמו</b></p>
+<pre><code>cd server
+.venv\Scripts\activate
+python run_worker.py</code></pre>
+    <p>לפתוח: <code>http://localhost:5174</code></p>
+    <div class="callout gotcha"><b>אחרי שינוי בקבצי פייתון</b> חייבים להפעיל את השרת מחדש: <code>Ctrl+C</code> ואז <code>python run.py</code> (אין reload אוטומטי). בקליינט מספיק לשמור קובץ והדפדפן מתעדכן לבד.</div>
+
+<h3>2. משתמשי דמו</h3>
+    <div class="tablewrap"><table>
+      <tr><th>אימייל</th><th>תפקיד</th></tr>
+      <tr><td>admin@lolsuit.local</td><td>מנהל (תור אישורים)</td></tr>
+      <tr><td>dana@lolsuit.local</td><td>משתמש רגיל</td></tr>
+      <tr><td>yoni@lolsuit.local / maya@lolsuit.local</td><td>משתמש רגיל</td></tr>
+    </table></div>
+    <p>סיסמה לכולם: <code>demo1234</code></p>
+    <p><b>יצירת משתמשי הדמו (בטוח להריץ שוב)</b></p>
+<pre><code>cd server
+.venv\Scripts\activate
+python -m app.seed</code></pre>
+    <p><b>כדי שמשפט יתקדם תוך דקות ולא ימים: להוסיף ל-.env ולהפעיל מחדש שרת ו-worker</b></p>
+<pre><code>PHASE_MINUTES=2</code></pre>
+
+<h3>3. הכול בדוקר (כמו בייצור, איטי יותר)</h3>
+    <p><b>להרים הכול - אתר ב-http://localhost:8080</b></p>
+<pre><code>docker compose up --build -d</code></pre>
+    <p><b>לעצור הכול (הנתונים נשמרים)</b></p>
+<pre><code>docker compose down</code></pre>
+    <p><b>סטטוס קונטיינרים</b></p>
+<pre><code>docker compose ps</code></pre>
+    <p><b>לוגים (להחליף server ב-worker / web / db)</b></p>
+<pre><code>docker compose logs -f server</code></pre>
+    <p><b>אתחול שירות אחד</b></p>
+<pre><code>docker compose restart server</code></pre>
+    <p><b>איפוס מלא - מוחק את מסד הנתונים!</b></p>
+<pre><code>docker compose down -v</code></pre>
+    <div class="callout gotcha">אם מריצים את <b>כל</b> הסטאק בדוקר, השרת תופס את פורט 5002, ואז לא אפשר להריץ שרת מקומי. לעבודה מקומית עוצרים: <code>docker compose stop server worker web</code></div>
+
+<h3>4. בדיקות</h3>
+    <p><b>שרת (דורש שה-DB רץ)</b></p>
+<pre><code>cd server
+.venv\Scripts\activate
+python -m pytest --cov</code></pre>
+    <p><b>רק בדיקות יחידה (לא צריך DB)</b></p>
+<pre><code>python -m pytest -m unit</code></pre>
+    <p><b>קליינט - בדיקות ובדיקת טיפוסים</b></p>
+<pre><code>cd client
+npm test
+npm run lint</code></pre>
+
+<h3>5. Git - שמירה ושליחה</h3>
+    <p><b>מה השתנה</b></p>
+<pre><code>git status
+git diff</code></pre>
+    <p><b>ענף חדש ואז שמירה ושליחה</b></p>
+<pre><code>git switch -c feature/my-change
+git add .
+git commit -m "feat: describe the change"
+git push -u origin feature/my-change</code></pre>
+    <p><b>למשוך שינויים עדכניים</b></p>
+<pre><code>git switch main
+git pull</code></pre>
+    <p><b>לבטל שינויים בקובץ שעוד לא נשמר</b></p>
+<pre><code>git restore path/to/file</code></pre>
+
+<h3>6. גרסה - איך בודקים איזו גרסה יש</h3>
+    <p><b>כל הגרסאות (tags) לפי סדר</b></p>
+<pre><code>git tag --sort=-v:refname</code></pre>
+    <p><b>הגרסה האחרונה והמרחק ממנה</b></p>
+<pre><code>git describe --tags</code></pre>
+    <p><b>מה השתנה בכל גרסה (קובץ הפרויקט)</b></p>
+<pre><code>notepad CHANGELOG.md</code></pre>
+    <p><b>איזו גרסה רצה בדוקר מקומית</b></p>
+<pre><code>docker compose ps
+docker images</code></pre>
+    <p><b>בדיקת בריאות השרת</b></p>
+<pre><code>curl http://localhost:5002/api/health</code></pre>
+    <p>שימו לב: ב-<code>CHANGELOG.md</code> הגרסה האחרונה היא 5.0.0, אבל ה-tag האחרון בגיט הוא v4.0.0 ו-<code>client/package.json</code> אומר 3.4.0. הם לא מסונכרנים. ה-tag הוא מקור האמת לשחרור.</p>
+
+<h3>7. שחרור גרסה חדשה</h3>
+    <p>הזרימה: במחשב שלכם <b>בונים ודוחפים</b> אימג'ים ל-Docker Hub, ובשרת (EC2) <b>מושכים ומפעילים</b>. השרת אף פעם לא בונה.</p>
+    <p>פורמט גרסה: <code>vMAJOR.MINOR.PATCH</code> עם v בהתחלה, למשל <code>v5.0.1</code>. Major עולה כשצריך צעד נוסף חוץ ממשיכת אימג' (למשל migration).</p>
+    <div class="callout gotcha">את הסקריפטים מריצים ב-<b>Git Bash</b> (מותקן עם Git) או ב-WSL, לא ב-PowerShell. צריך Docker Desktop רץ ו-<code>docker login</code> לחשבון Docker Hub.</div>
+
+    <p><b>א. להתחבר ל-Docker Hub (פעם אחת)</b></p>
+<pre><code>docker login</code></pre>
+    <p><b>ב. הכול שמור ב-git? (השחרור מסרב לעבוד עם שינויים לא שמורים)</b></p>
+<pre><code>git status</code></pre>
+    <p><b>ג. הרצת ניסיון - מדפיס מה יקרה ולא בונה ולא דוחף כלום</b></p>
+<pre><code>./prod/release.sh v5.0.1 --dry-run</code></pre>
+    <p><b>ד. שחרור אמיתי + יצירת tag בגיט</b></p>
+<pre><code>./prod/release.sh v5.0.1 --git-tag</code></pre>
+    <p>זה מפרסם 4 תגיות: <code>lolsuit-server:v5.0.1</code>, <code>lolsuit-server:latest</code>, <code>lolsuit-web:v5.0.1</code>, <code>lolsuit-web:latest</code>.</p>
+
+    <div class="tablewrap"><table>
+      <tr><th>אפשרות</th><th>משמעות</th></tr>
+      <tr><td>--server-only</td><td>רק אימג' השרת</td></tr>
+      <tr><td>--web-only</td><td>רק אימג' הקליינט (תיקון בפרונט)</td></tr>
+      <tr><td>--no-latest</td><td>לא להזיז את latest</td></tr>
+      <tr><td>--git-tag</td><td>ליצור ולדחוף tag בגיט</td></tr>
+      <tr><td>--allow-dirty</td><td>לבנות גם עם שינויים לא שמורים</td></tr>
+      <tr><td>-n, --dry-run</td><td>רק להדפיס, לא לבצע</td></tr>
+    </table></div>
+
+    <p><b>ה. בשרת EC2 - להפעיל את הגרסה (מושך, מחליף, בודק health, ואם נכשל חוזר אוטומטית לגרסה הקודמת)</b></p>
+<pre><code>cd /opt/lolsuit/prod && ./deploy.sh v5.0.1</code></pre>
+    <p><b>חזרה לגרסה הקודמת ידנית (בשרת)</b></p>
+<pre><code>cd /opt/lolsuit/prod && ./deploy.sh --rollback</code></pre>
+    <p><b>בשרת: סטטוס ולוגים של ייצור</b></p>
+<pre><code>docker compose -f prod/docker-compose.yml ps
+docker compose -f prod/docker-compose.yml logs -f server</code></pre>
+    <div class="callout gotcha">אם הגרסה מוסיפה טבלה (migration), מריצים את ה-SQL מ-<code>prod/migrations/</code> <b>לפני</b> deploy. בלי זה האתר עולה ורק ה-worker נופל, בלי שגיאה ברורה. קחו snapshot קודם. פרטים ב-<code>CHANGELOG.md</code> וב-<code>prod/README.md</code>.</div>
+    <p>מה שכתוב כאן על השחרור והפריסה נלקח מהתיעוד ומהקוד של <code>release.sh</code> ו-<code>deploy.sh</code> (כולל <code>--rollback</code>). לא הרצתי שחרור או פריסה אמיתיים. עזרה מלאה: <code>./deploy.sh --help</code> ו-<code>./prod/release.sh --help</code>.</p>
+
+<h3>8. כשמשהו לא עובד</h3>
+    <div class="tablewrap"><table>
+      <tr><th>תסמין</th><th>פתרון</th></tr>
+      <tr><td>failed to connect to the docker API</td><td>Docker Desktop לא רץ. להפעיל ולחכות לירוק.</td></tr>
+      <tr><td>'node' / 'py' is not recognized</td><td>לסגור ולפתוח טרמינל מחדש (PATH).</td></tr>
+      <tr><td>activate נחסם (execution policy)</td><td>Set-ExecutionPolicy -Scope CurrentUser RemoteSigned</td></tr>
+      <tr><td>שרת: Access denied / לא מתחבר ל-DB</td><td>חסר <code>.env</code>. להריץ: <code>copy .env.example .env</code></td></tr>
+      <tr><td>port 5002 / 5174 already in use</td><td>תהליך ישן רץ. ראו הפקודה למטה.</td></tr>
+      <tr><td>הדף נטען אבל קריאות API נכשלות</td><td>השרת לא רץ, או שהוא קרס. לבדוק את טרמינל 2.</td></tr>
+      <tr><td>חסרות חבילות</td><td>pip install -r requirements-dev.txt / npm install</td></tr>
+    </table></div>
+    <p><b>לעצור תהליך שתופס פורט (להחליף 5002 בפורט הרלוונטי) - PowerShell</b></p>
+<pre><code>Get-NetTCPConnection -LocalPort 5002 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }</code></pre>
+    <p><b>יצירת .env אם חסר</b></p>
+<pre><code>copy .env.example .env</code></pre>
+
+<h3>9. התקנה מאפס (אם המחשב מתאפס שוב)</h3>
+    <pre><code>winget install Git.Git
+winget install Docker.DockerDesktop
+winget install OpenJS.NodeJS.LTS
+winget install Python.Python.3.12</code></pre>
+    <p><b>ואז, מתיקיית הפרויקט</b></p>
+<pre><code>copy .env.example .env
+docker compose up -d db
+cd server
+py -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements-dev.txt
+python -m app.seed
+cd ..\client
+npm install</code></pre>
+</div></section>
 
 </div></main>
 </div>
