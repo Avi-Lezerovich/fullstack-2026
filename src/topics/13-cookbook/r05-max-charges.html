@@ -1,0 +1,13 @@
+<!-- R5 -->
+<details class="recipe" id="r5"><summary><span class="tag easy">קל</span> 5. מקסימום סעיפי אישום 3 (במקום 5)</summary><div class="in">
+<span class="rlabel">קבצים</span><ul><li><code>server/app/services/cases_service.py:21</code> — <code>MAX_CHARGES = 5</code> (נאכף ב־<code>clean_charges</code>: חותך, לא דוחה)</li><li><code>client/src/pages/NewCase.tsx:121</code> — <code>setCharges(value.slice(0, 5))</code></li><li><code>client/src/pages/NewCase.tsx:128</code> — <code>helperText="עד חמישה סעיפים"</code></li></ul>
+<pre><code><span class="del">-MAX_CHARGES = 5</span>
+<span class="add">+MAX_CHARGES = 3</span>
+<span class="c">// NewCase.tsx</span>
+<span class="del">-          onChange={(_, value) =&gt; setCharges(value.slice(0, 5))}</span>
+<span class="add">+          onChange={(_, value) =&gt; setCharges(value.slice(0, 3))}</span>
+<span class="del">-            &lt;TextField {...params} label="סעיפי האישום" helperText="עד חמישה סעיפים" /&gt;</span>
+<span class="add">+            &lt;TextField {...params} label="סעיפי האישום" helperText="עד שלושה סעיפים" /&gt;</span></code></pre>
+<span class="rlabel">אימות</span><p>הגש תביעה עם 5 סעיפים ב־curl → בתשובה <code>charges</code> יש רק 3. בטופס — לא ניתן לבחור יותר מ־3.</p>
+<span class="rlabel">מה יכול להישבר</span><p>טסט שבודק 5 סעיפים (<code>grep -rn "MAX_CHARGES\|charges" server/tests | head</code>). תביעות בוטים: <code>LAWSUIT_SCHEMA</code> כבר מגביל 1–3.</p>
+</div></details>

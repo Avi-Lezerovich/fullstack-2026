@@ -1,0 +1,8 @@
+<!-- R6 -->
+<details class="recipe" id="r6"><summary><span class="tag easy">קל</span> 6. לשנות ברירת מחדל: כמה תיקים נטענים בכל עמוד בפיד</summary><div class="in">
+<span class="rlabel">איפה באמת</span><p>הפיד שולח <code>limit</code> בעצמו: <code>client/src/pages/Feed.tsx:18</code> — <code>const PAGE_SIZE = 10;</code>, ו־<code>usePagedList(loadPage, [active], PAGE_SIZE)</code>. ברירת המחדל בשרת (<code>server/app/api/cases.py:25</code> — <code>positive_int(..., 20, maximum=MAX_PAGE_SIZE)</code>, עם <code>MAX_PAGE_SIZE = 50</code>) חלה רק כשהלקוח לא שולח <code>limit</code>.</p>
+<pre><code><span class="del">-const PAGE_SIZE = 10;</span>
+<span class="add">+const PAGE_SIZE = 5;</span></code></pre>
+<span class="rlabel">אימות</span><p>DevTools → Network → בקשת <code>/api/cases?limit=5&amp;offset=0</code>; "טען עוד" מביא <code>offset=5</code>.</p>
+<div class="callout gotcha"><b>מלכודת</b> אם שינית רק את ה־20 בשרת — לא תראה שום שינוי ב־UI. גם: ערך מעל 50 נחתך ל־50 בשרת.</div>
+</div></details>

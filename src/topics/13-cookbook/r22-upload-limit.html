@@ -1,0 +1,12 @@
+<!-- R22 -->
+<details class="recipe" id="r22"><summary><span class="tag easy">קל</span> 22. לשנות את מגבלת גודל ההעלאה (5MB)</summary><div class="in">
+<span class="rlabel">קבצים</span><ul><li><code>server/app/config.py:419</code>: <code>_int("UPLOAD_MAX_BYTES", 5 * 1024 * 1024)</code></li><li><code>client/nginx.conf.template:91</code>: <code>client_max_body_size 6m;</code> (רק בדוקר / פרודקשן)</li></ul>
+<pre><code><span class="c"># config.py</span>
+<span class="del">-        upload_max_bytes=_int("UPLOAD_MAX_BYTES", 5 * 1024 * 1024),</span>
+<span class="add">+        upload_max_bytes=_int("UPLOAD_MAX_BYTES", 2 * 1024 * 1024),</span>
+<span class="c"># nginx.conf.template (only needed when RAISING the limit)</span>
+<span class="del">-      client_max_body_size 6m;</span>
+<span class="add">+      client_max_body_size 11m;</span></code></pre>
+<span class="rlabel">אימות</span><p>מעלים קובץ גדול מהמגבלה ומקבלים 400 "הקובץ גדול מדי. המגבלה היא 2 מגה-בייט." ההודעה מחושבת מהקבוע (<code>server/app/api/uploads.py:90</code>), וגם <code>MAX_CONTENT_LENGTH</code> נגזר ממנו לבד (<code>server/app/__init__.py:31</code>).</p>
+<span class="rlabel">מה יכול להישבר / מה לומר</span><ul><li><code>UPLOAD_MAX_BYTES</code> <b>לא</b> מועבר ב־<code>docker-compose.yml</code>, ולכן ערך ב־<code>.env</code> לא יגיע לשרת בדוקר. משנים את ברירת המחדל בקוד או מוסיפים אותו ל־<code>environment</code> של server.</li><li>מגדילים מעל 6MB ושוכחים את nginx? בדוקר תקבלו 413 מ־nginx לפני שהבקשה מגיעה ל־Flask. אחרי השינוי: <code>docker compose up --build -d web</code>.</li></ul>
+</div></details>

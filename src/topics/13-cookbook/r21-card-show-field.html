@@ -1,0 +1,19 @@
+<!-- R21 -->
+<details class="recipe" id="r21"><summary><span class="tag easy">קל</span> 21. להציג בכרטיס בפיד מידע שכבר קיים (למשל פסק הדין)</summary><div class="in">
+<span class="rlabel">הרעיון</span><p>ה־API כבר מחזיר את כל שדות התיק (ראו <code>Case</code> ב־<code>client/src/types.ts:71</code>: <code>verdict</code>, <code>follow_count</code>, <code>filed_at</code>…). מספיק לשנות את ה־JSX, בלי שרת ובלי DB.</p>
+<span class="rlabel">קובץ</span><p><code>client/src/components/feed/CaseCard.tsx</code>: import בשורה 18, והתוספת אחרי שורת "נגד …" (בערך שורה 70).</p>
+<pre><code><span class="del">-import type { Case } from "../../types";</span>
+<span class="add">+import { VERDICT_LABELS, type Case } from "../../types";</span>
+ ...
+               &lt;Typography variant="caption" color="text.secondary" display="block"&gt;
+                 נגד &lt;strong&gt;{c.defendant_text}&lt;/strong&gt;
+               &lt;/Typography&gt;
+<span class="add">+              {c.verdict &amp;&amp; (</span>
+<span class="add">+                &lt;Typography variant="caption" display="block"</span>
+<span class="add">+                  color={c.verdict === "guilty" ? "error.main" : "success.main"}&gt;</span>
+<span class="add">+                  פסק דין: &lt;strong&gt;{VERDICT_LABELS[c.verdict]}&lt;/strong&gt;</span>
+<span class="add">+                &lt;/Typography&gt;</span>
+<span class="add">+              )}</span></code></pre>
+<span class="rlabel">אימות</span><p>לשונית "הוכרעו" בפיד: לכל כרטיס יש שורת פסק דין. אחרי זה <code>npm run lint</code> ו־<code>npx vitest run src/components/feed/CaseCard.test.tsx</code>.</p>
+<span class="rlabel">מה יכול להישבר</span><p>import של משהו שלא משתמשים בו שובר את ה־lint. שדה שה־API <b>לא</b> מחזיר דורש עבודה מקצה לקצה (מתכון 11).</p>
+</div></details>

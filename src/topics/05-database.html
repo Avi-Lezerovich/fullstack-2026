@@ -1,0 +1,98 @@
+<!-- ============================ 5 DATABASE ============================ -->
+<section class="topic" id="t5" data-title="Database">
+<div class="topic-head"><div class="n">5</div><h2>Database — סכמה, קשרים, migrations, seed</h2><label class="done-toggle"><input type="checkbox" data-done="t5"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
+<div class="topic-body">
+<p>MySQL 8, InnoDB, <code>utf8mb4</code>. קובץ אמת אחד: <code>database/init.sql</code> — <b>24 טבלאות</b>, כולן <code>CREATE TABLE IF NOT EXISTS</code>, בלי triggers/procedures/<code>DELIMITER</code> (הטסטים מריצים את הקובץ עצמו). כל timestamp הוא <code>DATETIME</code> ב־UTC נאיבי שנכתב ע"י <code>UTC_TIMESTAMP()</code>.</p>
+
+<figure>
+<div class="fig-scroll"><svg class="dg" viewBox="0 0 1000 600" role="img" aria-label="תרשים ER מפושט של הטבלאות המרכזיות: users במרכז, cases, comments, jury, notifications, messages ו־agent_events">
+  <!-- col A -->
+  <rect class="box" x="20" y="30" width="190" height="62" rx="8"/><text x="115" y="52" text-anchor="middle" class="b">sessions</text><text x="115" y="70" text-anchor="middle" class="sm">user_id FK · token_hash UK</text><text x="115" y="85" text-anchor="middle" class="sm">expires_at</text>
+  <rect class="box" x="20" y="170" width="190" height="62" rx="8"/><text x="115" y="192" text-anchor="middle" class="b">conversations</text><text x="115" y="210" text-anchor="middle" class="sm">user_a_id &lt; user_b_id</text><text x="115" y="225" text-anchor="middle" class="sm">uq_conv_pair</text>
+  <rect class="box" x="20" y="300" width="190" height="56" rx="8"/><text x="115" y="322" text-anchor="middle" class="b">messages</text><text x="115" y="341" text-anchor="middle" class="sm">conversation_id · sender_id</text>
+  <rect class="box" x="20" y="430" width="190" height="62" rx="8"/><text x="115" y="452" text-anchor="middle" class="b">notifications</text><text x="115" y="470" text-anchor="middle" class="sm">id PK = SSE cursor</text><text x="115" y="485" text-anchor="middle" class="sm">user_id · type · payload JSON</text>
+  <!-- col B -->
+  <rect class="box gold" x="270" y="30" width="200" height="70" rx="8"/><text x="370" y="52" text-anchor="middle" class="b">agents</text><text x="370" y="70" text-anchor="middle" class="sm">user_id PK+FK · role</text><text x="370" y="86" text-anchor="middle" class="sm">guilt_bias · tiebreak_lean</text>
+  <rect class="box acc" x="270" y="200" width="200" height="110" rx="8"/><text x="370" y="224" text-anchor="middle" class="b">users</text><text x="370" y="244" text-anchor="middle" class="sm">id PK · email UK</text><text x="370" y="262" text-anchor="middle" class="sm">password_hash · bio · avatar_url</text><text x="370" y="280" text-anchor="middle" class="sm">is_admin · is_bot</text><text x="370" y="298" text-anchor="middle" class="sm">status active|banned</text>
+  <rect class="box" x="270" y="380" width="200" height="62" rx="8"/><text x="370" y="402" text-anchor="middle" class="b">agent_events</text><text x="370" y="420" text-anchor="middle" class="sm">episodes · importance 1–5</text><text x="370" y="435" text-anchor="middle" class="sm">dedupe_key UK</text>
+  <rect class="box dash" x="270" y="490" width="200" height="56" rx="8"/><text x="370" y="512" text-anchor="middle" class="b">agent_memories</text><text x="370" y="531" text-anchor="middle" class="sm">cache over agent_events</text>
+  <!-- col C -->
+  <rect class="box" x="540" y="90" width="200" height="72" rx="8"/><text x="640" y="112" text-anchor="middle" class="b">likes · case_follows</text><text x="640" y="130" text-anchor="middle" class="sm">PK (case_id, user_id)</text><text x="640" y="147" text-anchor="middle" class="sm">= one per user per case</text>
+  <rect class="box acc" x="540" y="230" width="200" height="110" rx="8"/><text x="640" y="254" text-anchor="middle" class="b">cases</text><text x="640" y="274" text-anchor="middle" class="sm">author_id FK</text><text x="640" y="292" text-anchor="middle" class="sm">defendant_user_id (no FK!)</text><text x="640" y="310" text-anchor="middle" class="sm">status · phase_deadline_at</text><text x="640" y="328" text-anchor="middle" class="sm">verdict · moderation_status</text>
+  <rect class="box" x="540" y="400" width="200" height="80" rx="8"/><text x="640" y="422" text-anchor="middle" class="b">comments</text><text x="640" y="440" text-anchor="middle" class="sm">role: user | witness_testimony</text><text x="640" y="455" text-anchor="middle" class="sm">| jury_deliberation | verdict</text><text x="640" y="471" text-anchor="middle" class="sm">dedupe_key UK · parent/root</text>
+  <!-- col D -->
+  <rect class="box" x="790" y="30" width="190" height="56" rx="8"/><text x="885" y="52" text-anchor="middle" class="b">case_charges</text><text x="885" y="71" text-anchor="middle" class="sm">uq (case_id, charge)</text>
+  <rect class="box" x="790" y="150" width="190" height="62" rx="8"/><text x="885" y="172" text-anchor="middle" class="b">jury_panels</text><text x="885" y="190" text-anchor="middle" class="sm">case_id = PK (idempotent)</text><text x="885" y="205" text-anchor="middle" class="sm">judge_user_id · tally</text>
+  <rect class="box" x="790" y="270" width="190" height="72" rx="8"/><text x="885" y="292" text-anchor="middle" class="b">jury_panel_members</text><text x="885" y="310" text-anchor="middle" class="sm">seat · juror_user_id</text><text x="885" y="326" text-anchor="middle" class="sm">speaks_at · spoke_at · vote</text>
+  <rect class="box" x="790" y="400" width="190" height="62" rx="8"/><text x="885" y="422" text-anchor="middle" class="b">witness_summons</text><text x="885" y="440" text-anchor="middle" class="sm">side · status · deadline_at</text><text x="885" y="455" text-anchor="middle" class="sm">max 3 per side</text>
+  <rect class="box dash" x="540" y="520" width="440" height="56" rx="8"/><text x="760" y="541" text-anchor="middle" class="sm">also in init.sql, not drawn: brain_calls · worker_state · reports</text><text x="760" y="559" text-anchor="middle" class="sm">moderation_scans · moderation_actions · password_resets · case_activity · bot_memories</text>
+  <!-- relations -->
+  <line class="ln" x1="270" y1="235" x2="210" y2="70" /><text x="222" y="150" class="lbl">1:N</text>
+  <line class="ln" x1="270" y1="255" x2="210" y2="205"/><text x="225" y="220" class="lbl">1:N ×2</text>
+  <line class="ln" x1="115" y1="232" x2="115" y2="300"/><text x="122" y="270" class="lbl">1:N</text>
+  <line class="ln" x1="270" y1="295" x2="210" y2="455"/><text x="215" y="400" class="lbl">1:N</text>
+  <line class="ln acc" x1="370" y1="200" x2="370" y2="100"/><text x="377" y="150" class="lbl">1 : 0..1 (bot)</text>
+  <line class="ln" x1="370" y1="310" x2="370" y2="380"/><text x="377" y="350" class="lbl">1:N</text>
+  <line class="ln dash" x1="370" y1="442" x2="370" y2="490"/><text x="377" y="470" class="lbl">summarised into</text>
+  <line class="ln acc" x1="470" y1="265" x2="540" y2="265"/><text x="476" y="258" class="lbl">author 1:N</text>
+  <line class="ln dash" x1="470" y1="295" x2="540" y2="295"/><text x="472" y="312" class="lbl">defendant</text>
+  <line class="ln" x1="470" y1="215" x2="540" y2="140"/><text x="480" y="170" class="lbl">1:N</text>
+  <line class="ln" x1="640" y1="230" x2="640" y2="162"/><text x="647" y="200" class="lbl">1:N</text>
+  <line class="ln" x1="640" y1="340" x2="640" y2="400"/><text x="647" y="375" class="lbl">1:N</text>
+  <line class="ln" x1="470" y1="305" x2="540" y2="430"/><text x="482" y="385" class="lbl">author</text>
+  <line class="ln" x1="740" y1="245" x2="790" y2="70"/><text x="752" y="140" class="lbl">1:N</text>
+  <line class="ln acc" x1="740" y1="270" x2="790" y2="190"/><text x="748" y="222" class="lbl">1:0..1</text>
+  <line class="ln" x1="885" y1="212" x2="885" y2="270"/><text x="892" y="246" class="lbl">1:7</text>
+  <line class="ln" x1="740" y1="325" x2="790" y2="430"/><text x="752" y="390" class="lbl">1:N</text>
+  <path class="ln" d="M740,440 C780,440 780,470 740,470"/><text x="760" y="490" class="lbl">parent</text>
+</svg>
+</div>
+<figcaption>ER מפושט. <code>users</code> מייצג גם בני אדם וגם בוטים (בוט = users + שורה ב־<code>agents</code>). <code>comments</code> היא טבלה אחת לכל "מבע" בתיק — הבדל בתפקיד (<code>role</code>). הקו המקווקו ל־<code>defendant_user_id</code> מסמן עמודה עם index אך <b>בלי FK</b> (known issue D1). ה־ER המלא נמצא ב־<code>docs/database.md</code>.</figcaption>
+</figure>
+
+<details class="sub" open><summary>5.1 Invariants שהסכמה עצמה מחזיקה</summary><div class="in">
+<div class="tablewrap"><table><thead><tr><th>מפתח</th><th>מה מובטח</th></tr></thead><tbody>
+<tr><td><code>comments.dedupe_key</code> UNIQUE</td><td><b>פרימיטיב ה־crash-safety</b>: תוכן של בוט מקבל מפתח דטרמיניסטי (<code>jury:&lt;member_id&gt;</code>, <code>verdict:&lt;case_id&gt;</code>, <code>creply:&lt;reply_id&gt;</code>). worker שקרס אחרי ה־INSERT לא יפרסם עותק שני. תגובות אנושיות = NULL (מותר בלי הגבלה).</td></tr>
+<tr><td><code>jury_panels.case_id</code> PK</td><td>הושבת חבר מושבעים אידמפוטנטית — worker שני מקבל duplicate key ומבצע rollback.</td></tr>
+<tr><td><code>likes</code> / <code>case_follows</code> PK מורכב</td><td>לייק/מעקב אחד לכל משתמש לכל תיק.</td></tr>
+<tr><td><code>uq_reports_once</code></td><td>דיווח אחד לאדם לכל יעד.</td></tr>
+<tr><td><code>uq_conv_pair</code></td><td>שיחה אחת לכל זוג (ה־service ממיין <code>a &lt; b</code>).</td></tr>
+<tr><td><code>uq_event_dedupe</code></td><td>tick שחוזר לא כותב episode כפול.</td></tr>
+</tbody></table></div>
+<div class="callout gotcha"><b>שני כללים שהיו CHECK — וחיים ב־Python</b> "אי אפשר לתבוע את עצמך" (<code>cases_service.create_case</code>) ו־<code>user_a_id &lt; user_b_id</code> (<code>messages_service.conversation_for_pair</code>). MySQL 8 דוחה CHECK על עמודה ש־FK referential action כותב אליה (שגיאה 3823). מכוסה ב־<code>tests/unit/test_cases_rules.py</code>.</div>
+</div></details>
+
+<details class="sub" open><summary>5.2 מכונת המצבים של תיק (משפט)</summary><div class="in">
+<figure>
+<div class="fig-scroll"><svg class="dg" id="trialTimeline" viewBox="0 0 920 230" role="img" aria-label="ציר זמן של משפט: יום 0 עד 2 שלב עדים, 2 עד 6 דיוני מושבעים כשהמושבעים מדברים בין יום 2 ל־5, יום 6 פסק דין, יום 7 סגירה">
+  <line class="ln" x1="50" y1="100" x2="880" y2="100"/>
+  <g class="sm days">
+    <text x="60" y="122" text-anchor="middle">0</text><text x="174" y="122" text-anchor="middle">1</text><text x="288" y="122" text-anchor="middle">2</text><text x="402" y="122" text-anchor="middle">3</text><text x="516" y="122" text-anchor="middle">4</text><text x="630" y="122" text-anchor="middle">5</text><text x="744" y="122" text-anchor="middle">6</text><text x="858" y="122" text-anchor="middle">7</text>
+  </g>
+  <rect class="box acc" x="60" y="56" width="228" height="34" rx="6"/><text x="174" y="78" text-anchor="middle" class="b">witness_phase</text>
+  <rect class="box gold" x="288" y="56" width="456" height="34" rx="6"/><text x="516" y="78" text-anchor="middle" class="b">jury_deliberation</text>
+  <rect class="box ok" x="744" y="56" width="114" height="34" rx="6"/><text x="801" y="77" text-anchor="middle" class="lbl b">verdict_reached</text>
+  <text x="870" y="78" class="b">closed</text>
+  <rect class="box dash" x="300" y="22" width="320" height="26" rx="6"/><text x="460" y="40" text-anchor="middle" class="sm">jurors speak at speaks_at (5%–95% of days 2–5)</text>
+  <!-- triggers -->
+  <line class="ln acc" x1="60" y1="140" x2="60" y2="104"/><text x="60" y="158" text-anchor="middle" class="lbl">POST /api/cases</text><text x="60" y="173" text-anchor="middle" class="sm">create_case writes</text><text x="60" y="187" text-anchor="middle" class="sm">witness_phase</text>
+  <line class="ln acc" x1="288" y1="140" x2="288" y2="104"/><text x="288" y="158" text-anchor="middle" class="lbl">advance_witness_phase</text><text x="288" y="173" text-anchor="middle" class="sm">no-shows · select_panel</text><text x="288" y="187" text-anchor="middle" class="sm">7 jurors + judge</text>
+  <line class="ln acc" x1="516" y1="140" x2="516" y2="104"/><text x="516" y="158" text-anchor="middle" class="lbl">run_due_jurors</text><text x="516" y="173" text-anchor="middle" class="sm">speak_as_juror →</text><text x="516" y="187" text-anchor="middle" class="sm">brain.deliberate (vote+line)</text>
+  <line class="ln acc" x1="744" y1="140" x2="744" y2="104"/><text x="744" y="158" text-anchor="middle" class="lbl">advance_verdicts</text><text x="744" y="173" text-anchor="middle" class="sm">tally + judge tiebreak</text><text x="744" y="187" text-anchor="middle" class="sm">verdict + sentence</text>
+  <line class="ln acc" x1="858" y1="140" x2="858" y2="104"/><text x="858" y="158" text-anchor="middle" class="lbl">close_cases</text><text x="858" y="173" text-anchor="middle" class="sm">retire file</text>
+  <text x="50" y="218" class="sm">1 "day" = PHASE_MINUTES (1440 default; 2 → the whole trial takes 14 minutes). Constants: server/app/clock.py</text>
+</svg></div>
+<div class="fig-tools"><span class="seg" id="phaseSeg" role="group" aria-label="PHASE_MINUTES"><button type="button" data-pm="1440">1440 (ברירת מחדל)</button><button type="button" data-pm="60">60</button><button type="button" data-pm="2">2 (הדגמה)</button></span><span class="sim-out" id="phaseOut"></span></div>
+<figcaption>הסטטוסים: <code>filed → witness_phase → jury_deliberation → verdict_reached → closed</code>. בפועל <code>create_case</code> כותב ישר <code>witness_phase</code>; <code>filed</code> קיים ב־ENUM אבל אף קוד לא כותב אותו (רק <code>open_filed_cases</code> מטפל בשורה שהוכנסה ידנית).</figcaption>
+</figure>
+<p>קבועים ב־<code>server/app/clock.py</code>: <code>DAY_WITNESS_END = 2</code>, <code>DAY_DELIBERATION_START = 2</code>, <code>DAY_DELIBERATION_END = 5</code>, <code>DAY_VERDICT = 6</code>, <code>DAY_CLOSED = 7</code>. ה־worker מוצא תיקים לפי <code>idx_cases_due (status, phase_deadline_at)</code>.</p>
+</div></details>
+
+<details class="sub"><summary>5.3 Migrations ו־seed</summary><div class="in">
+<ul>
+<li><b>אין framework של migrations.</b> DB חדש מקבל את <code>init.sql</code> (כבר כולל הכל). <code>prod/migrations/001–004</code> מיועדים ל־RDS קיים עם נתונים: 001 agent_events/agent_memories, 002 case_follows/case_activity, 003 brain_calls, 004 <code>ALTER</code> ל־brain_calls (<b>לא אידמפוטנטי</b>).</li>
+<li><code>/docker-entrypoint-initdb.d</code> רץ <b>רק על volume ריק</b>. אחרי שינוי ב־<code>init.sql</code> מקומית: <code>docker compose down -v &amp;&amp; docker compose up --build</code> (מוחק את הנתונים!).</li>
+<li><b>Seed</b>: <code>python -m app.seed</code> (<code>server/app/seed.py</code>) — תהליך נפרד, <b>אידמפוטנטי</b> (מפתח טבעי: email / כותרת), לא מאפס סיסמה ששונתה. יוצר 31 בוטים מ־<code>seed_data.py</code>, admin, ו־dana/yoni/maya. כל הסיסמאות: <code>demo1234</code>.</li>
+</ul>
+</div></details>
+</div></section>

@@ -1,0 +1,11 @@
+<!-- R20 -->
+<details class="recipe" id="r20"><summary><span class="tag easy">קל</span> 20. לשנות את תדירות ה־worker (<code>TICK_SECONDS</code>)</summary><div class="in">
+<span class="rlabel">קבצים</span><ul><li><code>server/app/config.py:343</code>: <code>_int("TICK_SECONDS", 15)</code></li><li><code>docker-compose.yml:164</code>: <code>TICK_SECONDS: ${TICK_SECONDS:-15}</code> (רק ל־worker)</li></ul>
+<pre><code><span class="c"># הדרך הנקייה: .env</span>
+<span class="add">+TICK_SECONDS=5</span>
+<span class="c"># או שינוי ברירת המחדל, בשני המקומות</span>
+<span class="del">-      TICK_SECONDS: ${TICK_SECONDS:-15}</span>
+<span class="add">+      TICK_SECONDS: ${TICK_SECONDS:-5}</span></code></pre>
+<span class="rlabel">אימות</span><p><code>docker compose up -d worker</code> (או <code>make restart S=worker</code>). אחרי זה <code>curl localhost:5002/api/health</code> כמה פעמים, ו־<code>worker.tick_count</code> עולה מהר יותר. הלולאה עצמה: <code>server/worker/loop.py:223</code>.</p>
+<span class="rlabel">מה יכול להישבר / מה לומר</span><p>בדוקר, שינוי רק ב־<code>config.py</code> לא משפיע, כי compose מעביר 15. משימות תקופתיות נספרות ב־ticks (<code>SOCIAL_EVERY_TICKS=20</code>), אז tick מהיר יותר גם מאיץ את הבוטים. סף ה־"stale" בדף הניהול (<code>client/src/utils/adminOps.ts:9</code>, 120 שניות) וה־healthcheck ב־compose מניחים tick של 15 שניות.</p>
+</div></details>

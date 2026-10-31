@@ -1,0 +1,11 @@
+<!-- R17 -->
+<details class="recipe" id="r17"><summary><span class="tag easy">קל</span> 17. לשנות את סדר המיון של הפיד (למשל הישנים קודם, או הכי אהובים)</summary><div class="in">
+<span class="rlabel">קובץ</span><p><code>server/app/services/cases_service.py:403</code>, בתוך <code>list_cases</code>. המיון נעשה ב־SQL, לא בלקוח.</p>
+<pre><code><span class="c"># הישנים קודם</span>
+<span class="del">-            "ORDER BY c.created_at DESC, c.id DESC "</span>
+<span class="add">+            "ORDER BY c.created_at ASC, c.id ASC "</span>
+<span class="c"># הכי אהובים קודם (likes היא טבלה נפרדת: case_id, user_id)</span>
+<span class="add">+            "ORDER BY (SELECT COUNT(*) FROM likes l WHERE l.case_id = c.id) DESC, c.id DESC "</span></code></pre>
+<span class="rlabel">אימות</span><p><code>curl -s "localhost:5002/api/cases?limit=3"</code>, ובודקים את סדר ה־<code>created_at</code> / <code>like_count</code>. בפיד צריך לרענן.</p>
+<span class="rlabel">מה יכול להישבר / מה לומר</span><ul><li>תמיד משאירים שובר שוויון (<code>c.id</code>). אחרת ה־pagination (<code>LIMIT/OFFSET</code>) יכול להחזיר אותו תיק פעמיים או לדלג על תיק.</li><li>"הפיד שלי" ממוין בפונקציה אחרת (<code>list_followed_cases</code>, שורה 504), ויש לו טסט על הסדר: <code>server/tests/unit/test_feed_query.py:77</code>.</li><li>מיון לפי לייקים הוא subquery לכל שורה. בסדר בהיקף הזה, ובמערכת גדולה היו מוסיפים אינדקס או עמודה מצטברת.</li></ul>
+</div></details>

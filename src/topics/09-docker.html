@@ -1,0 +1,71 @@
+<!-- ============================ 9 DOCKER ============================ -->
+<section class="topic" id="t9" data-title="Docker / infra">
+<div class="topic-head"><div class="n">9</div><h2>Docker / infra — שירותים, פורטים, volumes</h2><label class="done-toggle"><input type="checkbox" data-done="t9"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
+<div class="topic-body">
+<figure>
+<div class="fig-scroll"><svg class="dg" viewBox="0 0 940 420" role="img" aria-label="טופולוגיית Docker: חמישה שירותים ברשת ברירת המחדל של compose, פורט 8080 ציבורי, 5002 ו־3307 על loopback, ו־volumes db-data ו־uploads">
+  <rect class="zone" x="10" y="10" width="920" height="400" rx="14"/><text x="24" y="32" class="sm">host (your laptop)</text>
+  <rect class="zone" x="30" y="60" width="700" height="300" rx="12"/><text x="44" y="352" class="sm">compose default network (service names = DNS: db, server, …)</text>
+  <!-- port tags -->
+  <rect class="box acc" x="50" y="40" width="170" height="26" rx="6"/><text x="135" y="58" text-anchor="middle" class="lbl">0.0.0.0:8080 → web:8080</text>
+  <rect class="box" x="290" y="40" width="170" height="26" rx="6"/><text x="375" y="58" text-anchor="middle" class="lbl">127.0.0.1:5002 → 5002</text>
+  <rect class="box" x="540" y="40" width="170" height="26" rx="6"/><text x="625" y="58" text-anchor="middle" class="lbl">127.0.0.1:3307 → 3306</text>
+  <!-- services -->
+  <rect class="box acc" x="55" y="110" width="160" height="70" rx="9"/><text x="135" y="134" text-anchor="middle" class="b">web</text><text x="135" y="152" text-anchor="middle" class="sm">lolsuit/web · nginx</text><text x="135" y="168" text-anchor="middle" class="sm">listens 8080</text>
+  <rect class="box acc" x="295" y="110" width="160" height="70" rx="9"/><text x="375" y="134" text-anchor="middle" class="b">server</text><text x="375" y="152" text-anchor="middle" class="sm">lolsuit/server</text><text x="375" y="168" text-anchor="middle" class="sm">gunicorn run:app :5002</text>
+  <rect class="box acc" x="295" y="250" width="160" height="70" rx="9"/><text x="375" y="274" text-anchor="middle" class="b">worker</text><text x="375" y="292" text-anchor="middle" class="sm">lolsuit/server</text><text x="375" y="308" text-anchor="middle" class="sm">python run_worker.py</text>
+  <rect class="box ok" x="545" y="110" width="160" height="70" rx="9"/><text x="625" y="134" text-anchor="middle" class="b">db</text><text x="625" y="152" text-anchor="middle" class="sm">mysql:8.0 · 3306</text><text x="625" y="168" text-anchor="middle" class="sm">healthcheck over TCP</text>
+  <rect class="box dash" x="545" y="250" width="160" height="70" rx="9"/><text x="625" y="274" text-anchor="middle" class="b">seed</text><text x="625" y="292" text-anchor="middle" class="sm">lolsuit/server</text><text x="625" y="308" text-anchor="middle" class="sm">python -m app.seed · exits 0</text>
+  <!-- volumes -->
+  <rect class="box gold" x="770" y="110" width="140" height="44" rx="20"/><text x="840" y="130" text-anchor="middle" class="b">db-data</text><text x="840" y="146" text-anchor="middle" class="sm">/var/lib/mysql</text>
+  <rect class="box gold" x="770" y="180" width="140" height="44" rx="20"/><text x="840" y="200" text-anchor="middle" class="b">uploads</text><text x="840" y="216" text-anchor="middle" class="sm">/app/uploads</text>
+  <rect class="box gold" x="770" y="250" width="140" height="58" rx="10"/><text x="840" y="270" text-anchor="middle" class="b">bind mount</text><text x="840" y="286" text-anchor="middle" class="sm">init.sql → /docker-</text><text x="840" y="300" text-anchor="middle" class="sm">entrypoint-initdb.d</text>
+  <!-- edges -->
+  <line class="ln" x1="135" y1="66" x2="135" y2="108" marker-end="url(#arw)"/>
+  <line class="ln" x1="375" y1="66" x2="375" y2="108" marker-end="url(#arw)"/>
+  <line class="ln" x1="625" y1="66" x2="625" y2="108" marker-end="url(#arw)"/>
+  <line class="ln acc" x1="215" y1="145" x2="293" y2="145" marker-end="url(#arwA)"/><text x="222" y="138" class="lbl">/api → server:5002</text>
+  <line class="ln" x1="455" y1="145" x2="543" y2="145" marker-end="url(#arw)"/><text x="478" y="138" class="lbl">SQL</text>
+  <line class="ln" x1="455" y1="285" x2="560" y2="182" marker-end="url(#arw)"/><text x="470" y="236" class="lbl">SQL</text>
+  <line class="ln dash" x1="625" y1="250" x2="625" y2="182" marker-end="url(#arw)"/><text x="632" y="222" class="lbl">upsert</text>
+  <line class="ln dash" x1="705" y1="132" x2="768" y2="132"/>
+  <path class="ln dash" d="M455,165 C600,210 700,202 768,202"/>
+  <line class="ln dash" x1="705" y1="160" x2="768" y2="270"/>
+  <text x="44" y="384" class="sm">start order (depends_on): db healthy → seed completed_successfully → server healthy → web ; seed → worker</text>
+  <text x="44" y="400" class="sm">worker healthcheck: worker_state.last_tick_at &lt; 120 s old · server image healthcheck: GET /api/health</text>
+</svg>
+</div>
+<figcaption>5 שירותים, 2 images. רק <code>web</code> ציבורי (8080); ה־API ו־MySQL קשורים ל־<code>127.0.0.1</code> בלבד — לדיבוג עם curl/pytest. אין <code>networks:</code> מוגדר — compose משתמש ברשת ברירת המחדל, ושמות השירותים הם ה־DNS (<code>DB_HOST: db</code>, <code>API_UPSTREAM: server:5002</code>).</figcaption>
+</figure>
+<details class="sub" open><summary>9.1 פרטים שחשוב לזכור</summary><div class="in">
+<ul>
+<li><b>server/worker/seed = אותו image</b> (<code>lolsuit/server:local</code>), 3 פקודות. ה־CMD של ה־image הוא gunicorn; compose דורס את ה־command ל־worker ול־seed.</li>
+<li><b>Server Dockerfile</b>: multi-stage (venv ב־<code>/opt/venv</code>), משתמש non-root <code>lolsuit</code> uid 1001, <code>/app/uploads</code> נוצר ב־image לפני ה־volume, healthcheck עם <code>urllib</code> (אין curl).</li>
+<li><b>Web Dockerfile</b>: node בונה <code>dist/</code> (<code>npm ci</code>, <code>npm run build</code> = <code>tsc -b &amp;&amp; vite build</code>), nginx unprivileged מגיש. <code>docker-entrypoint.sh</code> מרנדר <code>nginx.conf.template</code> עם <code>API_UPSTREAM</code>.</li>
+<li><b>nginx locations</b>: <code>= /api/notifications/stream</code> (<code>proxy_buffering off</code>, timeouts 3600s), <code>= /api/uploads</code> (<code>client_max_body_size 6m</code>), <code>/api/</code>, <code>/assets/</code> (cache שנה), <code>= /index.html</code> (no cache), <code>/</code> (<code>try_files … /index.html</code>).</li>
+<li><b>db healthcheck</b> ב־TCP (<code>-h 127.0.0.1</code>) — כי בזמן אתחול MySQL מאזין רק ל־socket, ופינג socket היה "בריא" בזמן ש־init.sql עוד רץ.</li>
+<li><b>env allowlist</b>: קונטיינר רואה רק משתנים שרשומים ב־<code>environment:</code> של השירות שלו. משתנה ב־<code>.env</code> שלא רשום — לא קיים בקונטיינר.</li>
+</ul>
+</div></details>
+<details class="sub" open><summary>9.2 איך מריצים ומוודאים מקומית</summary><div class="in">
+<pre><code><span class="c"># הכל בדוקר (build קר לוקח כמה דקות — npm ci + vite)</span>
+docker compose up --build            <span class="c"># או: make up  (detached)</span>
+open http://localhost:8080
+docker compose ps                    <span class="c"># או make ps — health של כל שירות</span>
+curl -s localhost:5002/api/health    <span class="c"># ישירות לשרת</span>
+curl -s localhost:8080/api/health    <span class="c"># דרך nginx</span>
+docker compose logs -f server        <span class="c"># make logs S=server</span>
+docker compose down                  <span class="c"># עוצר, שומר volumes</span>
+docker compose down -v               <span class="c"># מוחק DB + uploads (make clean)</span></code></pre>
+<pre><code><span class="c"># DB בדוקר, קוד native (לולאת עריכה מהירה)</span>
+cp .env.example .env                  <span class="c"># חובה! ברירות המחדל בקוד (root/lolsuit-dev) לא עובדות מול ה־DB של compose</span>
+docker compose up -d db               <span class="c"># MySQL על 127.0.0.1:3307</span>
+cd server &amp;&amp; source .venv/bin/activate
+python -m app.seed                    <span class="c"># פעם ראשונה</span>
+python run.py                         <span class="c"># API על 5002</span>
+python run_worker.py                  <span class="c"># טרמינל נוסף, אופציונלי</span>
+cd client &amp;&amp; npm install &amp;&amp; npm run dev   <span class="c"># http://localhost:5174, proxy /api → 5002</span></code></pre>
+<div class="callout exam"><b>טריק להדגמה</b> <code>PHASE_MINUTES=2</code> ב־<code>.env</code> → כל המשפט (7 "ימים") לוקח 14 דקות. compose מעביר אותו גם ל־server וגם ל־worker.</div>
+<p><b>Production</b> (<code>prod/</code>): EC2 אחד (nginx + API + worker) מול Amazon RDS; images נמשכים מ־Docker Hub (<code>release.sh</code> בונה <code>linux/amd64</code> עם buildx; <code>deploy.sh</code> pull → recreate → בודק <code>/api/health</code> → rollback אוטומטי). <code>${VAR:?}</code> לסודות במקום ברירות מחדל.</p>
+</div></details>
+</div></section>

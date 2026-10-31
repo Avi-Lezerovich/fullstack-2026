@@ -1,0 +1,13 @@
+<!-- ---------- errors ---------- -->
+<div class="fx-group"><h3>הודעות שגיאה וקודי סטטוס <span class="lyr">errors.py · api.ts</span></h3><div class="fx-list">
+<div class="fx" data-keys="error הודעת שגיאה ברירת מחדל 400 401 403 404 409 422"><div class="fx-q">הודעות שגיאה כלליות + איזה קוד HTTP</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/app/errors.py:46</code> <code>DEFAULT_MESSAGES</code> · מיפוי לסטטוס: <code>:29</code> <code>RESULT_STATUS</code> · <code>fail()</code> ב־<code>:61</code></div>
+<div class="fx-check"><span class="lb">איך זה מגיע ללקוח</span> <code>{"error": "...", "code": "..."}</code> → <code>ApiError</code> ב־<code>client/src/api.ts:54</code> → <code>err.message</code> מוצג. <a href="#r18" data-reveal="r18">מתכון 18 ←</a></div></div>
+
+<div class="fx" data-keys="specific error message טקסט שגיאה ספציפי"><div class="fx-q">הודעת שגיאה מסוימת שרואים במסך</div>
+<div class="fx-where"><span class="lb">שיטה</span> מעתיקים את הטקסט מהמסך ועושים grep. רוב ההודעות כתובות ב־route, ב־<code>fail("…", "הטקסט")</code>.</div>
+<div class="fx-check"><span class="lb">דוגמה</span> <button class="btn" type="button" data-grep="שגויות">grep "שגויות"</button> → <code>server/app/api/auth.py:62</code></div></div>
+
+<div class="fx" data-keys="network שגיאת רשת שרת לא פעיל"><div class="fx-q">"שגיאת רשת. ודא שהשרת פעיל"</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/api.ts:68</code> (וגם בשורה 314, בהעלאה)</div></div>
+</div></div>

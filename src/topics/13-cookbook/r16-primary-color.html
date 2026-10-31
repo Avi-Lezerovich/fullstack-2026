@@ -1,0 +1,12 @@
+<!-- R16 -->
+<details class="recipe" id="r16"><summary><span class="tag easy">קל</span> 16. לשנות את הצבע הראשי של האתר</summary><div class="in">
+<span class="rlabel">קבצים</span><ul><li><code>client/src/theme.ts:17</code>: <code>primary.main</code> (ו־<code>dark</code> / <code>light</code> בשורות 18–19)</li><li><code>client/src/theme.ts:71</code>: רקע הסרגל העליון, <b>כתוב ישירות</b></li><li>אופציונלי: <code>server/app/mail.py:188</code> (<code>PURPLE</code>, הצבע במיילים)</li></ul>
+<pre><code><span class="c">// theme.ts, palette.primary</span>
+<span class="del">-      main: "#3C3489", // Court Purple — the brand colour</span>
+<span class="add">+      main: "#1E6B52",</span>
+<span class="c">// theme.ts, components.MuiAppBar</span>
+<span class="del">-        root: { backgroundColor: "#3C3489", borderBottom: "3px solid #B8860B" },</span>
+<span class="add">+        root: { backgroundColor: "#1E6B52", borderBottom: "3px solid #B8860B" },</span></code></pre>
+<span class="rlabel">אימות</span><p><code>npm run dev</code>: כפתורים, לשוניות, הסרגל העליון והפוטר בצבע החדש (הפוטר משתמש ב־<code>primary.main</code>, אז הוא מתעדכן לבד). בדוקר: <code>docker compose up --build -d web</code>.</p>
+<span class="rlabel">מה יכול להישבר / מה לומר</span><p>אם משנים רק את <code>primary.main</code>, הסרגל נשאר סגול. כדי לתפוס את כל המופעים: <button class="btn" type="button" data-grep="3C3489">grep 3C3489</button>. פתרון נקי: <code>const BRAND = "#1E6B52"</code> בראש הקובץ ושימוש בו בשני המקומות. אין טסטים על צבעים.</p>
+</div></details>

@@ -1,0 +1,26 @@
+<!-- ---------- worker ---------- -->
+<div class="fx-group"><h3>Worker, משפט ובוטים <span class="lyr">worker/ · brain/ · services/</span></h3><div class="fx-list">
+<div class="fx" data-keys="tick order סדר משימות worker loop"><div class="fx-q">מה ה־worker עושה בכל tick ובאיזה סדר</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/worker/loop.py:91</code> <code>tick()</code>. משימות המשפט בשורות 104–108, והתקופתיות ב־<code>:121</code></div></div>
+
+<div class="fx" data-keys="trial days ימים לוח זמנים deadline שלבים"><div class="fx-q">לוח הזמנים של המשפט (בימים)</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/app/clock.py:26</code> עד <code>:30</code> (<code>DAY_WITNESS_END=2</code>, <code>DAY_VERDICT=6</code>, <code>DAY_CLOSED=7</code>)</div></div>
+
+<div class="fx" data-keys="jury מושבעים גודל חבר panel 7"><div class="fx-q">גודל חבר המושבעים (7)</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/app/services/jury_service.py:25</code> <code>PANEL_SIZE</code></div>
+<div class="fx-also"><span class="lb">עדכן גם</span> הטקסט "שבעה" ב־<code>CaseStatusChip.tsx:25</code> <a href="#r12" data-reveal="r12">מתכון 12 ←</a></div></div>
+
+<div class="fx" data-keys="verdict tally רוב הכרעה תיקו tiebreak"><div class="fx-q">איך נקבע פסק הדין (רוב, תיקו)</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/app/services/jury_service.py:106</code> <code>tally()</code>. בתיקו מכריע ה־lean של השופט.</div></div>
+
+<div class="fx" data-keys="bots social like comment משקולות התנהגות בוטים"><div class="fx-q">מה הבוטים עושים (לייק / תגובה / תביעה)</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/app/brain/decide.py:96</code> <code>SOCIAL_ACTIONS</code> (סכום = 1.0) · יעדי תביעה <code>:117</code></div>
+<div class="fx-also"><span class="lb">תדירות</span> <code>SOCIAL_EVERY_TICKS</code> <code>server/app/config.py:357</code> · <code>BOT_COOLDOWN_MINUTES</code> <code>:360</code> <a href="#r13" data-reveal="r13">מתכון 13 ←</a></div></div>
+
+<div class="fx" data-keys="moderation סינון מילים גסות toxic threshold סף"><div class="fx-q">סינון תוכן פוגעני (מילים, ספים)</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/app/brain/sentiment.py:18</code> (ספים) · <code>:22</code> <code>SEVERE_TERMS</code> · <code>:46</code> <code>MODERATE_TERMS</code></div>
+<div class="fx-check"><span class="lb">בדיקה</span> תגובה עם המילה מחזירה 422. <a href="#r15" data-reveal="r15">מתכון 15 ←</a></div></div>
+
+<div class="fx" data-keys="ban השעיה דיווחים חוזרים repeat offender"><div class="fx-q">אחרי כמה הסרות משתמש מושעה</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/app/config.py:362</code> <code>REPEAT_OFFENDER_THRESHOLD</code> (3)</div></div>
+</div></div>

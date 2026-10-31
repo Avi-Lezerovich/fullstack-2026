@@ -1,0 +1,16 @@
+<!-- R7 -->
+<details class="recipe" id="r7"><summary><span class="tag easy">קל</span> 7. להוסיף שורת log (למשל כשמוגשת תביעה)</summary><div class="in">
+<span class="rlabel">קובץ</span><p><code>server/app/api/cases.py</code> — אין בו logger כרגע. הקונבנציה בקוד: <code>log = logging.getLogger(__name__)</code> (כמו ב־<code>worker/loop.py</code>).</p>
+<pre><code><span class="add">+import logging</span>
+ from flask import Blueprint, g, jsonify, request
+ ...
+ bp = Blueprint("cases", __name__)
+<span class="add">+log = logging.getLogger(__name__)</span>
+ ...
+     case = cases_service.get_case(case_id, viewer_id=g.user_id)
+<span class="add">+    log.info("case %s filed by user %s", case_id, g.user_id)</span>
+     return jsonify({"case": case}), 201</code></pre>
+<span class="rlabel">אימות</span><p>native: בטרמינל של <code>python run.py</code>. דוקר: <code>docker compose logs -f server</code> (או <code>make logs S=server</code>) — צריך <code>docker compose up --build -d server</code> כי הקוד אפוי ב־image.</p>
+<span class="rlabel">למה זה מופיע בכלל?</span><p><code>server/run.py</code> מגדיר <code>logging.basicConfig(level=logging.INFO)</code> ברמת המודול — כדי שגם תחת gunicorn <code>log.info</code> לא ייזרק (ברירת המחדל של root logger היא WARNING).</p>
+<span class="rlabel">מה יכול להישבר</span><p>כמעט כלום. השתמש ב־<code>%s</code> ופרמטרים (lazy formatting), אל תלגג סיסמאות/טוקנים.</p>
+</div></details>

@@ -1,0 +1,10 @@
+<!-- R18 -->
+<details class="recipe" id="r18"><summary><span class="tag easy">קל</span> 18. לשנות הודעת שגיאה (או להוסיף שגיאה חדשה)</summary><div class="in">
+<span class="rlabel">איך זה זורם</span><p>route קורא ל־<code>fail("invalid", "טקסט")</code> (<code>server/app/errors.py:61</code>), השרת מחזיר <code>{"error": "טקסט", "code": "invalid"}</code> עם 400, <code>request()</code> ב־<code>client/src/api.ts:54</code> זורק <code>ApiError</code>, והדף מציג את <code>err.message</code>. כלומר הטקסט נכתב <b>רק בשרת</b>.</p>
+<pre><code><span class="c"># server/app/api/cases.py, create_case()</span>
+<span class="del">-        return fail("invalid", "כותרת התביעה קצרה מדי.")</span>
+<span class="add">+        return fail("invalid", "הכותרת חייבת להכיל לפחות 3 תווים.")</span></code></pre>
+<p>הודעה כללית לכל סוג (למשל 403) נמצאת ב־<code>server/app/errors.py:46</code> <code>DEFAULT_MESSAGES</code>, והיא משמשת כשקוראים ל־<code>fail("forbidden")</code> בלי טקסט.</p>
+<span class="rlabel">אימות</span><p>מגישים כותרת של 2 תווים ורואים את ההודעה החדשה מעל הטופס. או ב־DevTools → Network → התשובה.</p>
+<span class="rlabel">מה יכול להישבר</span><p>טסט שמשווה את הטקסט. לבדוק עם grep על הטקסט הישן, מסונן ל־tests. קוד HTTP חדש מוסיפים ל־<code>RESULT_STATUS</code> (<code>errors.py:29</code>).</p>
+</div></details>

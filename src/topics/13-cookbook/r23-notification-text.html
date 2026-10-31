@@ -1,0 +1,9 @@
+<!-- R23 -->
+<details class="recipe" id="r23"><summary><span class="tag easy">קל</span> 23. לשנות את הטקסט של התראה (למשל לייק)</summary><div class="in">
+<span class="rlabel">קובץ</span><p><code>client/src/components/layout/NotificationBell.tsx:34</code> <code>describe()</code>. השרת שומר רק <code>type</code>, <code>actor</code> ו־<code>payload</code>, והמשפט נבנה בלקוח.</p>
+<pre><code>     case "like":
+<span class="del">-      return `${actor ?? "מישהו"} אהב/ה את התביעה${title ? ` "${title}"` : ""}`;</span>
+<span class="add">+      return `❤ ${actor ?? "מישהו"} עשה/תה לייק לתביעה${title ? ` "${title}"` : ""}`;</span></code></pre>
+<span class="rlabel">אימות</span><p>מתחברים כדנה, ובחלון אחר (או incognito) כיוני עושים לייק לתביעה של דנה. הפעמון של דנה מתעדכן תוך שניות דרך SSE.</p>
+<span class="rlabel">מה לומר</span><p>ההתראה עצמה נכתבת בשרת ב־<code>notifications_service.notify</code>. ה־switch כאן הוא רק תצוגה, אז שינוי טקסט לא נוגע ב־DB. סוג התראה <b>חדש</b> הוא שינוי מקצה לקצה (ENUM, <code>TYPES</code>, <code>types.ts</code>, אייקון ו־case).</p>
+</div></details>

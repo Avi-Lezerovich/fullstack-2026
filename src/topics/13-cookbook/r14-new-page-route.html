@@ -1,0 +1,25 @@
+<!-- R14 -->
+<details class="recipe" id="r14"><summary><span class="tag med">בינוני</span> 14. להוסיף דף + נתיב חדש בצד לקוח (למשל <code>/rules</code> "תקנון")</summary><div class="in">
+<span class="rlabel">קבצים</span><ul><li>חדש: <code>client/src/pages/Rules.tsx</code></li><li><code>client/src/App.tsx</code> — <code>&lt;Route&gt;</code> חדש <b>לפני</b> <code>path="*"</code></li><li><code>client/src/components/layout/TopBar.tsx:27</code> — <code>NAV_LINKS</code></li></ul>
+<pre><code><span class="c">// pages/Rules.tsx</span>
+<span class="k">import</span> Paper <span class="k">from</span> <span class="s">"@mui/material/Paper"</span>;
+<span class="k">import</span> Typography <span class="k">from</span> <span class="s">"@mui/material/Typography"</span>;
+
+<span class="k">const</span> Rules = () =&gt; (
+  &lt;Paper sx={{ p: 3 }}&gt;
+    &lt;Typography variant=<span class="s">"h4"</span> gutterBottom&gt;תקנון בית המשפט&lt;/Typography&gt;
+    &lt;Typography&gt;אסור לתבוע את עצמך.&lt;/Typography&gt;
+  &lt;/Paper&gt;
+); <span class="k">export default</span> Rules;
+
+<span class="c">// App.tsx</span>
+<span class="add">+import Rules from "./pages/Rules";</span>
+<span class="add">+              &lt;Route path="/rules" element={&lt;Rules /&gt;} /&gt;</span>
+               &lt;Route path="*" element={&lt;NotFound /&gt;} /&gt;
+
+<span class="c">// TopBar.tsx</span>
+   { to: "/about", label: "אודות" },
+<span class="add">+  { to: "/rules", label: "תקנון" },</span></code></pre>
+<span class="rlabel">אימות</span><p><code>npm run dev</code> → קישור בסרגל; גישה ישירה ל־<code>/rules</code> עובדת (Vite / nginx <code>try_files</code>). <code>npm run lint</code>.</p>
+<span class="rlabel">מה יכול להישבר</span><p>Route אחרי <code>*</code> לא ייתפס (בפועל ב־v6 הדירוג לפי ספציפיות, אבל שמור על הסדר הקיים). לדף מוגן — עטוף ב־<code>&lt;ProtectedRoute&gt;</code>. <code>NAV_LINKS</code> משמש גם את הסרגל (מ־<code>sm</code> ומעלה, <code>TopBar.tsx:115</code>) וגם את ה־Drawer במובייל (<code>TopBar.tsx:221</code>) — שינוי אחד מעדכן את שניהם.</p>
+</div></details>

@@ -1,0 +1,7 @@
+<!-- R9 -->
+<details class="recipe" id="r9"><summary><span class="tag med">בינוני</span> 9. לשנות ברירת מחדל של config (למשל <code>PHASE_MINUTES</code> או <code>BOT_COOLDOWN_MINUTES</code>)</summary><div class="in">
+<span class="rlabel">קבצים</span><ul><li><code>server/app/config.py</code> — ב־<code>get_settings()</code>: <code>_int("BOT_COOLDOWN_MINUTES", 30)</code> / <code>_int("PHASE_MINUTES", 1440)</code></li><li><code>docker-compose.yml</code> — <code>PHASE_MINUTES: ${PHASE_MINUTES:-1440}</code> (server ו־worker)</li></ul>
+<div class="callout gotcha"><b>הנקודה שהבוחן מחפש</b> שינוי ברירת המחדל ב־<code>config.py</code> של <code>PHASE_MINUTES</code> <b>לא ישפיע בדוקר</b> — compose מעביר <code>1440</code> מפורשות. צריך לשנות את <code>${PHASE_MINUTES:-1440}</code> (בשני השירותים!) או להגדיר ב־<code>.env</code>. לעומת זאת <code>BOT_COOLDOWN_MINUTES</code> לא מועבר ע"י compose → שינוי בקוד כן משפיע (אחרי rebuild).</div>
+<span class="rlabel">אימות</span><p><code>curl -s localhost:5002/api/health</code> → השדה <code>phase_minutes</code>. לתיק חדש: <code>phase_deadline_at</code> = עכשיו + 2×PHASE_MINUTES.</p>
+<span class="rlabel">מה יכול להישבר</span><p>תיקים קיימים לא משתנים (ה־deadline כבר כתוב בשורה). הטסטים קובעים יום של דקה ב־conftest — לא מושפעים.</p>
+</div></details>

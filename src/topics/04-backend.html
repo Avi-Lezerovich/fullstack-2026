@@ -1,0 +1,130 @@
+<!-- ============================ 4 BACKEND ============================ -->
+<section class="topic" id="t4" data-title="Backend">
+<div class="topic-head"><div class="n">4</div><h2>Backend — Flask API</h2><label class="done-toggle"><input type="checkbox" data-done="t4"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
+<div class="topic-body">
+
+<details class="sub" open><summary>4.1 נקודת כניסה ו־factory</summary><div class="in">
+<ul>
+<li><code>server/run.py</code> — מגדיר logging ברמת INFO ברמת המודול (כדי שיעבוד גם תחת gunicorn) ויוצר <code>app = create_app()</code>. הרצה ישירה (<code>python run.py</code>) מריצה את שרת הפיתוח של Flask עם <code>threaded=True</code> על <code>settings.port</code> (5002).</li>
+<li><code>server/app/__init__.py:23</code> <code>create_app()</code> עושה 4 דברים: שומר <code>Settings</code> ב־<code>app.config["SETTINGS"]</code>; קובע <code>MAX_CONTENT_LENGTH = upload_max_bytes + 8192</code> (413 לפני שה־view רץ); CORS על <code>/api/*</code> עם <code>supports_credentials=True</code>; <code>register_blueprints(app)</code>.</li>
+<li><code>server/app/api/__init__.py:44</code> — רושם 12 blueprints, כולם עם <code>url_prefix="/api"</code>: health, auth, users, cases, social, trial, moderation, admin_ops, notifications, messages, assist, uploads.</li>
+<li>בפרודקשן/דוקר: ה־CMD של <code>server/Dockerfile</code> מריץ gunicorn עם <code>--worker-class gthread</code> (ברירת מחדל 2 workers × 16 threads דרך <code>GUNICORN_WORKERS</code>/<code>GUNICORN_THREADS</code>).</li>
+</ul>
+</div></details>
+
+<details class="sub" open><summary>4.2 שלוש השכבות ומחזור חיי בקשה</summary><div class="in">
+<pre><code>blueprint (api/*.py)   parse request → authorise (decorator) → call ONE service → map result code → status
+services (services/)   all SQL + business rules. Never import Flask. Never raise for business outcomes.
+db.py                  thin helper over PyMySQL: query_all / query_one / query_value / execute, owned(conn)</code></pre>
+<figure>
+<div class="fig-scroll"><svg class="dg" viewBox="0 0 920 270" role="img" aria-label="מחזור חיי בקשה: מהלקוח דרך nginx, decorator, ולידציה, service ו־DB, וחזרה דרך קוד תוצאה ל־HTTP status ול־ApiError">
+  <text x="10" y="22" class="sm">forward path</text>
+  <rect class="box" x="10" y="34" width="135" height="62" rx="9"/><text x="77" y="58" text-anchor="middle" class="b">api.ts</text><text x="77" y="78" text-anchor="middle" class="sm">request&lt;T&gt;()</text>
+  <rect class="box" x="162" y="34" width="135" height="62" rx="9"/><text x="229" y="58" text-anchor="middle" class="b">nginx / Vite</text><text x="229" y="78" text-anchor="middle" class="sm">proxy /api → :5002</text>
+  <rect class="box acc" x="314" y="34" width="135" height="62" rx="9"/><text x="381" y="58" text-anchor="middle" class="b">@require_auth</text><text x="381" y="78" text-anchor="middle" class="sm">security.py → g.user</text>
+  <rect class="box acc" x="466" y="34" width="135" height="62" rx="9"/><text x="533" y="58" text-anchor="middle" class="b">route body</text><text x="533" y="78" text-anchor="middle" class="sm">body_of · clean</text>
+  <rect class="box gold" x="618" y="34" width="135" height="62" rx="9"/><text x="685" y="58" text-anchor="middle" class="b">service</text><text x="685" y="78" text-anchor="middle" class="sm">rules + SQL</text>
+  <rect class="box ok" x="770" y="34" width="135" height="62" rx="9"/><text x="837" y="58" text-anchor="middle" class="b">db.py → MySQL</text><text x="837" y="78" text-anchor="middle" class="sm">owned(conn), %s</text>
+  <line class="ln" x1="145" y1="65" x2="160" y2="65" marker-end="url(#arw)"/>
+  <line class="ln" x1="297" y1="65" x2="312" y2="65" marker-end="url(#arw)"/>
+  <line class="ln" x1="449" y1="65" x2="464" y2="65" marker-end="url(#arw)"/>
+  <line class="ln" x1="601" y1="65" x2="616" y2="65" marker-end="url(#arw)"/>
+  <line class="ln" x1="753" y1="65" x2="768" y2="65" marker-end="url(#arw)"/>
+  <!-- early exits -->
+  <line class="ln warn dash" x1="381" y1="96" x2="381" y2="170" marker-end="url(#arwW)"/>
+  <text x="388" y="132" class="lbl">no cookie → 401 + clear cookie</text>
+  <line class="ln warn dash" x1="533" y1="96" x2="533" y2="170" marker-end="url(#arwW)"/>
+  <text x="540" y="150" class="lbl">bad input → fail("invalid") 400</text>
+  <text x="10" y="160" class="sm">return path</text>
+  <rect class="box" x="10" y="172" width="135" height="62" rx="9"/><text x="77" y="196" text-anchor="middle" class="b">component</text><text x="77" y="216" text-anchor="middle" class="sm">setState / show error</text>
+  <rect class="box" x="162" y="172" width="135" height="62" rx="9"/><text x="229" y="196" text-anchor="middle" class="b">ApiError</text><text x="229" y="216" text-anchor="middle" class="sm">status + code + error</text>
+  <rect class="box acc" x="314" y="172" width="287" height="62" rx="9"/><text x="457" y="196" text-anchor="middle" class="b">errors.fail(code) / jsonify(...)</text><text x="457" y="216" text-anchor="middle" class="sm">RESULT_STATUS: ok 200 · created 201 · invalid 400 · … · rejected 422</text>
+  <rect class="box gold" x="618" y="172" width="287" height="62" rx="9"/><text x="761" y="196" text-anchor="middle" class="b">service returns a code string</text><text x="761" y="216" text-anchor="middle" class="sm">"ok" · "not_found" · "forbidden" · "closed" · "rejected"</text>
+  <line class="ln" x1="685" y1="96" x2="685" y2="170" marker-end="url(#arw)"/>
+  <line class="ln" x1="618" y1="203" x2="603" y2="203" marker-end="url(#arw)"/>
+  <line class="ln" x1="314" y1="203" x2="299" y2="203" marker-end="url(#arw)"/>
+  <line class="ln" x1="162" y1="203" x2="147" y2="203" marker-end="url(#arw)"/>
+  <text x="10" y="258" class="sm">Services never raise for business outcomes — they return a string; the blueprint maps it with errors.py.</text>
+</svg>
+</div>
+<figcaption>מחזור חיי בקשה. שימו לב לשני "יציאות מוקדמות": ה־decorator (401) והולידציה ב־route (400). ה־service לא מכיר HTTP בכלל — הוא מחזיר מחרוזת, ו־<code>errors.py</code> ממפה אותה לסטטוס.</figcaption>
+</figure>
+<div class="callout key"><b>למה service מחזיר מחרוזת ולא זורק exception?</b> כך כלל כמו "רק המחבר יכול למשוך תביעה" חי ב־service (<code>cases_service.delete_case</code>) ונבדק ב־unit test בלי request context — וה־worker (שאין לו Flask בכלל) יכול לקרוא לאותן פונקציות. טסט <code>tests/unit/test_layering.py</code> אוכף שה־services לא מייבאים Flask.</div>
+</div></details>
+
+<details class="sub" open><summary>4.3 קודי תוצאה ← סטטוס HTTP (<code>server/app/errors.py</code>)</summary><div class="in">
+<div class="tablewrap"><table><thead><tr><th>קוד</th><th>סטטוס</th><th>משמעות</th></tr></thead><tbody>
+<tr><td><code>ok</code> / <code>already_done</code></td><td>200</td><td></td></tr>
+<tr><td><code>created</code></td><td>201</td><td></td></tr>
+<tr><td><code>invalid</code></td><td>400</td><td>גם קוד לא מוכר ממופה ל־400 (<code>status_for</code>)</td></tr>
+<tr><td><code>unauthorized</code></td><td>401</td><td>מה־decorators: עם Set-Cookie שמנקה את העוגייה</td></tr>
+<tr><td><code>forbidden</code></td><td>403</td><td></td></tr>
+<tr><td><code>not_found</code></td><td>404</td><td></td></tr>
+<tr><td><code>conflict</code></td><td>409</td><td>(חריג: SSE מעל המכסה → <code>conflict</code> אבל 503)</td></tr>
+<tr><td><code>closed</code></td><td>409</td><td>פעולת משפט בשלב הלא נכון</td></tr>
+<tr><td><code>rejected</code></td><td>422</td><td>נחסם ע"י סינון התוכן</td></tr>
+</tbody></table></div>
+<p><code>fail(result, message=None, **extra)</code> (<code>errors.py:61</code>) בונה <code>{"error": …, "code": …}</code> עם הודעת ברירת מחדל בעברית מ־<code>DEFAULT_MESSAGES</code>. אין <code>errorhandler</code> רשום — שגיאות של Werkzeug/nginx (בעיקר 413) לא בפורמט הזה, ולכן <code>api.ts</code> מטפל ב־413 במיוחד. <b>אין rate limiting ב־API</b> (רק cooldown על reset password).</p>
+</div></details>
+
+<details class="sub" open><summary>4.4 Auth — sessions, cookies, decorators</summary><div class="in">
+<ul>
+<li><b>סיסמאות</b>: bcrypt (<code>BCRYPT_ROUNDS</code>=12). <code>security.password_problem()</code> (<code>security.py:59</code>) — מינימום <code>MIN_PASSWORD_LENGTH = 8</code> תווים ומקסימום 72 <b>bytes</b> (bcrypt 5 זורק במקום לקצץ).</li>
+<li><b>Sessions</b>: שורה בטבלת <code>sessions</code> לכל התחברות (הרבה לכל משתמש). <code>auth_service.create_session()</code> מייצר טוקן אקראי; העוגייה <code>session_id</code> נושאת את הטוקן הגולמי, וה־DB שומר רק <code>token_hash</code> = SHA-256.</li>
+<li><b>Cookie flags</b> (<code>security.cookie_flags</code>): תמיד <code>httpOnly</code>; <code>SameSite=None; Secure</code> כש־<code>FLASK_SESSION_SECURE=1</code>, אחרת <code>Lax</code>.</li>
+<li><b>Decorators</b> (<code>security.py:137–182</code>): <code>@require_auth</code> (401 לאנונימי; קובע <code>g.user</code>, <code>g.user_id</code>), <code>@require_admin</code> (401 / 403 בלי <code>is_admin</code>), <code>@optional_auth</code> (עובד גם אנונימי). <code>_load_user</code> מטמין את המשתמש ב־<code>g</code> כך שיש שאילתה אחת לבקשה.</li>
+<li><b>Login</b> (<code>api/auth.py:51</code>): אותה הודעה ל"אין משתמש" ו"סיסמה שגויה" — כדי שלא יהיה אפשר לגלות אילו אימיילים רשומים. משתמש <code>banned</code> → 403.</li>
+<li><b>Password reset</b>: טוקן חד־פעמי מוצפן ב־hash, תוקף <code>RESET_TTL_MINUTES</code>=30, cooldown <code>RESET_COOLDOWN_SECONDS</code>=60. ב־<code>MAIL_BACKEND=console</code> הקישור מודפס בלוג של השרת.</li>
+</ul>
+<div class="callout gotcha"><b>מלכודת</b> כשה־decorator מחזיר 401 הוא גם <b>מנקה את העוגייה</b> (<code>_unauthorised</code>). login כושל מחזיר 401 רגיל ולא נוגע בעוגייה.</div>
+</div></details>
+
+<details class="sub"><summary>4.5 ולידציה (<code>server/app/validation.py</code>)</summary><div class="in">
+<p>"קטן ומשעמם בכוונה": רק "האם השדה הוא מחרוזת סבירה בגודל הנכון". כללים עסקיים שייכים ל־service.</p>
+<ul>
+<li><code>body_of(request)</code> — <code>get_json(silent=True)</code>; גוף שבור/חסר הופך ל־<code>{}</code> ואז 400 בעברית במקום 415 באנגלית.</li>
+<li><code>clean(value, max_length)</code> — ממיר למחרוזת, <code>strip()</code>, <b>וחותך</b> לאורך המקסימלי (לא דוחה!).</li>
+<li><code>positive_int(value, default, maximum=)</code> — לפרמטרי paging.</li>
+<li><code>is_email</code>, <code>name_problem</code> (<code>NAME_MIN=2</code>, <code>NAME_MAX=80</code>).</li>
+</ul>
+<p>דוגמה — <code>create_case</code> ב־<code>server/app/api/cases.py:65</code>: כותרת &lt; 3 תווים → 400 "כותרת התביעה קצרה מדי."; גוף &lt; 10 → 400; תביעה נגד עצמך → 400; נתבע לא קיים/חסום → 400; אין נתבע בכלל → 400. מגבלות אורך: title 512, body 8000, comment 4000, message 2000.</p>
+</div></details>
+
+<details class="sub"><summary>4.6 כל ה־endpoints (הכל תחת <code>/api</code>)</summary><div class="in">
+<div class="tablewrap"><table><thead><tr><th>Blueprint</th><th>Endpoints</th><th>Auth</th></tr></thead><tbody>
+<tr><td><code>health.py</code></td><td><code>GET /health</code> — db up/down, brain status, worker tick; 503 כש־MySQL למטה</td><td>—</td></tr>
+<tr><td><code>auth.py</code></td><td><code>POST /auth/signup</code> · <code>/auth/login</code> · <code>/auth/logout</code> · <code>/auth/password-reset/request</code> · <code>GET /auth/password-reset/validate</code> · <code>POST /auth/password-reset/confirm</code> · <code>GET /auth/me</code></td><td>— / optional</td></tr>
+<tr><td><code>users.py</code></td><td><code>GET /users</code> · <code>/users/&lt;id&gt;</code> · <code>/users/&lt;id&gt;/follows</code> · <code>/users/&lt;id&gt;/record</code> · <code>PATCH /users/me</code> · <code>GET|DELETE /users/me/memories</code></td><td>optional / required</td></tr>
+<tr><td><code>cases.py</code></td><td><code>GET /cases</code> · <code>GET /cases/feed</code> · <code>POST /cases</code> · <code>GET /cases/&lt;id&gt;</code> · <code>DELETE /cases/&lt;id&gt;</code> (מחבר בלבד, רק ב־filed/witness_phase)</td><td>optional / required</td></tr>
+<tr><td><code>social.py</code></td><td><code>POST /cases/&lt;id&gt;/like</code> (toggle) · <code>/follow</code> (toggle) · <code>GET …/likes</code> · <code>…/followers</code> · <code>…/comments</code> · <code>POST …/comments</code></td><td>required / optional</td></tr>
+<tr><td><code>trial.py</code></td><td><code>GET /cases/&lt;id&gt;/trial</code> · <code>POST …/summons</code> · <code>POST …/testify</code> · <code>GET /me/summons</code> · <code>GET /agents</code></td><td>mixed</td></tr>
+<tr><td><code>moderation.py</code></td><td><code>POST /reports</code> · <code>GET /admin/queue</code> · <code>/admin/flagged</code> · <code>/admin/users/banned</code> · <code>/admin/history/&lt;type&gt;/&lt;id&gt;</code> · <code>POST /admin/content/&lt;type&gt;/&lt;id&gt;/status</code> · <code>/admin/reports/&lt;id&gt;/resolve</code> · <code>/admin/users/&lt;id&gt;/ban</code> · <code>/unban</code></td><td>required / admin</td></tr>
+<tr><td><code>admin_ops.py</code></td><td><code>GET /admin/brain/usage</code> · <code>GET /admin/overview</code></td><td>admin</td></tr>
+<tr><td><code>notifications.py</code></td><td><code>GET /notifications</code> · <code>POST /notifications/read</code> · <code>GET /notifications/stream</code> (SSE)</td><td>required</td></tr>
+<tr><td><code>messages.py</code></td><td><code>GET /conversations</code> · <code>/conversations/&lt;id&gt;</code> · <code>/conversations/with/&lt;user_id&gt;</code> · <code>POST /messages</code></td><td>required</td></tr>
+<tr><td><code>assist.py</code></td><td><code>POST /assist/draft-lawsuit</code> · <code>/suggest-comment</code> · <code>/correct-text</code> · <code>/in-character</code> — לא כותבים ל־DB</td><td>required</td></tr>
+<tr><td><code>uploads.py</code></td><td><code>POST /uploads</code> (multipart, שדה <code>file</code>, JPEG/PNG/GIF/WebP לפי magic bytes) · <code>GET /uploads/&lt;name&gt;</code></td><td>required / —</td></tr>
+</tbody></table></div>
+</div></details>
+
+<details class="sub"><summary>4.7 טרנזקציות — <code>owned(conn)</code></summary><div class="in">
+<pre><code><span class="k">def</span> some_service(..., conn: Db | None = None):
+    <span class="k">with</span> owned(conn) <span class="k">as</span> db:      <span class="c"># server/app/db.py:195</span>
+        db.execute(<span class="s">"UPDATE ... WHERE id = %s AND status = 'x'"</span>, (case_id,))
+        db.commit_if_owned()       <span class="c"># commits only if WE opened the connection</span></code></pre>
+<ul>
+<li>אם הועבר <code>conn</code> — <b>הקורא</b> הוא הבעלים של הטרנזקציה (ה־service לא עושה commit/close). כך worker task מחבר כמה קריאות service לטרנזקציה אטומית אחת.</li>
+<li>אם לא — ה־service פותח חיבור, עושה commit בהצלחה ותמיד סוגר.</li>
+<li><code>autocommit</code> כבוי. <code>ExecResult.rowcount</code> קריטי: כל מעבר מצב הוא <code>UPDATE … WHERE status = 'expected'</code>, ו־rowcount 0 = worker אחר הקדים.</li>
+</ul>
+</div></details>
+
+<details class="sub"><summary>4.8 מודרציה, SSE והעלאות — בקיצור</summary><div class="in">
+<ul>
+<li><b>4 סטטוסים</b> (cases + comments): <code>published</code>, <code>flagged</code> (עדיין ציבורי!), <code>hidden</code>, <code>rejected</code>. <code>PUBLIC_VISIBILITY</code> ב־<code>cases_service.py:28</code>. <b>מודרציה לעולם לא מוחקת</b> — רק מעבר סטטוס + שורה ב־<code>moderation_actions</code>.</li>
+<li><b>Screen בזמן פרסום</b>: <code>moderation_service.screen()</code> → <code>sentiment.scan()</code> באותה טרנזקציה של ה־INSERT. תוכן <code>rejected</code> עדיין נכתב (ראיה לתור האדמין) אבל ה־route מחזיר 422.</li>
+<li><b>SSE</b> (<code>api/notifications.py:89</code>): cursor מ־<code>Last-Event-ID</code> → <code>?since=</code> → latest id; polling כל <code>SSE_POLL_SECONDS</code>=2; חיים מקסימליים <code>SSE_MAX_SECONDS</code>=300; מכסה <code>SSE_MAX_STREAMS</code>=50 לכל process (מעליה 503).</li>
+<li><b>Uploads</b>: שם הקובץ של הלקוח לא בשימוש (32 hex + סיומת שלנו), הפורמט לפי magic bytes, גודל נאכף 3 פעמים: nginx <code>6m</code>, <code>MAX_CONTENT_LENGTH</code>, ובדיקה ב־view (<code>UPLOAD_MAX_BYTES</code> = 5 MiB).</li>
+</ul>
+</div></details>
+</div></section>

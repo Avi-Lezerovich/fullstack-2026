@@ -1,0 +1,31 @@
+<!-- ---------- styling ---------- -->
+<div class="fx-group"><h3>צבעים, פונטים ועיצוב <span class="lyr">client/src/theme.ts</span></h3><div class="fx-list">
+<div class="fx" data-keys="color צבע ראשי סגול primary theme ערכת נושא"><div class="fx-q">הצבע הראשי (הסגול)</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/theme.ts:17</code> <code>primary.main</code></div>
+<div class="fx-also"><span class="lb">מלכודת</span> הסרגל העליון כתוב <b>ישירות</b> ב־<code>client/src/theme.ts:71</code> (MuiAppBar), ורקע הדף ב־<code>:61</code>. שינוי של <code>primary.main</code> לבד לא יצבע אותם. במיילים: <code>server/app/mail.py:188</code>.</div>
+<div class="fx-check"><span class="lb">בדיקה</span> כפתורים, לשוניות ופוטר משתנים. <a href="#r16" data-reveal="r16">מתכון 16 ←</a></div></div>
+
+<div class="fx" data-keys="secondary brass זהב צבע משני"><div class="fx-q">הצבע המשני (זהב)</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/theme.ts:22</code> <code>secondary</code></div>
+<div class="fx-also"><span class="lb">עדכן גם</span> הקו מתחת לסרגל: <code>theme.ts:71</code> (<code>#B8860B</code>)</div></div>
+
+<div class="fx" data-keys="font פונט גופן typography"><div class="fx-q">הפונט</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/theme.ts:43</code> <code>typography.fontFamily</code> (וכותרות h1–h6 מתחת)</div>
+<div class="fx-also"><span class="lb">עדכן גם</span> פונט חדש צריך גם להיטען: ה־<code>&lt;link&gt;</code> ל־Google Fonts ב־<code>client/index.html</code>. בלי זה הדפדפן נופל ל־Times.</div></div>
+
+<div class="fx" data-keys="radius פינות עגולות border shape"><div class="fx-q">עיגול פינות</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/theme.ts:52</code> <code>shape.borderRadius</code> (וכפתורים בנפרד, <code>MuiButton</code>)</div></div>
+
+<div class="fx" data-keys="dark mode מצב כהה mode light"><div class="fx-q">מצב כהה</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/theme.ts</code> <code>palette.mode: "light"</code></div>
+<div class="fx-also"><span class="lb">מלכודת</span> רקעים וצבעים קשיחים (<code>#FAF6E9</code> וכו') ב־overrides לא יתהפכו לבד. <button class="btn" type="button" data-grep="#FAF6E9">grep #FAF6E9</button></div></div>
+
+<div class="fx" data-keys="logo לוגו svg אייקון favicon"><div class="fx-q">לוגו / favicon</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/public/</code> (<code>lolsuit-*.svg</code>) · שימוש: <code>client/src/components/layout/TopBar.tsx:102</code> · favicon ב־<code>client/index.html</code></div></div>
+
+<div class="fx" data-keys="rtl כיוון ימין שמאל direction"><div class="fx-q">כיוון RTL</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/theme.ts</code> (<code>direction: "rtl"</code>) + <code>client/src/main.tsx</code> (cache של emotion עם <code>stylis-plugin-rtl</code>) + <code>dir="rtl"</code> ב־<code>client/index.html</code></div></div>
+
+<div class="fx" data-keys="card כרטיס צל shadow מסגרת"><div class="fx-q">מראה הכרטיסים (מסגרת, צל)</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/theme.ts</code>, ב־<code>components.MuiCard</code>. משפיע על כל Card באתר.</div></div>
+</div></div>

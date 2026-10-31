@@ -1,0 +1,39 @@
+<!-- ============================ 15 GLOSSARY ============================ -->
+<section class="topic" id="t15" data-title="מילון מונחים">
+<div class="topic-head"><div class="n">15</div><h2>מילון מונחים</h2><label class="done-toggle"><input type="checkbox" data-done="t15"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
+<div class="topic-body">
+<div class="tablewrap"><table><thead><tr><th>מונח</th><th>משמעות בפרויקט</th></tr></thead><tbody>
+<tr><td>Case / תביעה</td><td>שורה ב־<code>cases</code>; גם המשפט שלה (status, deadline, verdict).</td></tr>
+<tr><td>Phase / "יום"</td><td>יחידת זמן של המשפט = <code>PHASE_MINUTES</code> דקות.</td></tr>
+<tr><td>Agent / בוט</td><td>user עם <code>is_bot=1</code> + שורה ב־<code>agents</code>: juror / judge / moderator.</td></tr>
+<tr><td>Panel</td><td>חבר מושבעים של תיק: <code>jury_panels</code> + 7 <code>jury_panel_members</code>.</td></tr>
+<tr><td><code>speaks_at</code> / <code>spoke_at</code></td><td>מתי המושבע אמור לדבר (נקבע בהגרלה) / מתי דיבר (NULL = עוד לא).</td></tr>
+<tr><td><code>guilt_bias</code> / <code>tiebreak_lean</code></td><td>"חוגה" של מושבע (נטייה להרשיע) / נטיית שופט בתיקו.</td></tr>
+<tr><td>Summons / עד</td><td>זימון אדם (לא בוט) לעדות, עד 3 לכל צד, רק ב־witness_phase.</td></tr>
+<tr><td>Tick</td><td>סבב אחד של לולאת ה־worker.</td></tr>
+<tr><td>Advisory lock</td><td><code>GET_LOCK</code> של MySQL — נעילה בשם, משתחררת כשהחיבור מת.</td></tr>
+<tr><td><code>FOR UPDATE SKIP LOCKED</code></td><td>נועל שורות לטרנזקציה ומדלג על שורות שנעולות ע"י אחר — מחלק עבודה בין workers.</td></tr>
+<tr><td><code>dedupe_key</code></td><td>מפתח UNIQUE דטרמיניסטי שמונע תוכן בוט כפול אחרי retry.</td></tr>
+<tr><td>Idempotent</td><td>להריץ פעמיים = להריץ פעם אחת (seed, tick, seating).</td></tr>
+<tr><td>Result code</td><td>מחרוזת שה־service מחזיר (<code>ok</code>, <code>invalid</code>…), ממופה לסטטוס ב־<code>errors.py</code>.</td></tr>
+<tr><td><code>owned(conn)</code></td><td>מוסכמת טרנזקציה: מי שפתח את החיבור עושה commit.</td></tr>
+<tr><td>Blueprint</td><td>קבוצת routes ב־Flask; 12 כאלה תחת <code>/api</code>.</td></tr>
+<tr><td>SSE</td><td>Server-Sent Events: חיבור HTTP פתוח שהשרת דוחף בו אירועים (<code>EventSource</code>).</td></tr>
+<tr><td>Moderation status</td><td><code>published</code> / <code>flagged</code> (גלוי) / <code>hidden</code> / <code>rejected</code>.</td></tr>
+<tr><td>Clerk / Arbiter / Sweeper</td><td>שלושת בוטי המודרציה: תור דיווחים / הכרעה ו־ban / סריקת תוכן שלא דווח.</td></tr>
+<tr><td>Brain</td><td><code>app/brain/</code> — כל מה שבוט אומר/מחליט.</td></tr>
+<tr><td>Offline generator</td><td><code>offline.py</code> — טקסט דטרמיניסטי בלי רשת, ברירת המחדל ב־compose.</td></tr>
+<tr><td>Credential chain</td><td>רשימת credentials מסודרת (<code>LLM_CREDENTIALS</code>) שעוברים עליה עד שאחד עונה.</td></tr>
+<tr><td><code>cap=</code> / <code>rpm=</code></td><td>תקציב יומי / תקציב לדקה של credential.</td></tr>
+<tr><td>Cooldown</td><td>זמן שבו credential מושבת אחרי כישלון (60s / עד חצות / 120s).</td></tr>
+<tr><td>Structured output</td><td>תשובת מודל שנאכפת לפי JSON schema (enum להצבעה וכו').</td></tr>
+<tr><td>Capabilities</td><td>מה ספק יכול (למשל <code>structured_output</code>); gateway = לא.</td></tr>
+<tr><td>Angle</td><td>MOVE × HOOK × LENGTH — הוראת גיוון לכל קריאה במקום temperature.</td></tr>
+<tr><td>Episode / <code>agent_events</code></td><td>מה שבוט עשה (הצביע, נתבע…) — זיכרון גולמי.</td></tr>
+<tr><td><code>agent_memories</code></td><td>סיכום מרוכז שהמודל כתב — cache מעל episodes.</td></tr>
+<tr><td><code>LAST_CALL</code></td><td>מצב בזיכרון של התהליך על הקריאה האחרונה למוח; מוצג ב־<code>/api/health</code>.</td></tr>
+<tr><td><code>brain_calls</code></td><td>טבלת היסטוריה של כל קריאה למוח — לדשבורד ולספירת cap.</td></tr>
+<tr><td>My Feed</td><td><code>GET /api/cases/feed</code> — תיקים שעוקבים אחריהם, לפי פעילות אחרונה.</td></tr>
+<tr><td>RTL</td><td>Right-to-left; MUI <code>direction</code> + <code>stylis-plugin-rtl</code>.</td></tr>
+</tbody></table></div>
+</div></section>

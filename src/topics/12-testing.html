@@ -1,0 +1,30 @@
+<!-- ============================ 12 TESTING ============================ -->
+<section class="topic" id="t12" data-title="Testing">
+<div class="topic-head"><div class="n">12</div><h2>Testing — מה קיים, איך מריצים, מה שבור</h2><label class="done-toggle"><input type="checkbox" data-done="t12"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
+<div class="topic-body">
+<div class="tablewrap"><table><thead><tr><th>שכבה</th><th>marker</th><th>כמות (TESTING.md)</th><th>צריך</th></tr></thead><tbody>
+<tr><td>Unit</td><td><code>unit</code></td><td>564</td><td>כלום</td></tr>
+<tr><td>Integration</td><td><code>integration</code></td><td>491</td><td>MySQL על 3307</td></tr>
+<tr><td>Worker</td><td><code>worker</code> (+integration)</td><td>69</td><td>MySQL</td></tr>
+<tr><td>Frontend</td><td>—</td><td>~157</td><td>כלום (vitest + jsdom)</td></tr>
+</tbody></table></div>
+<pre><code>docker compose up -d db                 <span class="c"># integration + worker צריכים MySQL</span>
+cd server &amp;&amp; python -m pytest --cov     <span class="c"># כל ה־backend + gate של 85% (server/.coveragerc)</span>
+cd server &amp;&amp; python -m pytest -m unit   <span class="c"># מהיר, בלי DB</span>
+cd server &amp;&amp; python -m pytest tests/integration/test_cases_api.py -q
+cd client &amp;&amp; npm test &amp;&amp; npm run lint   <span class="c"># vitest, ואז tsc --noEmit (אין ESLint)</span></code></pre>
+<ul>
+<li><b>Harness</b> (<code>server/tests/conftest.py</code>): מתחבר כ־root, יוצר DB זמני <code>lolsuit_test</code>, מריץ את <code>database/init.sql</code> (מפצל לפי <code>;</code>), מגדיר <code>BCRYPT_ROUNDS=4</code>, <code>MAIL_BACKEND=console</code>, <code>BRAIN_FORCE_OFFLINE=1</code>, יום משפט של דקה; מריץ <code>app.seed</code> פעם אחת; מוחק הכל חוץ מה־cast לפני כל טסט. ה־DB האמיתי <code>lolsuit</code> לא נגוע.</li>
+<li><b>בלי MySQL</b> — טסטי integration/worker מדלגים (skip עם סיבה), לא נכשלים.</li>
+<li>טסטי "חוקה": <code>test_layering.py</code> (services לא מייבאים Flask), <code>test_no_deprecated_utcnow.py</code>, <code>test_schema_is_executable.py</code>; <code>pytest.ini</code> הופך <code>DeprecationWarning</code> מ־<code>app.*</code>/<code>worker.*</code> לשגיאה.</li>
+<li>Frontend: <code>usePagedList</code>, <code>useAsync</code>, <code>AuthContext</code>, <code>useNotificationStream</code>, <code>LikeButton</code>/<code>FollowButton</code>, <code>AiUsage</code>, <code>CommentThread</code>, <code>CaseCard</code>, <code>ProtectedRoute</code>, <code>App.test.tsx</code> (404), <code>ResetPassword.test.tsx</code>. דפים לא נבדקים בכוונה.</li>
+</ul>
+<div class="callout exam"><b>מה הרצתי בפועל בזמן הכנת המדריך</b> <code>python -m pytest -m unit</code> → <b>564 passed</b> (0.9s). Docker לא רץ במכונה, אז לא הרצתי integration/worker/frontend — לפי <code>TESTING.md</code> ו־known-issues הם תקינים.</div>
+<h3>מה שבור / חסר (מתועד)</h3>
+<ul>
+<li><b>B1 — eval judge שבור</b>: <code>server/evals/metrics.py:121</code> קורא ל־<code>llm._provider_and_model</code> שכבר לא קיים → <code>python -m evals.run</code> עם judge מחזיר null ל־voice/drift/grounding. רק <code>--no-judge</code> שימושי.</li>
+<li><b>D1 — <code>cases.defendant_user_id</code> בלי FK</b>: מוצמד ע"י <code>xfail</code> strict ב־<code>tests/integration/test_case_withdrawal.py</code> — יתחיל להיכשל ביום שיוסיפו את האילוץ.</li>
+<li><b>כיסוי</b>: <code>app/brain/llm/providers/base.py</code> ~50% (הטסטים offline ולא מגיעים ל־SDK); <code>worker/social_tasks.py</code> ~84% (ענפי תביעה שנכתבת ע"י מודל).</li>
+<li>אין gate כיסוי לצד הלקוח. <code>npm run lint</code> עם <code>noUnusedLocals</code> — import אחד מיותר מפיל גם את ה־Docker build.</li>
+</ul>
+</div></section>

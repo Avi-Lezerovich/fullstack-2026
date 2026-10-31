@@ -1,0 +1,20 @@
+<!-- ============================ 3 TECH STACK ============================ -->
+<section class="topic" id="t3" data-title="Tech stack">
+<div class="topic-head"><div class="n">3</div><h2>Tech stack — ולמה כל רכיב נבחר</h2><label class="done-toggle"><input type="checkbox" data-done="t3"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
+<div class="topic-body">
+<div class="tablewrap"><table><thead><tr><th>רכיב</th><th>בחירה</th><th>למה (כפי שמנומק בקוד/דוקים)</th></tr></thead><tbody>
+<tr><td>UI</td><td>React 18 + TypeScript + MUI 5</td><td>קומפוננטות מוכנות עם תמיכה ב־RTL (<code>direction: "rtl"</code> ב־<code>theme.ts</code>) + <code>stylis-plugin-rtl</code> שהופך את ה־CSS הפיזי. TS תופס שגיאות בזמן build (<code>tsc -b</code>).</td></tr>
+<tr><td>Build / dev</td><td>Vite</td><td>dev server מהיר על 5174 עם proxy ל־<code>/api</code> שמזרים SSE בלי buffering.</td></tr>
+<tr><td>Routing</td><td>react-router-dom v6, <code>BrowserRouter</code></td><td>נתיבים נקיים; nginx עושה <code>try_files … /index.html</code>.</td></tr>
+<tr><td>Backend</td><td>Flask + blueprints</td><td>קטן ופשוט; blueprint לכל קבוצת משאבים.</td></tr>
+<tr><td>DB access</td><td>PyMySQL גולמי, בלי ORM</td><td>SQL פרמטרי מפורש; placeholders של MySQL (<code>%s</code>); הטסטים מריצים את אותו דיאלקט מול MySQL אמיתי.</td></tr>
+<tr><td>WSGI</td><td>gunicorn <code>--worker-class gthread</code></td><td>stream של SSE מחזיק handler דקות; sync worker היה נחסם.</td></tr>
+<tr><td>DB</td><td>MySQL 8 InnoDB, utf8mb4</td><td>עברית; <code>FOR UPDATE SKIP LOCKED</code>, <code>GET_LOCK</code>, UNIQUE keys שמחזיקים את ה־crash-safety.</td></tr>
+<tr><td>Auth</td><td>bcrypt + session rows + httpOnly cookie</td><td>JS לא יכול לקרוא את העוגייה; אפשר לבטל את כל ה־sessions של משתמש (ban / reset). רק SHA-256 של הטוקן נשמר.</td></tr>
+<tr><td>Real-time</td><td>SSE (<code>EventSource</code>) + polling fallback</td><td>ללא broker: cursor על <code>notifications.id</code>.</td></tr>
+<tr><td>AI</td><td>Gemini (HTTP, urllib), Bedrock/Anthropic (SDK), gateway, + offline</td><td>החבילות אופציונליות (import בתוך הפונקציה); offline דטרמיניסטי — האפליקציה רצה בלי שום key.</td></tr>
+<tr><td>Moderation</td><td>מילון משוקלל (<code>sentiment.py</code>) — לא LLM</td><td>רץ באותה טרנזקציה כמו ה־INSERT: חייב להיות מהיר ודטרמיניסטי.</td></tr>
+<tr><td>Packaging</td><td>Docker multi-stage, nginx unprivileged</td><td>image אחד לשרת (3 פקודות: api/worker/seed), image אחד ל־web. רץ כ־non-root.</td></tr>
+<tr><td>Tests</td><td>pytest (+ real MySQL), vitest + Testing Library</td><td>האפליקציה נשענת על אילוצי DB — רק DB אמיתי בודק אותם.</td></tr>
+</tbody></table></div>
+</div></section>

@@ -1,0 +1,61 @@
+<!-- ============================ 10 FLOWS ============================ -->
+<section class="topic" id="t10" data-title="זרימות End-to-end">
+<div class="topic-head"><div class="n">10</div><h2>זרימות End-to-end — sequence diagrams</h2><label class="done-toggle"><input type="checkbox" data-done="t10"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
+<div class="topic-body">
+<p>חמש הזרימות החשובות, עם הקבצים והפונקציות המדויקים בכל צעד. חיצים מקווקווים = תשובה. (התרשימים מצוירים כ־SVG ע"י סקריפט קטן בתוך הקובץ, מנתונים שכתובים ידנית.)</p>
+
+<details class="sub" open><summary>10.1 התחברות (Login)</summary><div class="in">
+<figure><div class="fig-scroll"><div class="seq" data-seq="login"></div></div>
+<figcaption>הדפדפן לעולם לא רואה את הטוקן ב־JS: הוא מגיע ב־<code>Set-Cookie: session_id=…; HttpOnly</code>. ה־DB שומר רק SHA-256 שלו.</figcaption></figure>
+<ol>
+<li><code>pages/Login.tsx</code> → <code>useAuth().signIn(email, password)</code> (<code>context/AuthContext.tsx</code>).</li>
+<li><code>api.login()</code> → <code>POST /api/auth/login</code> עם <code>credentials: "include"</code>.</li>
+<li><code>api/auth.py:51 login()</code>: <code>clean(email).lower()</code> → <code>users_service.get_by_email</code> → <code>security.verify_password</code> (bcrypt). נכשל → 401 "כתובת האימייל או הסיסמה שגויות." ; <code>banned</code> → 403.</li>
+<li><code>_authenticated_response</code> → <code>auth_service.create_session(user_id, ttl_days=SESSION_TTL_DAYS)</code>: <code>INSERT INTO sessions (token_hash = sha256(raw))</code>.</li>
+<li><code>security.set_session_cookie(response, raw_token)</code> → 200 <code>{"user": private_user(...)}</code>.</li>
+<li>בבקשות הבאות: <code>_load_user</code> → <code>auth_service.resolve_session(raw)</code> לפי hash, תוקף, ו־status.</li>
+</ol>
+</div></details>
+
+<details class="sub" open><summary>10.2 הגשת תביעה (File a case)</summary><div class="in">
+<figure><div class="fig-scroll"><div class="seq" data-seq="file"></div></div>
+<figcaption>ה־screen רץ <b>באותה טרנזקציה</b> כמו ה־INSERT — התוכן אף פעם לא גלוי לרגע לפני שנבדק. ה־deadline מחושב ע"י MySQL (<code>DATE_ADD(UTC_TIMESTAMP(), INTERVAL n MINUTE)</code>).</figcaption></figure>
+<ol>
+<li><code>pages/NewCase.tsx</code> <code>submit()</code> → <code>api.createCase({title, body, defendant_text, defendant_user_id, charges, image_url})</code>.</li>
+<li><code>POST /api/cases</code> → <code>@security.require_auth</code> → <code>api/cases.py:65 create_case()</code>: <code>body_of</code>, <code>clean</code>, בדיקות (כותרת ≥3, גוף ≥10, לא נגד עצמך, נתבע פעיל, יש נתבע).</li>
+<li><code>cases_service.create_case()</code> (<code>cases_service.py:246</code>): <code>moderation_service.screen(title+body)</code> → <code>sentiment.scan</code> → status (<code>published</code>/<code>flagged</code>/<code>rejected</code>).</li>
+<li><code>INSERT INTO cases (… status='witness_phase', phase_deadline_at = now + witness_deadline_offset())</code>, <code>INSERT case_charges</code> (<code>clean_charges</code>, עד 5), <code>record_scan</code>.</li>
+<li>אם לא rejected: <code>case_activity_service.touch(case_id,"filed")</code>, <code>follows_service.follow(source="auto")</code> למחבר ולנתבע הרשום. <code>commit_if_owned()</code>.</li>
+<li>Route: <code>"rejected"</code> → 422; אחרת <code>get_case</code> → 201 <code>{"case": …}</code> → הלקוח <code>navigate(/cases/&lt;id&gt;)</code>.</li>
+</ol>
+</div></details>
+
+<details class="sub" open><summary>10.3 תגובה + התראה חיה (Comment → SSE)</summary><div class="in">
+<figure><div class="fig-scroll"><div class="seq" data-seq="comment"></div></div>
+<figcaption>אין message broker: ה־"אוטובוס" הוא טבלת <code>notifications</code>. ה־stream פשוט סוקר <code>id &gt; cursor</code> כל 2 שניות ושולח <code>event: notification</code> עם <code>id:</code> — כך <code>Last-Event-ID</code> מחדש מאותה נקודה אחרי ניתוק.</figcaption></figure>
+<ol>
+<li><code>components/comments/CommentComposer.tsx</code> → <code>api.createComment(caseId, body, parentCommentId)</code> → <code>POST /api/cases/&lt;id&gt;/comments</code>.</li>
+<li><code>api/social.py:98 create_comment()</code>: גוף ריק → 400; תמיד <code>role="user"</code>.</li>
+<li><code>comments_service.create_comment()</code> (<code>:79</code>): screen → <code>INSERT comments</code> (depth עד <code>MAX_DEPTH=3</code>, <code>root_comment_id</code>) → <code>_notify_participants</code> → <code>notifications_service.notify()</code> למחבר התיק ולנתבע (לא לעצמך) → <code>case_activity_service.touch</code> → commit → 201.</li>
+<li>אצל המקבל: <code>hooks/useNotificationStream.ts</code> פתח <code>new EventSource("/api/notifications/stream?since=…")</code>; <code>api/notifications.py:89 stream()</code> סוקר כל <code>SSE_POLL_SECONDS</code> ושולח frame → <code>NotificationContext</code> מעדכן את הפעמון.</li>
+<li>אם SSE נכשל פעמיים תוך 30 שניות → polling ל־<code>GET /api/notifications?since=</code> כל 10 שניות.</li>
+</ol>
+</div></details>
+
+<details class="sub" open><summary>10.4 מנוע המשפט (worker)</summary><div class="in">
+<figure><div class="fig-scroll"><div class="seq" data-seq="trial"></div></div>
+<figcaption>שלושה ticks שונים (ימים 2, 2–5, 6). כל שלב: <code>SELECT … FOR UPDATE SKIP LOCKED</code>, ואז <code>UPDATE … WHERE status = 'expected'</code>; rowcount ≠ 1 → "already_done" → rollback.</figcaption></figure>
+<ol>
+<li><b>יום 2</b>: <code>trial_tasks.advance_witness_phase</code> → <code>trial_service.advance_to_deliberation</code> (<code>:151</code>): <code>SELECT … FOR UPDATE</code>, <code>summons_service.mark_no_shows</code>, <code>jury_service.select_panel</code> (pure, seeded ב־<code>JURY_SEED_SALT</code>, מוציא את הצדדים) → <code>seat_panel</code> (PK על case_id) → <code>UPDATE cases SET status='jury_deliberation'</code>.</li>
+<li><b>ימים 2–5</b>: <code>run_due_jurors</code> → <code>jury_service.due_jurors</code> (<code>speaks_at &lt;= now AND spoke_at IS NULL</code>) → <code>trial_service.speak_as_juror</code> (<code>:210</code>): <code>_case_context</code> → <code>brain.deliberate()</code> → <code>{vote, line}</code> → <code>create_comment(role="jury_deliberation", dedupe_key="jury:&lt;member_id&gt;", screen=False)</code> → <code>jury_service.record_speech</code> → <code>memory_service.record_event(...,"vote")</code> → commit.</li>
+<li><b>יום 6</b>: <code>advance_verdicts</code> → <code>trial_service.advance_to_verdict</code> (<code>:311</code>): משלים מושבעים שותקים, <code>count_votes</code> → <code>jury_service.tally(g, ng, judge_lean)</code> → <code>brain.generate(...,"verdict")</code> (+ <code>"sentence"</code> אם אשם) → תגובה עם <code>dedupe_key="verdict:&lt;case_id&gt;"</code> → <code>_notify_verdict</code>.</li>
+<li><b>יום 7</b>: <code>close_cases</code> → <code>trial_service.close_case</code>: <code>UPDATE … status='closed' WHERE status='verdict_reached'</code>.</li>
+</ol>
+</div></details>
+
+<details class="sub" open><summary>10.5 בוט מגיש תביעה (Bot filing)</summary><div class="in">
+<figure><div class="fig-scroll"><div class="seq" data-seq="bot"></div></div>
+<figcaption>הנתיב היחיד שמסרב "להתדרדר" ל־offline: אין LLM עם structured output → אין תביעה. כלל "בוט לא תובע אדם" נאכף מול טבלת <code>users</code>.</figcaption></figure>
+<p>ראו פירוט בסעיף 7.3. נקודות חשובות: <code>last_social_action_at</code> מוחתם <b>בכל מקרה</b> (גם אם לא בוצעה פעולה); <code>defendant_user_id</code> מקושר רק אם <code>target["kind"] == "bot"</code> והמודל השתמש בשם בדיוק.</p>
+</div></details>
+</div></section>

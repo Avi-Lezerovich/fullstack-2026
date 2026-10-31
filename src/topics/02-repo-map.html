@@ -1,0 +1,65 @@
+<!-- ============================ 2 REPO MAP ============================ -->
+<section class="topic" id="t2" data-title="מפת ה־repo">
+<div class="topic-head"><div class="n">2</div><h2>מפת ה־repo — סיור תיקייה־תיקייה</h2><label class="done-toggle"><input type="checkbox" data-done="t2"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
+<div class="topic-body">
+<pre><code>.
+├── client/                  React + TS (Vite). Dockerfile: node builds → nginx serves
+│   ├── nginx.conf.template  SPA fallback + /api proxy + SSE + upload size
+│   ├── docker-entrypoint.sh renders the template (API_UPSTREAM)
+│   ├── vite.config.ts       dev port 5174, proxy /api → localhost:5002
+│   └── src/
+│       ├── main.tsx         providers: RTL emotion cache, theme, router, auth, notifications
+│       ├── App.tsx          the route table
+│       ├── api.ts           THE REST seam — request&lt;T&gt;, ApiError
+│       ├── types.ts         response shapes + Hebrew labels (CASE_STATUS_LABELS…)
+│       ├── theme.ts         palette, direction: "rtl"
+│       ├── context/         AuthContext, NotificationContext
+│       ├── hooks/           useAsync, usePagedList, useNotificationStream
+│       ├── pages/           one component per route
+│       ├── components/      admin/ assist/ case/ comments/ common/ feed/ layout/ moderation/ routing/ trial/
+│       └── utils/           format.ts, adminOps.ts
+├── server/
+│   ├── run.py               web entry (gunicorn run:app)
+│   ├── run_worker.py        worker entry → worker.loop.run_forever()
+│   ├── app/
+│   │   ├── __init__.py      create_app() — pure factory
+│   │   ├── config.py        env → frozen Settings (get_settings() re-reads every call)
+│   │   ├── db.py            Db helper, connect(), owned(conn)
+│   │   ├── errors.py        result code → HTTP status, fail()
+│   │   ├── security.py      bcrypt, cookies, @require_auth/@require_admin/@optional_auth
+│   │   ├── validation.py    clean(), body_of(), positive_int(), is_email()
+│   │   ├── clock.py         trial-day constants + offsets
+│   │   ├── mail.py          password-reset email (console | smtp)
+│   │   ├── seed.py          python -m app.seed ; seed_data.py = the 31 personalities
+│   │   ├── api/             12 blueprints
+│   │   ├── services/        ALL the SQL + business rules (never import Flask)
+│   │   └── brain/           offline generator, llm/ package, chain.py, decide.py, sentiment.py
+│   ├── worker/              loop.py + trial/social/moderation/housekeeping tasks
+│   ├── tests/               unit/ + integration/ (pytest, real MySQL)
+│   └── evals/               offline scorecard for bot voices
+├── database/init.sql        the schema (mounted into MySQL entrypoint)
+├── prod/                    EC2+RDS compose, release.sh, deploy.sh, init-rds.sh, migrations/
+├── docs/                    architecture docs
+├── docker-compose.yml       local stack (5 services)
+└── Makefile                 shortcuts (make help)</code></pre>
+
+<h3>"אם צריך לשנות X — מסתכלים ב־Y"</h3>
+<div class="tablewrap"><table><thead><tr><th>רוצה לשנות…</th><th>קובץ/ים</th></tr></thead><tbody>
+<tr><td>טקסט/תווית בממשק</td><td><code>client/src/pages/*.tsx</code>, <code>client/src/components/**</code>, תוויות סטטוס ב־<code>client/src/types.ts</code> (<code>CASE_STATUS_LABELS</code>)</td></tr>
+<tr><td>דף/נתיב חדש בצד לקוח</td><td><code>client/src/App.tsx</code> + דף ב־<code>client/src/pages/</code> + קישור ב־<code>components/layout/TopBar.tsx</code></td></tr>
+<tr><td>קריאת API מהלקוח</td><td><code>client/src/api.ts</code> + טיפוס ב־<code>client/src/types.ts</code></td></tr>
+<tr><td>endpoint חדש</td><td>blueprint ב־<code>server/app/api/*.py</code> (+ רישום ב־<code>api/__init__.py</code> אם blueprint חדש) + פונקציה ב־<code>server/app/services/</code></td></tr>
+<tr><td>כלל ולידציה של בקשה</td><td>ה־route ב־<code>server/app/api/*.py</code> / <code>server/app/validation.py</code>; כלל עסקי → ה־service</td></tr>
+<tr><td>הודעת שגיאה / קוד סטטוס</td><td><code>server/app/errors.py</code> (<code>RESULT_STATUS</code>, <code>DEFAULT_MESSAGES</code>)</td></tr>
+<tr><td>עמודה/טבלה</td><td><code>database/init.sql</code> + ה־service שכותב/קורא + <code>shape_*</code> + <code>types.ts</code>; לפרודקשן: <code>prod/migrations/00N-*.sql</code></td></tr>
+<tr><td>משתנה סביבה</td><td><code>server/app/config.py</code> (<code>Settings</code> + <code>get_settings()</code>) + <code>docker-compose.yml</code> (רשימה מפורשת לכל שירות!) + <code>.env.example</code></td></tr>
+<tr><td>קצב/תזמון המשפט</td><td><code>server/app/clock.py</code> (ימים), <code>PHASE_MINUTES</code>, <code>server/worker/loop.py</code></td></tr>
+<tr><td>גודל חבר מושבעים / שופט</td><td><code>server/app/services/jury_service.py</code> (<code>PANEL_SIZE</code>, <code>tally</code>)</td></tr>
+<tr><td>מה בוט עושה / משקולות</td><td><code>server/app/brain/decide.py</code>, <code>server/worker/social_tasks.py</code></td></tr>
+<tr><td>סינון תוכן</td><td><code>server/app/brain/sentiment.py</code> (מילון + ספים), <code>services/moderation_service.py</code></td></tr>
+<tr><td>prompts של LLM</td><td><code>server/app/brain/llm/prompt.py</code>, <code>llm/tasks.py</code></td></tr>
+<tr><td>ספקי LLM / credentials</td><td><code>server/app/brain/llm/registry.py</code>, <code>llm/providers/</code>, <code>brain/chain.py</code>, <code>LLM_CREDENTIALS</code></td></tr>
+<tr><td>פורטים / שירותים</td><td><code>docker-compose.yml</code>, <code>client/vite.config.ts</code>, <code>server/Dockerfile</code></td></tr>
+<tr><td>הגדרות nginx</td><td><code>client/nginx.conf.template</code></td></tr>
+</tbody></table></div>
+</div></section>

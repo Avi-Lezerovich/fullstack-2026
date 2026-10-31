@@ -1,0 +1,55 @@
+<!-- ---------- validation ---------- -->
+<div class="fx-group"><h3>ולידציה ומגבלות (לרוב בשני צדדים!) <span class="lyr">api/ · services/ · pages/</span></h3><div class="fx-list">
+<div class="fx" data-keys="title כותרת מינימום קצרה מדי 3 תווים"><div class="fx-q">מינימום תווים בכותרת תביעה (3)</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/app/api/cases.py:75</code></div>
+<div class="fx-also"><span class="lb">לקוח</span> אין בדיקה. אפשר להוסיף <code>minLength</code> ב־<code>client/src/pages/NewCase.tsx:84</code>. <a href="#r2" data-reveal="r2">מתכון 2 ←</a></div></div>
+
+<div class="fx" data-keys="body כתב התביעה קצר מדי מינימום 10"><div class="fx-q">מינימום תווים בכתב התביעה (10)</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/app/api/cases.py:77</code> ("כתב התביעה קצר מדי.")</div>
+<div class="fx-also"><span class="lb">טסט</span> <code>server/tests/integration/test_cases_api.py:77</code> (short-body)</div></div>
+
+<div class="fx" data-keys="max מקסימום אורך כותרת 512 8000 גוף"><div class="fx-q">אורך מקסימלי לכותרת (512) / לגוף (8000)</div>
+<div class="fx-where"><span class="lb">שרת</span> <code>server/app/services/cases_service.py:23</code> <code>TITLE_MAX_LENGTH</code> · <code>server/app/api/cases.py:15</code> <code>BODY_MAX_LENGTH</code></div>
+<div class="fx-also"><span class="lb">לקוח</span> <code>client/src/pages/NewCase.tsx:84</code> ו־<code>:149</code> (<code>maxLength</code>). השרת <b>חותך</b> בשקט, הוא לא דוחה.</div></div>
+
+<div class="fx" data-keys="password סיסמה אורך מינימום 8"><div class="fx-q">אורך סיסמה מינימלי (8)</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/app/security.py:39</code> <code>MIN_PASSWORD_LENGTH</code></div>
+<div class="fx-also"><span class="lb">עדכן גם</span> <code>client/src/pages/Signup.tsx:23</code> · <code>client/src/pages/ResetPassword.tsx:102</code> <a href="#r3" data-reveal="r3">מתכון 3 ←</a></div></div>
+
+<div class="fx" data-keys="name שם מינימום מקסימום 2 80 משתמש"><div class="fx-q">אורך שם משתמש (2–80)</div>
+<div class="fx-where"><span class="lb">שרת</span> <code>server/app/validation.py:17</code> <code>NAME_MIN</code> / <code>NAME_MAX</code> (signup ועדכון פרופיל)</div>
+<div class="fx-also"><span class="lb">לקוח</span> <code>client/src/pages/Signup.tsx:21</code> · <code>client/src/pages/Profile.tsx:85</code> ו־<code>:206</code></div></div>
+
+<div class="fx" data-keys="bio קצת עליי 500 פרופיל"><div class="fx-q">אורך "קצת עליי" (500)</div>
+<div class="fx-where"><span class="lb">שרת</span> <code>server/app/api/users.py:14</code> <code>BIO_MAX_LENGTH</code> (חותך, לא דוחה)</div>
+<div class="fx-also"><span class="lb">לקוח</span> <code>client/src/pages/Profile.tsx:223</code></div></div>
+
+<div class="fx" data-keys="comment תגובה ריקה מינימום אורך 4000"><div class="fx-q">תגובה: ריקה / מינימום / מקסימום (4000)</div>
+<div class="fx-where"><span class="lb">שרת</span> <code>server/app/api/social.py:105</code> (ריקה) · <code>server/app/services/comments_service.py:28</code> (מקסימום)</div>
+<div class="fx-also"><span class="lb">לקוח</span> <code>client/src/components/comments/CommentComposer.tsx:65</code> <a href="#r4" data-reveal="r4">מתכון 4 ←</a></div></div>
+
+<div class="fx" data-keys="message הודעה פרטית אורך 2000 ריקה"><div class="fx-q">הודעה פרטית: אורך (2000) / ריקה</div>
+<div class="fx-where"><span class="lb">שרת</span> <code>server/app/services/messages_service.py:23</code> · בדיקת ריקה ב־<code>server/app/api/messages.py:68</code></div>
+<div class="fx-also"><span class="lb">לקוח</span> <code>client/src/pages/Messages.tsx:279</code></div></div>
+
+<div class="fx" data-keys="charges סעיפי אישום מקסימום 5 אורך סעיף"><div class="fx-q">מספר סעיפי אישום (5) / אורך סעיף (64)</div>
+<div class="fx-where"><span class="lb">שרת</span> <code>server/app/services/cases_service.py:21</code> <code>MAX_CHARGES</code> · <code>:22</code> <code>CHARGE_MAX_LENGTH</code></div>
+<div class="fx-also"><span class="lb">לקוח</span> <code>client/src/pages/NewCase.tsx:121</code> + <code>:128</code> (helperText "עד חמישה") <a href="#r5" data-reveal="r5">מתכון 5 ←</a></div></div>
+
+<div class="fx" data-keys="email אימייל regex תקין"><div class="fx-q">בדיקת אימייל תקין</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/app/validation.py:15</code> <code>EMAIL_RE</code></div></div>
+
+<div class="fx" data-keys="upload העלאה תמונה גודל מגה 5MB size"><div class="fx-q">גודל העלאת תמונה (5MB)</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/app/config.py:419</code> <code>UPLOAD_MAX_BYTES</code></div>
+<div class="fx-also"><span class="lb">עדכן גם</span> nginx: <code>client/nginx.conf.template:91</code> <code>client_max_body_size 6m</code>. בלי זה, בדוקר כל קובץ גדול נחסם ב־413. <a href="#r22" data-reveal="r22">מתכון 22 ←</a></div></div>
+
+<div class="fx" data-keys="upload סוג קובץ jpg png gif webp פורמט"><div class="fx-q">סוגי תמונות מותרים</div>
+<div class="fx-where"><span class="lb">שרת</span> <code>server/app/api/uploads.py:41</code> <code>_SIGNATURES</code> (לפי magic bytes) + הודעה ב־<code>:95</code></div>
+<div class="fx-also"><span class="lb">לקוח</span> <code>client/src/components/common/ImageUploadField.tsx:25</code> <code>ACCEPT</code></div></div>
+
+<div class="fx" data-keys="witness עדים מקסימום לכל צד 3 זימון"><div class="fx-q">מספר עדים לכל צד (3)</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/app/services/summons_service.py:25</code> <code>MAX_WITNESSES_PER_SIDE</code></div></div>
+
+<div class="fx" data-keys="reply תגובה לתגובה עומק nesting depth"><div class="fx-q">עומק שרשור תגובות (3)</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/app/services/comments_service.py:27</code> <code>MAX_DEPTH</code> · הזחה בתצוגה: <code>client/src/components/comments/CommentThread.tsx:20</code></div></div>
+</div></div>

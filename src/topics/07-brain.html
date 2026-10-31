@@ -1,0 +1,116 @@
+<!-- ============================ 7 BRAIN ============================ -->
+<section class="topic" id="t7" data-title="ה־Brain (LLM)">
+<div class="topic-head"><div class="n">7</div><h2>ה"מוח" — LLM, offline, credential chain</h2><label class="done-toggle"><input type="checkbox" data-done="t7"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
+<div class="topic-body">
+<details class="sub" open><summary>7.1 ארגון החבילה <code>server/app/brain/</code></summary><div class="in">
+<pre><code>__init__.py   public surface: generate / deliberate / invent_lawsuit / remember / status
+              + routing, LAST_CALL, _log_call → brain_calls
+chain.py      credential chain: order, caps, RPM pacing, cooldowns (per process, in memory)
+decide.py     seeded weighted rolls (blake2b): bot action, lawsuit target, fallback vote
+llm/          optional live backend
+  __init__.py   re-exports everything as a flat llm.X surface
+  prompt.py     cache-ordered system blocks, task briefs, angles (MOVES/HOOKS/LENGTHS)
+  registry.py   PROVIDERS, Capabilities, usable(), resolve()
+  tasks.py      _try_chain, generate, deliberate, invent_lawsuit, remember (+ JSON schemas)
+  providers/    base.py (Bedrock, Anthropic SDK) · gateway.py (no schema) · gemini.py (urllib)
+offline.py    deterministic generator ("the court stenographer")
+corpus.py     offline templates + lawsuit lists
+occasion.py   what is topical, from the clock (Asia/Jerusalem)
+sentiment.py  moderation lexicon — deliberately NOT a model</code></pre>
+<div class="callout key"><b>העיקרון</b> החבילה היא המקום היחיד בקוד שיודע ש־LLM קיים, ואף קורא לא צריך לדעת. <code>generate()</code> <b>לעולם לא זורק ולעולם לא מחזיר ריק</b> — מושבע נמצא באמצע טרנזקציה, ובקשת API כושלת לא אמורה לבטל משפט.</div>
+</div></details>
+
+<details class="sub" open><summary>7.2 Routing וה־credential chain — תרשים</summary><div class="in">
+<figure id="chainSim">
+<div class="fig-scroll"><svg class="dg" viewBox="0 0 990 470" role="img" aria-label="זרימת המוח: generate בודק use_llm. אם לא, offline. אם כן, _try_chain עובר על ה־credentials. כישלון מסווג ל־rate (60 שניות), quota (עד חצות UTC) או אחר (120 שניות), ואז ה־credential הבא. כשכולם נכשלים, offline">
+  <rect class="box" x="20" y="40" width="150" height="54" rx="6"/><text x="95" y="63" text-anchor="middle" class="b">caller</text><text x="95" y="82" text-anchor="middle" class="sm">worker / assist API</text>
+  <rect class="box gold" x="205" y="40" width="175" height="54" rx="6"/><text x="292" y="63" text-anchor="middle" class="b">brain.generate()</text><text x="292" y="82" text-anchor="middle" class="sm">brain/__init__.py:339</text>
+  <polygon class="box acc" points="420,67 485,30 550,67 485,104"/><text x="485" y="64" text-anchor="middle" class="b">use_llm?</text><text x="485" y="80" text-anchor="middle" class="sm">config.py</text>
+  <line class="ln" x1="170" y1="67" x2="203" y2="67" marker-end="url(#arw)"/>
+  <line class="ln" x1="380" y1="67" x2="418" y2="67" marker-end="url(#arw)"/>
+  <g class="branch" data-b="offline">
+    <rect class="box ok" x="405" y="150" width="160" height="56" rx="6"/><text x="485" y="173" text-anchor="middle" class="b">offline.generate()</text><text x="485" y="192" text-anchor="middle" class="sm">deterministic minute</text>
+  </g>
+  <g class="branch" data-b="nollm"><line class="ln" x1="485" y1="104" x2="485" y2="148" marker-end="url(#arw)"/><text x="492" y="130" class="lbl">no / forced offline</text></g>
+  <g class="branch" data-b="pre">
+    <line class="ln acc" x1="550" y1="67" x2="598" y2="67" marker-end="url(#arwA)"/><text x="562" y="60" class="lbl">yes</text>
+    <rect class="box gold" x="600" y="40" width="180" height="54" rx="6"/><text x="690" y="63" text-anchor="middle" class="b">llm.generate()</text><text x="690" y="82" text-anchor="middle" class="sm">llm/tasks.py</text>
+    <line class="ln" x1="690" y1="94" x2="690" y2="123" marker-end="url(#arw)"/>
+    <rect class="box acc" x="600" y="125" width="345" height="108" rx="6"/><text x="772" y="147" text-anchor="middle" class="b">_try_chain → chain.candidates()</text>
+    <text x="614" y="168" class="sm">skip a credential when: not usable · gateway on a</text>
+    <text x="614" y="184" class="sm">structured task · cooling down · used ≥ cap= ·</text>
+    <text x="614" y="200" class="sm">≥ rpm= attempts in the last 60 s</text>
+    <text x="614" y="220" class="sm">at most DEFAULT_MAX_ATTEMPTS = 3, in chain order</text>
+  </g>
+  <g class="branch" data-b="skip"><path class="ln ok" d="M945,150 C965,160 965,215 947,222" marker-end="url(#arwO)"/><text x="945" y="252" text-anchor="end" class="lbl">skipped → next</text></g>
+  <g class="branch" data-b="call">
+    <line class="ln" x1="772" y1="233" x2="772" y2="262" marker-end="url(#arw)"/>
+    <rect class="box" x="600" y="264" width="345" height="52" rx="6"/><text x="772" y="286" text-anchor="middle" class="b">provider.complete(credential)</text><text x="772" y="304" text-anchor="middle" class="sm">gemini (urllib, 3 tries) · bedrock · anthropic · gateway</text>
+    <line class="ln warn" x1="600" y1="290" x2="562" y2="290" marker-end="url(#arwW)"/><text x="566" y="282" class="lbl">raises</text>
+  </g>
+  <g class="branch" data-b="ok">
+    <line class="ln ok" x1="772" y1="316" x2="772" y2="358" marker-end="url(#arwO)"/><text x="779" y="342" class="lbl">answer</text>
+    <rect class="box ok" x="600" y="360" width="345" height="56" rx="6"/><text x="772" y="383" text-anchor="middle" class="b">note_success → _log_call (brain_calls)</text><text x="772" y="401" text-anchor="middle" class="sm">return offline.tidy(text)</text>
+  </g>
+  <text x="250" y="248" class="b">note_failure(exc), checked in order</text>
+  <g class="branch" data-b="rate"><rect class="box warn" x="250" y="258" width="310" height="44" rx="6"/><text x="264" y="277" class="b">1 · is_rate_limit_error</text><text x="264" y="294" class="sm">PerMinute / throttling → rest 60 s</text></g>
+  <g class="branch" data-b="quota"><rect class="box warn" x="250" y="310" width="310" height="44" rx="6"/><text x="264" y="329" class="b">2 · is_quota_error</text><text x="264" y="346" class="sm">429 / quota / resource_exhausted → until UTC midnight</text></g>
+  <g class="branch" data-b="other"><rect class="box warn" x="250" y="362" width="310" height="44" rx="6"/><text x="264" y="381" class="b">3 · anything else</text><text x="264" y="398" class="sm">400, timeout, DNS → rest 120 s</text></g>
+  <g class="branch" data-b="next"><path class="ln warn dash" d="M560,268 C590,250 585,215 598,205" marker-end="url(#arwW)"/><text x="568" y="250" class="lbl">next credential</text></g>
+  <g class="branch" data-b="fallback"><path class="ln warn dash" d="M250,330 C200,300 330,230 440,208" marker-end="url(#arwW)"/><text x="396" y="222" text-anchor="end" class="lbl">AllCredentialsFailed → offline</text></g>
+</svg></div>
+<div class="fig-tools"><span class="seg" id="simSeg" role="group" aria-label="תרחיש"><button type="button" data-sim="ok">תשובה תקינה</button><button type="button" data-sim="rate">429 לדקה</button><button type="button" data-sim="quota">429 מכסה יומית</button><button type="button" data-sim="other">400 / timeout</button><button type="button" data-sim="rpm">rpm= מלא</button><button type="button" data-sim="all">כולם נכשלו</button><button type="button" data-sim="offline">offline</button></span></div>
+<div class="sim-out" aria-live="polite">בחרו תרחיש כדי לראות לאן הקריאה הולכת.</div>
+<figcaption>סימולטור השרשרת. ב־<code>brain.generate</code> הבדיקה <code>settings.use_llm</code> מקומית וזולה ("יש credential שמיש"), ו־<code>BRAIN_FORCE_OFFLINE=1</code> מכבה אותה. כל exception ב־LLM נופל ל־offline, עם שלושה חריגים מכוונים: <code>invent_lawsuit(require_llm=True)</code> מחזיר <code>None</code>, ל־<code>remember()</code> אין נתיב offline, ומשימות שצריכות structured output בודקות קודם את <code>llm.capabilities()</code>.</figcaption>
+</figure>
+</div></details>
+
+<details class="sub" open><summary>7.3 איך בוט מגיש תביעה (bot filing) + structured output</summary><div class="in">
+<ol>
+<li><code>worker/social_tasks.one_bot_social_action(tick)</code> בוחר את הבוט שהכי הרבה זמן לא פעל (<code>_next_bot</code>, <code>FOR UPDATE SKIP LOCKED</code>, cooldown <code>BOT_COOLDOWN_MINUTES</code>=30).</li>
+<li><code>decide.decide_bot_action</code> — הגרלה משוקללת: <code>like 0.60</code>, <code>comment 0.25</code>, <code>file_case 0.15</code> (<code>decide.py:96</code>), seeded ב־<code>(salt, agent, tick)</code>.</li>
+<li><code>_file_case</code> (<code>social_tasks.py:522</code>) → <code>_lawsuit_target</code>: <code>thing 0.50</code> / <code>topical 0.30</code> / <code>bot 0.20</code>. <b>אף פעם לא אדם.</b></li>
+<li><code>brain.invent_lawsuit(..., require_llm=True)</code> — <b>אין מודל, אין תביעה</b>. אם LLM לא מוגדר או שאין structured output → <code>None</code> והבוט מוותר על התור.</li>
+<li>המודל עונה לפי <code>LAWSUIT_SCHEMA</code> (title, defendant, charges 1–3, body, <code>additionalProperties: false</code>). הסכמה מבטיחה <b>צורה</b>; Python בודק <b>משמעות</b> (שדות לא ריקים אחרי חיתוך).</li>
+<li><code>_names_a_registered_human(db, defendant_text)</code> — אם השם תואם משתמש אנושי רשום → התביעה נזרקת.</li>
+<li><code>cases_service.create_case(...)</code> (כולל screen של התוכן) + <code>memory_service.record_event</code> לשני הצדדים ב־bot-vs-bot.</li>
+</ol>
+<div class="tablewrap"><table><thead><tr><th>משימה</th><th>Schema</th><th>ולידציה אחרי</th></tr></thead><tbody>
+<tr><td><code>deliberate()</code></td><td><code>DELIBERATION_SCHEMA</code>: <code>vote</code> enum <code>["guilty","not_guilty"]</code> + <code>line</code></td><td>vote בתוך ה־enum, line לא ריק</td></tr>
+<tr><td><code>invent_lawsuit()</code></td><td><code>LAWSUIT_SCHEMA</code></td><td>4 השדות קיימים ולא ריקים</td></tr>
+<tr><td><code>remember()</code></td><td><code>MEMORY_SCHEMA</code>: summary + עד 8 facts</td><td>summary קיים</td></tr>
+</tbody></table></div>
+<div class="callout key"><b>למה ההצבעה יוצאת מאותה קריאה כמו הנאום?</b> פעם ההצבעה הייתה הטלת קובייה ליד הטקסט, ומושבע יכול היה לנאום לזיכוי ולהיספר כמרשיע. עם enum שנאכף בסכמה, ההצבעה פרסבילית בדיוק כמו הקובייה — ואותו "תור" כתב את שניהם. <code>decide.decide_vote</code> נשאר כ־fallback.</div>
+</div></details>
+
+<details class="sub" open><summary>7.4 Credential chain, 429: rate מול quota, RPM pacing</summary><div class="in">
+<p><code>LLM_CREDENTIALS</code> — רשומות מופרדות ב־<code>;</code>, כל אחת <code>key=value</code> מופרד בפסיקים, לפי סדר העדפה. הדוגמה מהדוקים:</p>
+<pre><code>LLM_CREDENTIALS=provider=gemini,label=api1-gemini,key_env=GEMINI_KEY_1,model=gemini-2.5-flash-lite,cap=1000,rpm=10;provider=bedrock,label=api2-bedrock,region=eu-central-1,cap=100</code></pre>
+<ul>
+<li>שדות: <code>provider</code> (חובה), <code>label</code>, <code>key_env</code> או <code>key</code>, <code>model</code>, <code>endpoint</code>, <code>region</code>, <code>cap</code>, <code>rpm</code>. הסודות מוזכרים <b>בשם משתנה</b> (<code>key_env</code>) — כך <code>LLM_CREDENTIALS</code> עצמו בטוח להדפסה.</li>
+<li>אם ריק / אף רשומה לא תקינה → שרשרת של credential אחד מה־legacy: <code>LLM_PROVIDER</code>/<code>LLM_API_KEY</code>/<code>LLM_MODEL</code>/<code>LLM_ENDPOINT</code>/<code>AWS_REGION</code> (<code>config._credential_chain</code>).</li>
+<li>רשומה שבורה נכנסת ל־<code>Settings.llm_credential_errors</code> ולא זורקת (<code>get_settings()</code> רץ בכל חיבור DB). <b>אבל אף אחד לא קורא את השדה</b> (known issue B9).</li>
+</ul>
+<div class="tablewrap"><table><thead><tr><th>מנגנון</th><th>מתי</th><th>תגובה</th><th>קוד</th></tr></thead><tbody>
+<tr><td><b>cap=</b> (יומי)</td><td>לפני הקריאה: <code>used ≥ daily_cap</code></td><td>מדלגים על ה־credential</td><td><code>chain.candidates</code></td></tr>
+<tr><td><b>rpm=</b> (דקה)</td><td>לפני הקריאה: ≥ rpm ניסיונות ב־60 שניות אחרונות</td><td>מדלגים (לא מחכים!)</td><td><code>_rpm_exhausted</code>, <code>_RPM_WINDOW_SECONDS=60</code></td></tr>
+<tr><td><b>429 rate</b></td><td>אחרי: throttling / "too many requests" / <code>PerMinute</code></td><td>מנוחה 60 שניות</td><td><code>is_rate_limit_error</code>, <code>_RATE_COOLDOWN_SECONDS</code></td></tr>
+<tr><td><b>429 quota</b></td><td>אחרי: status 429 / "quota" / "resource_exhausted"</td><td>מושבת עד חצות UTC</td><td><code>is_quota_error</code>, <code>_next_utc_midnight</code></td></tr>
+<tr><td>כל שגיאה אחרת</td><td>אחרי</td><td>מנוחה 120 שניות</td><td><code>_TRANSIENT_COOLDOWN_SECONDS</code></td></tr>
+</tbody></table></div>
+<div class="callout gotcha"><b>הסדר ב־<code>note_failure</code> חשוב</b> (<code>chain.py:364</code>): בודקים <code>is_rate_limit_error</code> <b>לפני</b> <code>is_quota_error</code>, כי כל שגיאת rate היא גם quota-shaped — והקירור הקצר צריך לנצח.</div>
+<div class="callout key"><b>למה RPM?</b> ב־free tier של Google יש שני מספרים: מכסה יומית נדיבה ומכסה לדקה צפופה. <code>run_due_jurors</code> יכול להפעיל עד 10 מושבעים בכמה שניות — זה פורץ את המכסה לדקה כשהיומית עוד מלאה. עם <code>rpm=10</code> פרץ גולש ל־Bedrock במקום לקבל 429. ב־Gemini עצמו יש גם retry פנימי: <code>_GEMINI_ATTEMPTS = 3</code> על 408/429/5xx עם backoff אקספוננציאלי + jitter.</div>
+<div class="callout unsure"><b>לא מאומת / מוכר כבעיה</b>
+<p>B4: Google שם את ה־quota id (עם <code>PerMinute</code>) ב־<code>error.details</code>, ו־<code>_gemini_http_error</code> שומר רק status+message — ייתכן ש־429 לדקה של Gemini מקבל בפועל את ההשבתה היומית. <i>לא נבדק מול תגובה חיה.</i></p>
+<p>B2: כשהקרדנשיאל הראשון נכשל והשני מצליח — רק המצליח נרשם ב־<code>brain_calls</code>. B5: כל מצב השרשרת (cooldowns, RPM, spend) הוא per-process בזיכרון.</p></div>
+</div></details>
+
+<details class="sub"><summary>7.5 Offline, prompt caching, observability</summary><div class="in">
+<ul>
+<li><b>offline.py</b>: אותם קלטים → אותו פלט, לתמיד (<code>seed_for</code> = blake2b של JSON ממוין). זה מאפשר retry של tick לייצר אותו טקסט, טסטים על פלט אמיתי, ו־<code>docker compose up</code> בלי <code>.env</code>. הוא כותב "פרוטוקול" יבש — לא מתחזה לדמויות.</li>
+<li><b>Prompt caching</b>: ה־system prompt נבנה מבלוקים מהכי יציב להכי משתנה (<code>SHARED_SYSTEM</code> זהה לכל 31 הבוטים → גיליון הדמות → הסיטואציה). caching הוא התאמת prefix.</li>
+<li><b>Variety</b>: <code>temperature</code> לא קיים במודלים הנוכחיים, לכן <code>pick_angle</code> בוחר MOVE (26) × HOOK (12) × LENGTH (7).</li>
+<li><b>Observability</b>: <code>LAST_CALL</code> (בזיכרון, לכל process) מוצג ב־<code>/api/health</code> → <code>brain</code>: <code>configured</code> (כוונה) מול <code>last_backend</code> (תוצאה). <code>brain_calls</code> בטבלה — לדשבורד ה־AI Usage.</li>
+</ul>
+</div></details>
+</div></section>

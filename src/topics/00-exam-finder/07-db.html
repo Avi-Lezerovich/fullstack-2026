@@ -1,0 +1,24 @@
+<!-- ---------- DB ---------- -->
+<div class="fx-group"><h3>Database, סכמה ו־seed <span class="lyr">database/init.sql · seed_data.py</span></h3><div class="fx-list">
+<div class="fx" data-keys="schema table טבלה עמודה column init.sql"><div class="fx-q">טבלאות ועמודות</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>database/init.sql</code>: users <code>:29</code>, cases <code>:117</code>, comments <code>:178</code>, notifications <code>:365</code> (ב־<kbd>Ctrl</kbd>+<kbd>K</kbd> מקלידים שם טבלה)</div>
+<div class="fx-also"><span class="lb">מלכודת</span> רץ רק על volume ריק. <a href="#r11" data-reveal="r11">מתכון 11 ←</a></div></div>
+
+<div class="fx" data-keys="enum status ערך חדש סטטוס חדש"><div class="fx-q">להוסיף ערך ל־ENUM (סטטוס חדש וכד')</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>database/init.sql:127</code> (status של cases)</div>
+<div class="fx-also"><span class="lb">עדכן גם</span> <code>server/app/services/cases_service.py:33</code> <code>CASE_STATUSES</code> · <code>client/src/types.ts:56</code> <code>CaseStatus</code> · <code>CASE_STATUS_LABELS</code> · <code>CaseStatusChip</code>. TypeScript ייכשל אם שכחת label (<code>Record&lt;CaseStatus,…&gt;</code>).</div></div>
+
+<div class="fx" data-keys="notification type סוג התראה חדש"><div class="fx-q">סוג התראה חדש</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>database/init.sql:368</code> (ENUM) + <code>server/app/services/notifications_service.py:22</code> <code>TYPES</code></div>
+<div class="fx-also"><span class="lb">לקוח</span> <code>client/src/types.ts:350</code> + <code>NotificationBell.tsx:23</code> (ICONS) + <code>describe()</code></div></div>
+
+<div class="fx" data-keys="seed demo users משתמשי דמו dana yoni maya admin סיסמה demo1234"><div class="fx-q">משתמשי דמו / הסיסמה שלהם</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/app/seed_data.py:793</code> <code>DEMO_HUMANS</code> · <code>:787</code> <code>ADMIN</code> · <code>:74</code> <code>DEMO_PASSWORD</code></div>
+<div class="fx-check"><span class="lb">להריץ</span> <code>make seed</code> או <code>cd server &amp;&amp; python -m app.seed</code>. אפשר להריץ שוב ושוב (upsert).</div></div>
+
+<div class="fx" data-keys="bots בוטים מושבעים שופטים אישיות personality"><div class="fx-q">הבוטים (מושבעים / שופטים / מנחים) והאישיות שלהם</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/app/seed_data.py:134</code> <code>JURORS</code> · <code>:536</code> <code>JUDGES</code> · <code>:701</code> <code>MODERATORS</code></div></div>
+
+<div class="fx" data-keys="migration prod מיגרציה alter"><div class="fx-q">שינוי סכמה בפרודקשן</div>
+<div class="fx-where"><span class="lb">איפה</span> קובץ חדש <code>prod/migrations/005-….sql</code> עם <code>ALTER TABLE</code> (ראו <code>prod/migrations/004-brain-credentials.sql</code>)</div></div>
+</div></div>

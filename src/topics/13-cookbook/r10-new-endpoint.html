@@ -1,0 +1,30 @@
+<!-- R10 -->
+<details class="recipe" id="r10"><summary><span class="tag med">בינוני</span> 10. להוסיף endpoint חדש: <code>GET /api/cases/stats</code> (ספירה לפי סטטוס)</summary><div class="in">
+<span class="rlabel">קבצים</span><ul><li><code>server/app/services/cases_service.py</code> — פונקציית service עם ה־SQL</li><li><code>server/app/api/cases.py</code> — route (blueprint קיים; אין צורך לגעת ב־<code>api/__init__.py</code>)</li><li><code>client/src/api.ts</code> — פונקציה (אם רוצים להשתמש בלקוח)</li></ul>
+<pre><code><span class="c"># services/cases_service.py</span>
+<span class="k">def</span> status_counts(conn: Db | None = None) -&gt; dict[str, int]:
+    <span class="s">"""How many publicly visible cases sit in each phase."""</span>
+    <span class="k">with</span> owned(conn) <span class="k">as</span> db:
+        rows = db.query_all(
+            f<span class="s">"SELECT c.status, COUNT(*) AS n FROM cases c "</span>
+            f<span class="s">"WHERE {PUBLIC_VISIBILITY} GROUP BY c.status"</span>
+        )
+    <span class="k">return</span> {row[<span class="s">"status"</span>]: int(row[<span class="s">"n"</span>]) <span class="k">for</span> row <span class="k">in</span> rows}
+
+<span class="c"># api/cases.py</span>
+@bp.get(<span class="s">"/cases/stats"</span>)
+<span class="k">def</span> case_stats():
+    <span class="k">return</span> jsonify({<span class="s">"counts"</span>: cases_service.status_counts()}), 200
+
+<span class="c">// client/src/api.ts</span>
+<span class="k">export const</span> fetchCaseStats = () =&gt;
+  request&lt;{ counts: Partial&lt;Record&lt;CaseStatus, number&gt;&gt; }&gt;(<span class="s">"/cases/stats"</span>).then((r) =&gt; r.counts);</code></pre>
+<span class="rlabel">אימות</span><pre><code>curl -s localhost:5002/api/cases/stats
+<span class="c"># {"counts":{"witness_phase":3,"closed":1}}</span></code></pre>
+<span class="rlabel">מה יכול להישבר / מה לומר</span>
+<ul><li>אין התנגשות עם <code>/cases/&lt;int:case_id&gt;</code> — ה־converter <code>int</code> לא יתאים ל־"stats" (כמו <code>/cases/feed</code> שכבר קיים).</li>
+<li>שומרים על השכבות: SQL ב־service, ה־route רק קורא ומחזיר. אסור <code>import flask</code> ב־service (<code>test_layering.py</code>).</li>
+<li>שימוש ב־<code>PUBLIC_VISIBILITY</code> — אחרת דולף מספר התיקים המוסתרים.</li>
+<li>אם צריך auth: להוסיף <code>@security.require_auth</code> / <code>@security.optional_auth</code> מתחת ל־<code>@bp.get</code>.</li>
+<li>מוסיפים <code>import</code> ב־<code>api.ts</code> של <code>CaseStatus</code> רק אם לא קיים — הוא כבר מיובא. import מיותר → <code>npm run lint</code> נכשל.</li></ul>
+</div></details>

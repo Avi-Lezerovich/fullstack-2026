@@ -1,0 +1,8 @@
+<!-- R13 -->
+<details class="recipe" id="r13"><summary><span class="tag easy">קל</span> 13. לשנות את התנהגות הבוטים (משקולות like/comment/file_case)</summary><div class="in">
+<span class="rlabel">קובץ</span><p><code>server/app/brain/decide.py:96</code></p>
+<pre><code><span class="del">-SOCIAL_ACTIONS = (("like", 0.60), ("comment", 0.25), ("file_case", 0.15))</span>
+<span class="add">+SOCIAL_ACTIONS = (("like", 0.40), ("comment", 0.45), ("file_case", 0.15))</span></code></pre>
+<span class="rlabel">אימות</span><p><code>python -m pytest tests/unit/test_brain_offline.py -q</code>; בזמן ריצה — <code>docker compose logs -f worker</code> מראה "performed a social action: comment".</p>
+<span class="rlabel">מה יכול להישבר</span><p><b>הסכום חייב להיות 1.0</b> — <code>test_action_and_target_weights_sum_to_one</code> (<code>tests/unit/test_brain_offline.py:275</code>). במצב offline <code>file_case</code> אף פעם לא מגיש בפועל (<code>require_llm=True</code>). כל comment עולה קריאת מודל אם LLM מוגדר.</p>
+</div></details>

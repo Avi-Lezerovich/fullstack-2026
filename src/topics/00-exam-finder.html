@@ -1,0 +1,65 @@
+<!-- ============================ 0 EXAM FINDER ============================ -->
+<section class="topic" id="t0" data-title="מצב מבחן — איפה זה?">
+<div class="topic-head"><div class="n">0</div><h2>מצב מבחן — ביקשו לשנות X, איפה זה?</h2><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
+<div class="topic-body">
+<p>הדף הזה הוא לשימוש <b>בזמן</b> המבחן. מוצאים את מה שביקשו לשנות ומקבלים את הקובץ והשורה, את המקומות שבהם אותו ערך משוכפל ("עדכן גם"), ואיך לוודא שזה עבד. <b>כל נתיב עם ↗ נפתח בקוד עצמו</b> בשורה הנכונה. <b>Alt+לחיצה</b> על נתיב פותחת אותו ישר ב־<b>VS Code במחשב שלך</b>, אחרי שמגדירים פעם אחת את תיקיית הפרויקט (הכפתור למטה). בלי הגדרה, "העתק נתיב:שורה" נותן משהו שמדביקים ב־<kbd>Ctrl</kbd>+<kbd>P</kbd> ב־VS Code.</p>
+<div class="big-actions">
+  <button class="btn primary" type="button" data-open-palette>⌕ חיפוש מהיר <kbd>Ctrl</kbd> <kbd>K</kbd></button>
+  <button class="btn" type="button" data-local-setup>⚙ הגדר פתיחה ב־VS Code</button>
+  <button class="btn" type="button" data-open-code="grep">חיפוש בכל הקוד (grep)</button>
+  <button class="btn" type="button" data-open-code="files">כל הקבצים</button>
+  <a class="btn" href="#t13" data-go="t13">מתכוני שינוי (Cookbook)</a>
+</div>
+
+<div class="exam-day">
+  <div class="card"><h4>לפני שמתחילים (5 דקות)</h4>
+  <ul>
+    <li>הפרויקט רץ: <code>docker compose up --build</code> → <code>http://localhost:8080</code>, או native (נושא 17).</li>
+    <li>התחברות: <code>dana@lolsuit.local</code> / <code>demo1234</code>. מנהל: <code>admin@lolsuit.local</code>.</li>
+    <li><code>git status</code> נקי, כדי שבסוף <code>git diff</code> יראה רק את השינוי שלך.</li>
+    <li>הטסטים עוברים לפני שנוגעים (אחרת לא תדע מה שברת).</li>
+    <li>פתיחה ב־VS Code: לוחצים <button class="btn" type="button" data-local-setup>⚙ הגדר</button>, מדביקים את נתיב תיקיית הפרויקט, ובודקים עם Alt+לחיצה על נתיב כלשהו.</li>
+  </ul></div>
+  <div class="card"><h4>כשמקבלים משימה: 5 צעדים</h4>
+  <ol>
+    <li><b>שכבה:</b> UI (<code>client/src</code>), route (<code>api/</code>), service (<code>services/</code>), סכמה (<code>init.sql</code>) או config?</li>
+    <li><b>מצא</b> כאן או ב־<kbd>Ctrl</kbd>+<kbd>K</kbd>. אחרי זה <b>grep לערך עצמו</b>, כי הרבה ערכים כתובים פעמיים (לקוח ושרת).</li>
+    <li><b>שנה</b> את המינימום שצריך. לא משנים שמות של ENUM או מפתחות API.</li>
+    <li><b>הוכח:</b> דפדפן, curl או DevTools → Network. בדוקר צריך rebuild לשירות ששונה.</li>
+    <li><b>טסטים + <code>git diff</code></b>, ותסביר לבוחן מה עוד הושפע.</li>
+  </ol></div>
+  <div class="card"><h4>מה צריך כדי שהשינוי ייראה</h4>
+  <ul>
+    <li><b>client native</b> (<code>npm run dev</code>, :5174): HMR, מיד.</li>
+    <li><b>server native</b> (<code>python run.py</code>): Ctrl+C והרצה מחדש.</li>
+    <li><b>דוקר:</b> <code>docker compose up --build -d server</code> (או <code>web</code> / <code>worker</code>). הקוד אפוי ב־image.</li>
+    <li><b>init.sql</b> רץ רק על DB ריק: <code>docker compose down -v</code> או <code>ALTER TABLE</code>.</li>
+    <li><b>.env / compose:</b> restart לשירות.</li>
+  </ul></div>
+</div>
+
+<div class="fx-tools"><input class="search" id="fxFilter" type="search" placeholder="סינון הרשימה: צבע, סיסמה, פורט, לייק, מושבעים…" aria-label="סינון רשומות"><span class="fx-count" id="fxCount" aria-live="polite"></span></div>
+
+<!-- @include 00-exam-finder/01-ui-text.html -->
+
+<!-- @include 00-exam-finder/02-styling.html -->
+
+<!-- @include 00-exam-finder/03-routing-access.html -->
+
+<!-- @include 00-exam-finder/04-validation.html -->
+
+<!-- @include 00-exam-finder/05-errors.html -->
+
+<!-- @include 00-exam-finder/06-api.html -->
+
+<!-- @include 00-exam-finder/07-db.html -->
+
+<!-- @include 00-exam-finder/08-config.html -->
+
+<!-- @include 00-exam-finder/09-worker.html -->
+
+<!-- @include 00-exam-finder/10-live.html -->
+
+<!-- @include 00-exam-finder/11-run-test.html -->
+
+</div></section>

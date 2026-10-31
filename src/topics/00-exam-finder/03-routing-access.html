@@ -1,0 +1,20 @@
+<!-- ---------- routing / access ---------- -->
+<div class="fx-group"><h3>דפים, נתיבים והרשאות <span class="lyr">App.tsx · security.py</span></h3><div class="fx-list">
+<div class="fx" data-keys="route נתיב דף page url router"><div class="fx-q">רשימת כל הדפים והנתיבים</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/App.tsx:32</code> עד <code>:50</code> (<code>path="*"</code> = 404, תמיד אחרון)</div>
+<div class="fx-check"><span class="lb">דף חדש</span> <a href="#r14" data-reveal="r14">מתכון 14 ←</a></div></div>
+
+<div class="fx" data-keys="protected מחוברים בלבד login required דף מוגן"><div class="fx-q">דף רק למשתמשים מחוברים</div>
+<div class="fx-where"><span class="lb">איפה</span> עוטפים ב־<code>&lt;ProtectedRoute&gt;</code> ב־<code>client/src/App.tsx:33</code> (דוגמה: <code>/cases/new</code>)</div>
+<div class="fx-also"><span class="lb">שרת</span> ה־endpoint צריך <code>@security.require_auth</code> (<code>server/app/security.py:137</code>). הסתרה בלקוח היא לא אבטחה.</div></div>
+
+<div class="fx" data-keys="admin אדמין מנהל בלבד הרשאה is_admin hide הסתרה"><div class="fx-q">משהו שרק אדמין רואה / יכול לעשות</div>
+<div class="fx-where"><span class="lb">לקוח</span> <code>const { user } = useAuth()</code> ואז <code>{user?.is_admin &amp;&amp; (…)}</code>. דוגמאות: <code>client/src/components/layout/TopBar.tsx:129</code>, <code>client/src/pages/AdminDashboard.tsx:243</code></div>
+<div class="fx-also"><span class="lb">שרת</span> <code>@security.require_admin</code> (<code>server/app/security.py:152</code>) מחזיר 403. <a href="#r19" data-reveal="r19">מתכון 19 ←</a></div></div>
+
+<div class="fx" data-keys="logged in מחובר אנונימי hide button הסתר כפתור useAuth user"><div class="fx-q">להציג או להסתיר משהו לפי "מחובר / לא מחובר"</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>useAuth()</code> מ־<code>client/src/context/AuthContext.tsx:80</code>, ואז <code>{user ? … : …}</code>. דוגמה: <code>client/src/pages/Feed.tsx:62</code> (לשונית "הפיד שלי" רק למחוברים)</div></div>
+
+<div class="fx" data-keys="session cookie עוגייה התחברות תוקף ttl ימים"><div class="fx-q">כמה זמן נשארים מחוברים</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/app/config.py:334</code> <code>SESSION_TTL_DAYS</code> (7) · שם העוגייה <code>server/app/security.py:34</code></div></div>
+</div></div>

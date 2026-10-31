@@ -1,0 +1,60 @@
+<!-- ============================ 16 CHEAT SHEET ============================ -->
+<section class="topic" id="t16" data-title="דף הלילה האחרון">
+<div class="topic-head"><div class="n">16</div><h2>דף הלילה האחרון — cheat sheet</h2><label class="done-toggle"><input type="checkbox" data-done="t16"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
+<div class="topic-body">
+<div class="cheat">
+<div class="card"><h4>פורטים</h4><div class="tablewrap"><table><tbody>
+<tr><td>web (nginx)</td><td><code>8080</code> ציבורי</td></tr>
+<tr><td>API</td><td><code>5002</code> (loopback)</td></tr>
+<tr><td>Vite dev</td><td><code>5174</code></td></tr>
+<tr><td>MySQL</td><td><code>3307</code>→<code>3306</code></td></tr></tbody></table></div></div>
+<div class="card"><h4>חשבונות</h4><p><code>admin@lolsuit.local</code>, <code>dana@</code>, <code>yoni@</code>, <code>maya@lolsuit.local</code> — סיסמה <code>demo1234</code>. 31 בוטים ב־<code>@bots.lolsuit.local</code>.</p><p>MySQL: <code>-ulolsuit -plolsuit-dev</code> (root: <code>lolsuit-root-dev</code>), עם <code>--default-character-set=utf8mb4</code>.</p></div>
+<div class="card"><h4>פקודות דוקר</h4><pre><code>docker compose up --build    # make up
+docker compose ps            # make ps
+docker compose logs -f server
+docker compose down -v       # make clean (wipe)
+make seed · make db-shell · make shell</code></pre></div>
+<div class="card"><h4>Native</h4><pre><code>cp .env.example .env
+docker compose up -d db
+cd server &amp;&amp; source .venv/bin/activate
+python -m app.seed &amp;&amp; python run.py
+python run_worker.py
+cd client &amp;&amp; npm run dev</code></pre></div>
+<div class="card"><h4>טסטים</h4><pre><code>cd server &amp;&amp; python -m pytest --cov
+python -m pytest -m unit
+cd client &amp;&amp; npm test &amp;&amp; npm run lint
+curl -s localhost:5002/api/health</code></pre></div>
+<div class="card"><h4>קבצים שחייבים לזכור</h4><ul style="font-size:14px">
+<li><code>server/app/__init__.py</code> — factory</li>
+<li><code>server/app/api/__init__.py</code> — 12 blueprints</li>
+<li><code>server/app/errors.py</code> — codes→status</li>
+<li><code>server/app/security.py</code> — auth</li>
+<li><code>server/app/config.py</code> — Settings</li>
+<li><code>server/app/services/cases_service.py</code></li>
+<li><code>server/app/services/trial_service.py</code></li>
+<li><code>server/worker/loop.py</code> — tick</li>
+<li><code>server/app/brain/__init__.py</code>, <code>chain.py</code></li>
+<li><code>database/init.sql</code></li>
+<li><code>client/src/api.ts</code>, <code>App.tsx</code>, <code>types.ts</code></li>
+<li><code>docker-compose.yml</code></li></ul></div>
+<div class="card"><h4>מספרים</h4><ul style="font-size:14px">
+<li>31 בוטים = 20 jurors + 8 judges + 3 moderators</li>
+<li>7 מושבעים + שופט; עד 3 עדים לצד</li>
+<li>ימים: עדים 0–2, מושבעים 2–5, פסק 6, סגירה 7</li>
+<li>tick 15s; sweep /4; social /20; housekeeping /240</li>
+<li>bot weights 0.60/0.25/0.15; targets 0.50/0.30/0.20</li>
+<li>sentiment 0.35 borderline / 0.70 toxic</li>
+<li>chain: max 3; rate 60s; quota → UTC midnight; other 120s</li>
+<li>24 טבלאות; coverage gate 85%</li></ul></div>
+<div class="card"><h4>הזרימות במשפט אחד</h4><ul style="font-size:14px">
+<li><b>Login</b>: Login.tsx → AuthContext.signIn → POST /auth/login → verify_password → create_session → Set-Cookie.</li>
+<li><b>File</b>: NewCase → POST /cases → require_auth → validate → create_case (screen+INSERT witness_phase) → 201.</li>
+<li><b>Comment</b>: POST …/comments → create_comment → notify → SSE stream → bell.</li>
+<li><b>Trial</b>: tick → seat jury → jurors deliberate (brain) → tally+verdict → close.</li>
+<li><b>Bot filing</b>: one_bot_social_action → file_case → invent_lawsuit(require_llm) → not-a-human check → create_case.</li></ul></div>
+</div>
+<div class="callout key"><b>אם שוכחים הכל — שלושה משפטים</b>
+<p>1. ה־API רק כותב שורות עם deadlines; ה־worker הוא מי שמקדם משפטים, ושניהם חולקים רק MySQL.</p>
+<p>2. נכונות מגיעה מה־DB: SKIP LOCKED, UPDATE מותנה סטטוס, UNIQUE (dedupe_key) — ולכן כל retry בטוח.</p>
+<p>3. ה־brain לעולם לא מפיל את המערכת: LLM דרך credential chain, ואם נכשל — offline דטרמיניסטי (חוץ מתביעת בוט וזיכרון).</p></div>
+</div></section>

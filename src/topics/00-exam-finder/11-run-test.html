@@ -1,0 +1,16 @@
+<!-- ---------- run / test ---------- -->
+<div class="fx-group"><h3>הרצה, טסטים ודוקר <span class="lyr">Makefile · tests/</span></h3><div class="fx-list">
+<div class="fx" data-keys="test טסט pytest npm test הרצה אחד ספציפי"><div class="fx-q">להריץ טסט אחד מהר</div>
+<div class="fx-where"><span class="lb">שרת</span> <code>cd server &amp;&amp; python -m pytest tests/unit/test_cases_rules.py -q</code> · לפי שם: <code>-k short_title</code> · רק unit: <code>-m unit</code></div>
+<div class="fx-also"><span class="lb">לקוח</span> <code>cd client &amp;&amp; npx vitest run src/utils/format.test.ts</code> · <code>npm run lint</code></div></div>
+
+<div class="fx" data-keys="which test טסט שבודק את זה מוצא"><div class="fx-q">איזה טסט בודק את מה ששיניתי?</div>
+<div class="fx-where"><span class="lb">שיטה</span> grep לשם הקבוע או לטקסט, עם סינון נתיב <code>tests</code>. ב־"חיפוש בכל הקוד" תוצאות של טסטים מסומנות בתגית "טסט".</div></div>
+
+<div class="fx" data-keys="docker make rebuild logs restart compose"><div class="fx-q">פקודות דוקר שימושיות</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>Makefile</code>: <code>make up</code> · <code>make logs S=server</code> · <code>make restart S=worker</code> · <code>make db-shell</code> · <code>make clean</code> (מוחק DB)</div>
+<div class="fx-check"><span class="lb">עוד</span> נושא 17 (פקודות), נושא 9 (Docker)</div></div>
+
+<div class="fx" data-keys="nginx proxy api uploads sse buffering"><div class="fx-q">nginx (פרוקסי ל־API, SSE, גודל העלאה)</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/nginx.conf.template</code>: listen <code>:58</code> · SSE <code>:69</code> · uploads <code>:90</code> · <code>/api/</code> <code>:107</code></div></div>
+</div></div>

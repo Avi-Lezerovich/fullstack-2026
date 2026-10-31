@@ -1,0 +1,77 @@
+<!-- ---------- UI text ---------- -->
+<div class="fx-group"><h3>טקסטים ותוויות בממשק <span class="lyr">client/src</span></h3><div class="fx-list">
+<div class="fx" data-keys="status label סטטוס שם שלב איסוף עדויות דיוני מושבעים witness_phase"><div class="fx-q">שם של סטטוס/שלב תיק ("איסוף עדויות"…)</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/types.ts:413</code> <code>CASE_STATUS_LABELS</code></div>
+<div class="fx-also"><span class="lb">עדכן גם</span> <code>client/src/components/case/PhaseTimeline.tsx:12</code> (מערך משלו) · <code>client/src/pages/Feed.tsx:29</code> (לשוניות)</div>
+<div class="fx-check"><span class="lb">בדיקה</span> chip בכרטיס, ציר הזמן בדף תיק ולשונית בפיד. לא משנים את המפתח <code>witness_phase</code>. <a href="#r1" data-reveal="r1">מתכון 1 ←</a></div></div>
+
+<div class="fx" data-keys="hint tooltip הסבר סטטוס שבעה מושבעים"><div class="fx-q">משפט ההסבר שליד סטטוס ("שבעה מושבעים דנים…")</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/components/case/CaseStatusChip.tsx:15</code> <code>PRESENTATION</code> (צבע, אייקון ו־hint לכל סטטוס)</div>
+<div class="fx-also"><span class="lb">עדכן גם</span> אם משנים את גודל חבר המושבעים, הטקסט בשורה 25 אומר "שבעה".</div></div>
+
+<div class="fx" data-keys="verdict guilty not_guilty חייב זכאי פסק דין תווית"><div class="fx-q">המילים "חייב" / "זכאי"</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/types.ts:421</code> <code>VERDICT_LABELS</code></div>
+<div class="fx-also"><span class="lb">עדכן גם</span> <code>client/src/components/layout/NotificationBell.tsx:46</code> (כתוב שם ישירות) · <button class="btn" type="button" data-grep="זכאי">grep "זכאי"</button></div></div>
+
+<div class="fx" data-keys="כפתור הגש תביעה הגשת תביעה new case button"><div class="fx-q">כפתור "הגשת תביעה" / "הגש תביעה"</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/components/layout/TopBar.tsx:161</code> (מחשב) + <code>:238</code> (תפריט מובייל)</div>
+<div class="fx-also"><span class="lb">עדכן גם</span> <code>client/src/pages/Feed.tsx:144</code> ו־<code>:170</code> · כותרת הדף <code>client/src/pages/NewCase.tsx:68</code></div></div>
+
+<div class="fx" data-keys="nav ניווט קישור תפריט navbar menu link בית תובעים אודות"><div class="fx-q">קישורי הניווט בסרגל העליון</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/components/layout/TopBar.tsx:27</code> <code>NAV_LINKS</code></div>
+<div class="fx-check"><span class="lb">שים לב</span> אותו מערך מזין גם את הסרגל וגם את ה־Drawer במובייל. קישור "ניהול" נפרד ומוצג רק לאדמין (<code>TopBar.tsx:129</code>). <a href="#r14" data-reveal="r14">מתכון 14 ←</a></div></div>
+
+<div class="fx" data-keys="footer פוטר תחתית כיתוב RUNI"><div class="fx-q">הטקסט בפוטר</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/components/layout/Footer.tsx:53</code> (המשפט) · <code>:57</code> ("Mid term project…")</div>
+<div class="fx-check"><span class="lb">בדיקה</span> מופיע בכל דף. צבע הרקע הוא <code>primary.main</code>, כך שהוא נצבע מחדש לבד כשמשנים את הצבע הראשי ב־<code>theme.ts</code>.</div></div>
+
+<div class="fx" data-keys="title כותרת לשונית דפדפן tab name שם האתר meta"><div class="fx-q">הכותרת בלשונית הדפדפן / שם האתר</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/index.html</code> (שורה 6, <code>&lt;title&gt;</code>, ו־meta description)</div>
+<div class="fx-also"><span class="lb">עדכן גם</span> הלוגו בסרגל: <code>client/src/components/layout/TopBar.tsx:102</code> (alt) · Footer · <button class="btn" type="button" data-grep="LolSuit">grep LolSuit</button></div></div>
+
+<div class="fx" data-keys="like לייק אהבתי כפתור"><div class="fx-q">טקסט כפתור הלייק ("לייק" / "אהבתי")</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/components/case/LikeButton.tsx:82</code></div></div>
+
+<div class="fx" data-keys="form טופס תווית label שדה כותרת התביעה כתב התביעה placeholder"><div class="fx-q">תוויות בטופס הגשת תביעה</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/pages/NewCase.tsx:78</code> (כותרת) · <code>:108</code> (נגד מי) · <code>:128</code> (סעיפים) · <code>:142</code> (כתב התביעה)</div></div>
+
+<div class="fx" data-keys="login signup הרשמה כניסה תווית אימייל סיסמה שם מלא"><div class="fx-q">תוויות בטופסי כניסה / הרשמה / פרופיל</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/pages/Login.tsx:49</code> · <code>client/src/pages/Signup.tsx:69</code> · <code>client/src/pages/Profile.tsx:199</code></div></div>
+
+<div class="fx" data-keys="404 not found דף לא נמצא שגיאה"><div class="fx-q">דף 404 ("התיק לא נמצא בארכיון")</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/pages/NotFound.tsx:14</code></div>
+<div class="fx-also"><span class="lb">גם</span> דף "האולם סגור לקהל" (401) מגיע מ־<code>client/src/components/routing/ProtectedRoute.tsx</code></div></div>
+
+<div class="fx" data-keys="empty ריק אין תיקים להצגה"><div class="fx-q">הודעת "אין תיקים להצגה" בפיד</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/pages/Feed.tsx:161</code></div></div>
+
+<div class="fx" data-keys="notification התראה טקסט פעמון bell"><div class="fx-q">הטקסט של התראה בפעמון</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/components/layout/NotificationBell.tsx:34</code> <code>describe()</code>, עם case לכל סוג. אייקונים בשורה 23.</div>
+<div class="fx-check"><span class="lb">שים לב</span> השרת שולח רק type ו־payload, והמשפט נבנה בלקוח.</div></div>
+
+<div class="fx" data-keys="comment role badge עדות מושבעים תפקיד תגובה"><div class="fx-q">תוויות של תגובות בית המשפט (עדות / מושבע / פסק דין)</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/types.ts:132</code> <code>COMMENT_ROLE_LABELS</code> · צבע ואייקון: <code>client/src/components/comments/RoleBadge.tsx:14</code></div></div>
+
+<div class="fx" data-keys="witness עדי התביעה עדי ההגנה plaintiff defense"><div class="fx-q">"עדי התביעה" / "עדי ההגנה"</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/components/trial/WitnessList.tsx:17</code> <code>SIDE_LABEL</code> · סטטוס זימון: <code>client/src/types.ts:244</code></div></div>
+
+<div class="fx" data-keys="about אודות דף תיאור שופט מושבע מנחה"><div class="fx-q">טקסטים בדף "אודות"</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/pages/About.tsx:40</code> <code>ROLE_BLURB</code> · תוויות תפקידים <code>client/src/types.ts:181</code></div></div>
+
+<div class="fx" data-keys="date תאריך זמן format לפני שעה relative פורמט"><div class="fx-q">פורמט תאריך / "לפני 5 דקות"</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/utils/format.ts:22</code> <code>relativeTime</code> · <code>:46</code> <code>formatDate</code></div>
+<div class="fx-check"><span class="lb">טסט</span> <code>client/src/utils/format.test.ts</code></div></div>
+
+<div class="fx" data-keys="preview תקציר אורך כרטיס card 220 חיתוך"><div class="fx-q">כמה תווים מהתביעה מוצגים בכרטיס בפיד</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/components/feed/CaseCard.tsx:21</code> <code>PREVIEW_LENGTH = 220</code></div></div>
+
+<div class="fx" data-keys="charges suggestions סעיפי אישום הצעות autocomplete"><div class="fx-q">ההצעות לסעיפי אישום (autocomplete)</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/types.ts:402</code> <code>CHARGE_SUGGESTIONS</code></div></div>
+
+<div class="fx" data-keys="report reasons דיווח סיבות ספאם הטרדה"><div class="fx-q">סיבות דיווח (ספאם, הטרדה…)</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/types.ts:316</code> <code>REPORT_REASONS</code></div>
+<div class="fx-also"><span class="lb">עדכן גם</span> <code>server/app/api/moderation.py:19</code> (השרת דוחה value שלא ברשימה) · ENUM ב־<code>database/init.sql</code> (טבלת reports) אם מוסיפים סיבה</div></div>
+
+<div class="fx" data-keys="admin tabs ניהול לשוניות תור דיווחים"><div class="fx-q">לשוניות בדף הניהול</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/pages/AdminDashboard.tsx:34</code> <code>QUEUE_TABS</code> · <code>:222</code> <code>VIEWS</code></div></div>
+</div></div>

@@ -1,0 +1,11 @@
+<!-- R24 -->
+<details class="recipe" id="r24"><summary><span class="tag med">בינוני</span> 24. לשנות פורט (web / API / vite)</summary><div class="in">
+<span class="rlabel">איזה פורט?</span>
+<div class="tablewrap"><table><tr><th>מה</th><th>ברירת מחדל</th><th>איפה משנים</th><th>עדכן גם</th></tr>
+<tr><td>האתר בדוקר</td><td>8080</td><td><code>.env</code>: <code>WEB_PUBLISH_PORT=9090</code> (<code>docker-compose.yml:225</code>)</td><td><code>CLIENT_ORIGIN</code> ב־<code>docker-compose.yml:90</code> (לינקים במייל איפוס)</td></tr>
+<tr><td>API native</td><td>5002</td><td><code>server/app/config.py:331</code> <code>PORT</code></td><td>proxy של vite: <code>client/vite.config.ts:17</code></td></tr>
+<tr><td>vite dev</td><td>5174</td><td><code>client/vite.config.ts:8</code></td><td><code>CLIENT_ORIGIN</code>: <code>server/app/config.py:332</code> (CORS + לינקים)</td></tr>
+<tr><td>MySQL מהמחשב</td><td>3307</td><td><code>.env</code>: <code>DB_PUBLISH_PORT</code> (<code>docker-compose.yml:37</code>)</td><td><code>DB_PORT</code>: <code>server/app/config.py:327</code></td></tr></table></div>
+<span class="rlabel">מה לא לגעת</span><p><code>listen 8080</code> ב־nginx (<code>client/nginx.conf.template:58</code>) והפורט הפנימי 8080 בצד ימין של המיפוי הם פנימיים לקונטיינר. משנים רק את הצד השמאלי (המארח).</p>
+<span class="rlabel">אימות</span><p><code>docker compose up -d</code> ואז <code>http://localhost:9090</code>. <code>docker compose ps</code> מראה את המיפוי.</p>
+</div></details>

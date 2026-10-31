@@ -1,0 +1,6 @@
+<!-- R25 -->
+<details class="recipe" id="r25"><summary><span class="tag easy">קל</span> 25. לשנות את שם האתר / הכותרת / הסלוגן</summary><div class="in">
+<span class="rlabel">קבצים</span><ul><li><code>client/index.html</code>: <code>&lt;title&gt;</code> (שורה 6) ו־meta description</li><li><code>client/src/components/layout/Footer.tsx:44</code> (השם) ו־<code>:53</code> (הסלוגן)</li><li><code>client/src/components/layout/TopBar.tsx:97</code> ו־<code>:102</code> (aria-label / alt)</li></ul>
+<span class="rlabel">מלכודת</span><p>השם בסרגל העליון הוא <b>תמונה</b> (<code>client/public/lolsuit-lockup-horizontal.svg</code>), לא טקסט. כדי לשנות אותו משנים את ה־SVG או מחליפים את ה־<code>img</code> ב־<code>&lt;Typography&gt;</code>.</p>
+<span class="rlabel">אימות</span><p>הלשונית בדפדפן ותחתית הדף. כדי לא לפספס מופע: <button class="btn" type="button" data-grep="LolSuit">grep LolSuit</button> עם סינון נתיב <code>client/src</code>.</p>
+</div></details>

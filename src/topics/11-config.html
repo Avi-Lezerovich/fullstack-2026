@@ -1,0 +1,36 @@
+<!-- ============================ 11 CONFIG ============================ -->
+<section class="topic" id="t11" data-title="Configuration">
+<div class="topic-head"><div class="n">11</div><h2>Configuration ומשתני סביבה</h2><label class="done-toggle"><input type="checkbox" data-done="t11"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
+<div class="topic-body">
+<div class="callout key"><b>איך ערכים מגיעים</b>
+<p><b>מחוץ לדוקר</b>: <code>config.py</code> קורא <code>load_dotenv</code> על <code>.env</code> בשורש ה־repo (לא דורס משתנה שכבר מוגדר); חסר → ברירת המחדל בקוד. <code>get_settings()</code> (<code>config.py:324</code>) קורא את הסביבה <b>בכל קריאה</b> — אין singleton, ו־<code>Settings</code> הוא frozen dataclass.</p>
+<p><b>בדוקר</b>: compose קורא <code>.env</code> רק להחלפת <code>${VAR}</code>. קונטיינר רואה רק את מה שב־<code>environment:</code> של השירות שלו.</p></div>
+<div class="tablewrap"><table><thead><tr><th>משתנה</th><th>ברירת מחדל בקוד</th><th>compose מקומי</th><th>הערה</th></tr></thead><tbody>
+<tr><td><code>DB_HOST</code> / <code>DB_PORT</code></td><td><code>127.0.0.1</code> / <code>3307</code></td><td><code>db</code> / <code>3306</code></td><td></td></tr>
+<tr><td><code>DB_USER</code> / <code>DB_PASSWORD</code></td><td><code>root</code> / <code>lolsuit-dev</code></td><td><code>lolsuit</code> / <code>lolsuit-dev</code></td><td>⚠ ברירת המחדל בקוד לא עובדת מול ה־DB של compose (סיסמת root היא <code>lolsuit-root-dev</code>) → <code>cp .env.example .env</code></td></tr>
+<tr><td><code>DB_NAME</code></td><td><code>lolsuit</code></td><td><code>lolsuit</code></td><td></td></tr>
+<tr><td><code>PORT</code></td><td><code>5002</code></td><td><code>5002</code></td><td></td></tr>
+<tr><td><code>CLIENT_ORIGIN</code></td><td><code>http://localhost:5174</code></td><td><code>http://localhost:8080</code></td><td>CORS; רלוונטי רק בגישה cross-origin</td></tr>
+<tr><td><code>FLASK_SESSION_SECURE</code></td><td>off</td><td><code>0</code></td><td><code>1</code> = <code>Secure; SameSite=None</code></td></tr>
+<tr><td><code>SESSION_TTL_DAYS</code></td><td><code>7</code></td><td>—</td><td></td></tr>
+<tr><td><code>BCRYPT_ROUNDS</code></td><td><code>12</code></td><td>—</td><td>הטסטים מורידים ל־4</td></tr>
+<tr><td><code>PHASE_MINUTES</code></td><td><code>1440</code></td><td><code>1440</code> (server+worker)</td><td>יום משפט אחד</td></tr>
+<tr><td><code>TICK_SECONDS</code></td><td><code>15</code></td><td>worker</td><td>נקרא פעם אחת בעליית ה־worker</td></tr>
+<tr><td><code>SOCIAL_EVERY_TICKS</code></td><td><code>20</code></td><td><code>""</code> → קוד</td><td>"חוגת הוצאות" — כל pass עולה קריאות מודל</td></tr>
+<tr><td><code>SWEEP_EVERY_TICKS</code> / <code>HOUSEKEEPING_EVERY_TICKS</code></td><td><code>4</code> / <code>240</code></td><td>—</td><td>נקראים בכל tick</td></tr>
+<tr><td><code>BOT_COOLDOWN_MINUTES</code></td><td><code>30</code></td><td>—</td><td></td></tr>
+<tr><td><code>JURY_SEED_SALT</code></td><td><code>lolsuit-v2</code></td><td>—</td><td></td></tr>
+<tr><td><code>REPEAT_OFFENDER_THRESHOLD</code></td><td><code>3</code></td><td>—</td><td></td></tr>
+<tr><td><code>BRAIN_FORCE_OFFLINE</code></td><td>off</td><td><code>1</code></td><td>⚠ שונה בין קוד ל־compose!</td></tr>
+<tr><td><code>LLM_CREDENTIALS</code></td><td>ריק</td><td>forwarded</td><td>השרשרת</td></tr>
+<tr><td><code>LLM_PROVIDER</code></td><td><code>bedrock</code></td><td><code>""</code></td><td>legacy; רק אם אין רשומה תקינה ב־LLM_CREDENTIALS</td></tr>
+<tr><td><code>LLM_API_KEY</code>, <code>LLM_MODEL</code>, <code>LLM_ENDPOINT</code></td><td>ריק</td><td>forwarded</td><td></td></tr>
+<tr><td><code>LLM_TIMEOUT_SECONDS</code></td><td><code>60</code></td><td><code>""</code> → 60</td><td></td></tr>
+<tr><td><code>GEMINI_KEY_1..3</code>, <code>AWS_REGION</code></td><td>—</td><td>forwarded</td><td></td></tr>
+<tr><td><code>MAIL_BACKEND</code></td><td><code>console</code></td><td><code>console</code></td><td>רק ל־server</td></tr>
+<tr><td><code>RESET_TTL_MINUTES</code> / <code>RESET_COOLDOWN_SECONDS</code></td><td><code>30</code> / <code>60</code></td><td>— / <code>60</code></td><td>RESET_TTL לא מועבר בכלל (C2)</td></tr>
+<tr><td><code>UPLOAD_DIR</code> / <code>UPLOAD_MAX_BYTES</code></td><td><code>server/uploads</code> / 5 MiB</td><td><code>/app/uploads</code> / —</td><td></td></tr>
+<tr><td><code>SSE_POLL_SECONDS</code>, <code>SSE_MAX_SECONDS</code>, <code>SSE_MAX_STREAMS</code></td><td><code>2.0</code>, <code>300</code>, <code>50</code></td><td>—</td><td></td></tr>
+</tbody></table></div>
+<div class="callout gotcha"><b>המלכודת הכי נפוצה</b> הוספת משתנה ל־<code>.env</code> ול־<code>config.py</code> אבל לא ל־<code>environment:</code> של השירות ב־<code>docker-compose.yml</code> → בדוקר הוא פשוט לא קיים, והקוד רץ עם ברירת המחדל. משתני brain צריכים להופיע גם ב־<code>server</code> וגם ב־<code>worker</code>.</div>
+</div></section>

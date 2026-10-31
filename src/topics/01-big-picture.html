@@ -1,0 +1,65 @@
+<!-- ============================ 1 BIG PICTURE ============================ -->
+<section class="topic" id="t1" data-title="התמונה הגדולה">
+<div class="topic-head"><div class="n">1</div><h2>התמונה הגדולה — מה הפרויקט עושה</h2><label class="done-toggle"><input type="checkbox" data-done="t1"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
+<div class="topic-body">
+<p><b>LolSuit</b> היא רשת חברתית סאטירית בעברית: משתמשים מגישים "תביעות" מצחיקות (נגד אדם רשום או נגד משהו מופשט כמו "יום שני"), וכל תביעה עוברת <b>משפט אמיתי</b>: זימון עדים, חבר מושבעים של 7 בוטים עם אישיות, ושופט שפוסק. 31 בוטים (20 מושבעים, 8 שופטים, 3 מנחי תוכן) גם מגיבים, עושים לייק, עונים להודעות ותובעים זה את זה.</p>
+
+<div class="callout key"><b>רעיון מרכזי — 4 שכבות, 2 תהליכי Python, מצב משותף אחד</b>
+<p>Frontend (React) ← nginx ← API (Flask תחת gunicorn) ← MySQL. ובנפרד: <b>worker</b> — תהליך Python נפרד (לא thread!) שמקדם משפטים כל 15 שניות. ה־API וה־worker לא מדברים זה עם זה ישירות; <b>MySQL הוא המצב המשותף היחיד</b> — כולל "אוטובוס" ההתראות החיות (SSE הוא cursor על <code>notifications.id</code>).</p></div>
+
+<figure>
+<div class="legend" aria-hidden="true"><span><i class="l-client"></i>client</span><span><i class="l-edge"></i>edge / brain</span><span><i class="l-app"></i>Python processes</span><span><i class="l-data"></i>data</span><span><i class="l-ext"></i>optional / one-shot</span></div>
+<div class="fig-scroll"><svg class="dg" viewBox="0 0 960 440" role="img" aria-label="ארכיטקטורה בחמישה נתיבים: דפדפן, nginx, תהליכי Python ‏(server, worker, brain), MySQL וספקי LLM, עם מסלול בקשה ממוספר">
+  <rect class="lane" x="8" y="8" width="152" height="424" rx="6"/><text class="lane-t" x="84" y="30" text-anchor="middle">CLIENT</text>
+  <rect class="lane" x="168" y="8" width="190" height="424" rx="6"/><text class="lane-t" x="263" y="30" text-anchor="middle">EDGE</text>
+  <rect class="lane" x="366" y="8" width="290" height="424" rx="6"/><text class="lane-t" x="511" y="30" text-anchor="middle">APP (one image)</text>
+  <rect class="lane" x="664" y="8" width="160" height="424" rx="6"/><text class="lane-t" x="744" y="30" text-anchor="middle">DATA</text>
+  <rect class="lane" x="832" y="8" width="120" height="424" rx="6"/><text class="lane-t" x="892" y="30" text-anchor="middle">EXTERNAL</text>
+  <rect class="box info" x="20" y="180" width="128" height="72" rx="6"/><text x="84" y="206" text-anchor="middle" class="b">Browser</text><text x="84" y="224" text-anchor="middle" class="sm">React SPA</text><text x="84" y="240" text-anchor="middle" class="sm">client/src</text>
+  <rect class="box gold" x="182" y="160" width="162" height="112" rx="6"/><text x="263" y="185" text-anchor="middle" class="b">web · nginx</text><text x="263" y="204" text-anchor="middle" class="sm">public :8080</text><text x="263" y="222" text-anchor="middle" class="sm">/ → dist/ bundle</text><text x="263" y="240" text-anchor="middle" class="sm">/api/* → server:5002</text><text x="263" y="258" text-anchor="middle" class="sm">SSE: proxy_buffering off</text>
+  <rect class="box acc" x="390" y="56" width="242" height="98" rx="6"/><text x="511" y="81" text-anchor="middle" class="b">server · gunicorn + Flask</text><text x="511" y="100" text-anchor="middle" class="sm">127.0.0.1:5002 · run:app</text><text x="511" y="118" text-anchor="middle" class="sm">api/ → services/ → db.py</text><text x="511" y="136" text-anchor="middle" class="sm">gthread workers (SSE-safe)</text>
+  <rect class="box gold" x="441" y="190" width="140" height="56" rx="6"/><text x="511" y="214" text-anchor="middle" class="b">app/brain</text><text x="511" y="232" text-anchor="middle" class="sm">offline | LLM chain</text>
+  <rect class="box acc" x="390" y="282" width="242" height="98" rx="6"/><text x="511" y="307" text-anchor="middle" class="b">worker · run_worker.py</text><text x="511" y="326" text-anchor="middle" class="sm">tick every TICK_SECONDS = 15</text><text x="511" y="344" text-anchor="middle" class="sm">trial · social · moderation</text><text x="511" y="362" text-anchor="middle" class="sm">serves no HTTP</text>
+  <rect class="box dash" x="676" y="56" width="136" height="58" rx="6"/><text x="744" y="80" text-anchor="middle" class="b">seed</text><text x="744" y="98" text-anchor="middle" class="sm">python -m app.seed</text>
+  <rect class="box ok" x="676" y="168" width="136" height="96" rx="6"/><text x="744" y="193" text-anchor="middle" class="b">db · MySQL 8</text><text x="744" y="212" text-anchor="middle" class="sm">24 tables (init.sql)</text><text x="744" y="230" text-anchor="middle" class="sm">the only shared state</text><text x="744" y="248" text-anchor="middle" class="sm">127.0.0.1:3307</text>
+  <rect class="box dash" x="844" y="168" width="98" height="96" rx="6"/><text x="893" y="193" text-anchor="middle" class="b">LLM</text><text x="893" y="212" text-anchor="middle" class="sm">gemini</text><text x="893" y="228" text-anchor="middle" class="sm">bedrock</text><text x="893" y="244" text-anchor="middle" class="sm">anthropic · gw</text>
+  <line class="ln acc" x1="148" y1="216" x2="180" y2="216" marker-end="url(#arwA)"/>
+  <line class="ln acc" x1="344" y1="190" x2="388" y2="118" marker-end="url(#arwA)"/>
+  <line class="ln acc" x1="632" y1="110" x2="674" y2="196" marker-end="url(#arwA)"/>
+  <line class="ln" x1="632" y1="330" x2="674" y2="240" marker-end="url(#arw)"/>
+  <line class="ln" x1="511" y1="154" x2="511" y2="188" marker-end="url(#arw)"/>
+  <line class="ln" x1="511" y1="282" x2="511" y2="248" marker-end="url(#arw)"/>
+  <path class="ln dash" d="M581,232 C640,410 820,410 880,266" marker-end="url(#arw)"/>
+  <line class="ln dash" x1="744" y1="114" x2="744" y2="166" marker-end="url(#arw)"/>
+  <g><circle class="num-dot" cx="164" cy="216" r="9"/><text class="num-t" x="164" y="220" text-anchor="middle">1</text></g>
+  <g><circle class="num-dot" cx="366" cy="154" r="9"/><text class="num-t" x="366" y="158" text-anchor="middle">2</text></g>
+  <g><circle class="num-dot" cx="653" cy="153" r="9"/><text class="num-t" x="653" y="157" text-anchor="middle">3</text></g>
+  <g><circle class="num-dot" cx="653" cy="285" r="9"/><text class="num-t" x="653" y="289" text-anchor="middle">4</text></g>
+  <g><circle class="num-dot" cx="511" cy="171" r="9"/><text class="num-t" x="511" y="175" text-anchor="middle">5</text></g>
+  <g><circle class="num-dot" cx="511" cy="265" r="9"/><text class="num-t" x="511" y="269" text-anchor="middle">5</text></g>
+  <g><circle class="num-dot" cx="730" cy="381" r="9"/><text class="num-t" x="730" y="385" text-anchor="middle">6</text></g>
+  <g><circle class="num-dot" cx="744" cy="140" r="9"/><text class="num-t" x="744" y="144" text-anchor="middle">7</text></g>
+</svg></div>
+<figcaption>
+<b>1</b> הדפדפן מדבר רק עם nginx על 8080 (HTTP + SSE), כך שהעוגייה היא first-party. <b>2</b> nginx מעביר <code>/api/*</code> לשרת. <b>3</b> השרת מריץ SQL דרך <code>db.py</code>. <b>4</b> ה־worker מריץ SQL ו־<code>GET_LOCK</code>. אין ביניהם קו ישיר, ו־MySQL הוא המצב המשותף היחיד. <b>5</b> שניהם קוראים ל־<code>app/brain</code> (assist מהשרת, deliberate/generate מה־worker). <b>6</b> רק עם credentials המוח פונה החוצה. ב־compose ברירת המחדל היא <code>BRAIN_FORCE_OFFLINE=1</code>. <b>7</b> <code>seed</code> רץ פעם אחת ויוצא.
+</figcaption>
+</figure>
+
+<h3>הרכיבים העיקריים</h3>
+<div class="tablewrap"><table><thead><tr><th>רכיב</th><th>טכנולוגיה</th><th>היכן</th><th>תפקיד</th></tr></thead><tbody>
+<tr><td>Frontend</td><td>React 18 + TypeScript + Vite + MUI 5, RTL</td><td><code>client/</code></td><td>כל המסכים; כל הקריאות דרך <code>client/src/api.ts</code></td></tr>
+<tr><td>API</td><td>Flask + PyMySQL גולמי, gunicorn</td><td><code>server/app/</code>, כניסה <code>server/run.py</code></td><td>12 blueprints תחת <code>/api</code></td></tr>
+<tr><td>Worker</td><td>Python loop</td><td><code>server/run_worker.py</code> → <code>server/worker/loop.py</code></td><td>מקדם משפטים, בוטים חברתיים, מודרציה, ניקיון</td></tr>
+<tr><td>Brain</td><td>Python package</td><td><code>server/app/brain/</code></td><td>כל מה שבוט אומר או מחליט; offline דטרמיניסטי או LLM</td></tr>
+<tr><td>DB</td><td>MySQL 8 (RDS בפרודקשן)</td><td><code>database/init.sql</code></td><td>מקור האמת היחיד; 24 טבלאות</td></tr>
+<tr><td>Infra</td><td>Docker Compose, nginx</td><td><code>docker-compose.yml</code>, <code>client/nginx.conf.template</code>, <code>prod/</code></td><td>5 שירותים מקומית; EC2+RDS בפרודקשן</td></tr>
+</tbody></table></div>
+
+<h3>שלוש החלטות שכדאי לדעת לומר בעל־פה</h3>
+<ol>
+<li><b><code>create_app()</code> בלי תופעות לוואי</b> (<code>server/app/__init__.py:23</code>) — לא יוצרת סכמה ולא עושה seed, כך שכמה gunicorn workers עולים במקביל בלי מרוץ על יצירת טבלאות. הסכמה מגיעה מ־<code>init.sql</code> דרך ה־entrypoint של MySQL, וה־seed הוא תהליך נפרד.</li>
+<li><b>ה־worker הוא תהליך נפרד, לא thread</b> — thread בתוך gunicorn היה "מתקתק" פעם אחת לכל worker process, וכל משפט היה מתקדם פעמיים־שלוש. בטוח להריץ כמה: <code>GET_LOCK</code> ליעילות, ו־<code>FOR UPDATE SKIP LOCKED</code> + UPDATE מותנה־סטטוס לנכונות.</li>
+<li><b>שעון אחד — של MySQL</b>: כל deadline נכתב ונבדק עם <code>UTC_TIMESTAMP()</code>, כך שה־API וה־worker לעולם לא חלוקים על "האם השלב נגמר".</li>
+</ol>
+<div class="callout exam"><b>טיפ למבחן</b> אם שואלים "מה קורה כשמגישים תביעה?" — התשובה הקצרה: ה־API רק כותב שורה עם <code>status='witness_phase'</code> ו־<code>phase_deadline_at</code>. <b>כל השאר</b> (חבר מושבעים, הצבעות, פסק דין, סגירה) נעשה ע"י ה־worker כשה־deadline עובר.</div>
+</div></section>

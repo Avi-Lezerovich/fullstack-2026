@@ -1,0 +1,37 @@
+<!-- R11 -->
+<details class="recipe" id="r11"><summary><span class="tag hard">מתקדם</span> 11. להוסיף שדה לתביעה מקצה לקצה (למשל <code>location</code> — "מקום האירוע")</summary><div class="in">
+<span class="rlabel">קבצים (7)</span>
+<ol>
+<li><code>database/init.sql</code> — טבלת <code>cases</code> (שורה 117): <code>location VARCHAR(120) NULL,</code></li>
+<li><code>server/app/services/cases_service.py</code> — <code>_CASE_COLUMNS</code> (שורה 63): להוסיף <code>c.location,</code></li>
+<li>אותו קובץ — <code>shape_case</code>: <code>"location": row.get("location"),</code></li>
+<li>אותו קובץ — <code>create_case</code>: פרמטר <code>location: str | None = None</code>, עמודה + <code>%s</code> ב־INSERT, וערך בטאפל באותו מיקום</li>
+<li><code>server/app/api/cases.py</code> — <code>location = clean(data.get("location"), 120) or None</code> והעברה <code>location=location</code></li>
+<li><code>client/src/types.ts</code> — ב־<code>Case</code>: <code>location: string | null;</code> וב־<code>NewCaseInput</code>: <code>location?: string | null;</code></li>
+<li><code>client/src/pages/NewCase.tsx</code> — <code>useState</code> + <code>TextField</code> + להוסיף ל־<code>api.createCase({...})</code>; ולהציג ב־<code>components/feed/CaseCard.tsx</code> או <code>pages/CasePage.tsx</code></li>
+</ol>
+<pre><code><span class="c"># cases_service.create_case — INSERT (excerpt)</span>
+     "INSERT INTO cases "
+<span class="del">-    "(title, body, author_id, defendant_text, defendant_user_id, image_url, "</span>
+<span class="add">+    "(title, body, author_id, defendant_text, defendant_user_id, image_url, location, "</span>
+     " status, filed_at, ...) "
+<span class="del">-    "VALUES (%s, %s, %s, %s, %s, %s, "</span>
+<span class="add">+    "VALUES (%s, %s, %s, %s, %s, %s, %s, "</span>
+     ...
+         image_url,
+<span class="add">+        location,</span>
+         witness_deadline_offset(),</code></pre>
+<span class="rlabel">להחיל על ה־DB המקומי</span>
+<pre><code><span class="c"># אפשרות א — מוחק את כל הנתונים:</span>
+docker compose down -v &amp;&amp; docker compose up --build
+<span class="c"># אפשרות ב — שומר נתונים:</span>
+make db-shell
+mysql&gt; ALTER TABLE cases ADD COLUMN location VARCHAR(120) NULL;</code></pre>
+<span class="rlabel">אימות</span><p>הגש תביעה עם location → <code>GET /api/cases/&lt;id&gt;</code> מחזיר את השדה; מוצג בכרטיס.</p>
+<span class="rlabel">מה יכול להישבר</span>
+<ul><li><code>row.get("location")</code> ולא <code>row["location"]</code> — יש unit tests שבונים שורה ידנית ל־<code>shape_case</code> (<code>tests/unit/test_feed_query.py:191</code>) → <code>KeyError</code>.</li>
+<li>מספר ה־<code>%s</code> חייב להתאים למספר הערכים בטאפל, באותו סדר.</li>
+<li>שכחת לעדכן DB → <code>Unknown column 'c.location'</code> → 500 על <b>כל</b> קריאת תיק.</li>
+<li><code>init.sql</code> רץ רק על volume ריק. לפרודקשן — קובץ <code>prod/migrations/005-….sql</code> עם <code>ALTER TABLE</code>.</li>
+<li>הטסטים בונים DB מ־<code>init.sql</code> → יקבלו את העמודה אוטומטית.</li></ul>
+</div></details>

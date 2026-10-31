@@ -1,0 +1,28 @@
+<!-- ---------- API ---------- -->
+<div class="fx-group"><h3>API ו־endpoints <span class="lyr">server/app/api · client/src/api.ts</span></h3><div class="fx-list">
+<div class="fx" data-keys="endpoint route api רשימה כל"><div class="fx-q">איפה כל endpoint נמצא</div>
+<div class="fx-where"><span class="lb">איפה</span> קובץ לכל משאב ב־<code>server/app/api/</code>, וכולם תחת <code>/api</code> (<code>server/app/api/__init__.py:44</code>). בצד הלקוח, פונקציה לכל endpoint ב־<code>client/src/api.ts</code>.</div>
+<div class="fx-check"><span class="lb">טיפ</span> ב־<kbd>Ctrl</kbd>+<kbd>K</kbd> מקלידים <code>POST /api/cases</code> או <code>GET /api/users</code>, וכל route מופיע עם השורה שלו.</div></div>
+
+<div class="fx" data-keys="new endpoint חדש להוסיף route stats"><div class="fx-q">להוסיף endpoint חדש</div>
+<div class="fx-where"><span class="lb">איפה</span> SQL ב־<code>services/</code>, route ב־<code>api/</code> בתוך blueprint קיים, ופונקציה ב־<code>client/src/api.ts</code>. <a href="#r10" data-reveal="r10">מתכון 10 ←</a></div></div>
+
+<div class="fx" data-keys="page size עמוד כמה תיקים טעינה limit pagination"><div class="fx-q">כמה תיקים נטענים בכל פעם בפיד</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/pages/Feed.tsx:18</code> <code>PAGE_SIZE</code> (הלקוח שולח limit)</div>
+<div class="fx-also"><span class="lb">שרת</span> ברירת מחדל <code>server/app/api/cases.py:25</code>, תקרה <code>:14</code> <code>MAX_PAGE_SIZE</code> <a href="#r6" data-reveal="r6">מתכון 6 ←</a></div></div>
+
+<div class="fx" data-keys="sort מיון סדר הפיד חדשים ישנים order by"><div class="fx-q">סדר המיון של הפיד</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/app/services/cases_service.py:403</code> <code>ORDER BY c.created_at DESC</code></div>
+<div class="fx-also"><span class="lb">שים לב</span> "הפיד שלי" ממוין בנפרד, לפי פעילות אחרונה, ב־<code>:504</code>. <a href="#r17" data-reveal="r17">מתכון 17 ←</a></div></div>
+
+<div class="fx" data-keys="case json shape שדה תשובה response fields"><div class="fx-q">אילו שדות של תיק חוזרים מה־API</div>
+<div class="fx-where"><span class="lb">שרת</span> <code>server/app/services/cases_service.py:86</code> <code>shape_case</code> + עמודות <code>:63</code> <code>_CASE_COLUMNS</code></div>
+<div class="fx-also"><span class="lb">לקוח</span> הטיפוס <code>client/src/types.ts:71</code> <code>Case</code>. שדה חדש מקצה לקצה: <a href="#r11" data-reveal="r11">מתכון 11 ←</a></div></div>
+
+<div class="fx" data-keys="status filter סינון לשונית הוכרעו decided"><div class="fx-q">לשוניות הסינון בפיד (סטטוסים)</div>
+<div class="fx-where"><span class="lb">לקוח</span> <code>client/src/pages/Feed.tsx:29</code> <code>FILTERS</code> (כל לשונית שולחת <code>status=</code>)</div>
+<div class="fx-also"><span class="lb">שרת</span> <code>server/app/api/cases.py:34</code>. סטטוס לא מוכר מחזיר 400.</div></div>
+
+<div class="fx" data-keys="health בריאות בדיקה phase_minutes worker"><div class="fx-q">בדיקה מהירה שהשרת וה־worker חיים</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/app/api/health.py:21</code>. <code>curl localhost:5002/api/health</code> (בדוקר דרך nginx: <code>localhost:8080/api/health</code>)</div></div>
+</div></div>

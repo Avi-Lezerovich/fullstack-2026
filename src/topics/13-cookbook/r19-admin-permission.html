@@ -1,0 +1,18 @@
+<!-- R19 -->
+<details class="recipe" id="r19"><summary><span class="tag med">בינוני</span> 19. הרשאה: לאפשר גם לאדמין למשוך תביעה (או להסתיר כפתור לפי תפקיד)</summary><div class="in">
+<span class="rlabel">קבצים</span><ul><li><code>server/app/services/cases_service.py:336</code> <code>delete_case</code>, הבדיקה בשורה 347</li><li><code>server/app/api/cases.py:135</code>: הקריאה ל־service</li><li><code>client/src/pages/CasePage.tsx:98</code> <code>canWithdraw</code> (מתי הכפתור "משוך את התביעה" מוצג)</li></ul>
+<pre><code><span class="c"># cases_service.py</span>
+<span class="del">-def delete_case(case_id: int, user_id: int, conn: Db | None = None) -&gt; str:</span>
+<span class="add">+def delete_case(case_id: int, user_id: int, conn: Db | None = None, *, is_admin: bool = False) -&gt; str:</span>
+<span class="del">-        if row["author_id"] != user_id:</span>
+<span class="add">+        if row["author_id"] != user_id and not is_admin:</span>
+<span class="c"># api/cases.py (g.user is set by @require_auth)</span>
+<span class="del">-    result = cases_service.delete_case(case_id, g.user_id)</span>
+<span class="add">+    result = cases_service.delete_case(case_id, g.user_id, is_admin=bool(g.user.get("is_admin")))</span>
+<span class="c">// CasePage.tsx</span>
+   const canWithdraw =
+<span class="del">-    user?.id === c.author.id &amp;&amp; (c.status === "filed" || c.status === "witness_phase");</span>
+<span class="add">+    (user?.id === c.author.id || !!user?.is_admin) &amp;&amp; (c.status === "filed" || c.status === "witness_phase");</span></code></pre>
+<span class="rlabel">אימות</span><p>מתחברים כ־<code>admin@lolsuit.local</code>, נכנסים לתיק של מישהו אחר בשלב העדים, הכפתור מופיע, ולחיצה עליו מחזירה 200.</p>
+<span class="rlabel">מה יכול להישבר / מה לומר</span><ul><li><b>טסט ייכשל בכוונה:</b> <code>server/tests/integration/test_case_withdrawal.py:53</code> (<code>test_nobody_else_can_withdraw_it_not_even_an_admin</code>). זו החלטת עיצוב מתועדת (ה־docstring בשורה 340: "moderation hides, it never deletes"). מעדכנים את הטסט ומסבירים לבוחן למה.</li><li>הסתרת הכפתור בלקוח היא UX בלבד. האכיפה האמיתית היא בשרת.</li><li>תבנית כללית להסתרה: <code>{user?.is_admin &amp;&amp; &lt;Button…/&gt;}</code>, עם <code>user</code> מ־<code>useAuth()</code>.</li></ul>
+</div></details>

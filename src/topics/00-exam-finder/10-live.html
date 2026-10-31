@@ -1,0 +1,9 @@
+<!-- ---------- live ---------- -->
+<div class="fx-group"><h3>עדכונים חיים, התראות ורענון <span class="lyr">SSE · polling</span></h3><div class="fx-list">
+<div class="fx" data-keys="refresh רענון דף תיק live כל 10 שניות"><div class="fx-q">כל כמה זמן דף התיק מתרענן</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>client/src/pages/CasePage.tsx:41</code> <code>LIVE_REFRESH_MS</code></div></div>
+
+<div class="fx" data-keys="sse stream polling התראות חיות poll interval"><div class="fx-q">תדירות ההתראות החיות</div>
+<div class="fx-where"><span class="lb">שרת</span> <code>SSE_POLL_SECONDS</code> <code>server/app/config.py:363</code> · stream: <code>server/app/api/notifications.py:89</code></div>
+<div class="fx-also"><span class="lb">לקוח</span> fallback של polling: <code>client/src/hooks/useNotificationStream.ts:5</code> · כמה נשמרות: <code>client/src/context/NotificationContext.tsx:32</code></div></div>
+</div></div>

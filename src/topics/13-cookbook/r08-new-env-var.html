@@ -1,0 +1,20 @@
+<!-- R8 -->
+<details class="recipe" id="r8"><summary><span class="tag med">בינוני</span> 8. להוסיף משתנה סביבה (למשל <code>CASE_TITLE_MIN_LENGTH</code>)</summary><div class="in">
+<span class="rlabel">קבצים</span><ul><li><code>server/app/config.py</code> — שדה ב־<code>class Settings</code> (שורה ~195) + ערך ב־<code>get_settings()</code> (שורה 324)</li><li><code>server/app/api/cases.py</code> — שימוש</li><li><code>docker-compose.yml</code> — <code>environment:</code> של <code>server</code> (שורה ~85)</li><li><code>.env.example</code> — תיעוד</li></ul>
+<pre><code><span class="c"># config.py — inside class Settings, in the "web" group</span>
+<span class="add">+    case_title_min_length: int</span>
+<span class="c"># config.py — inside get_settings()</span>
+<span class="add">+        case_title_min_length=_int("CASE_TITLE_MIN_LENGTH", 3),</span>
+<span class="c"># api/cases.py — create_case()</span>
+<span class="add">+    from ..config import get_settings   # (or import at top)</span>
+<span class="del">-    if len(title) &lt; 3:</span>
+<span class="add">+    if len(title) &lt; get_settings().case_title_min_length:</span>
+<span class="c"># docker-compose.yml — services.server.environment</span>
+<span class="add">+      CASE_TITLE_MIN_LENGTH: ${CASE_TITLE_MIN_LENGTH:-3}</span></code></pre>
+<span class="rlabel">אימות</span><p>native: <code>CASE_TITLE_MIN_LENGTH=6</code> ב־<code>.env</code> → הפעל מחדש את <code>python run.py</code> → כותרת בת 5 נדחית. דוקר: <code>docker compose up --build -d server</code>.</p>
+<span class="rlabel">מה יכול להישבר</span>
+<ul><li><code>Settings</code> הוא <b>frozen dataclass בלי defaults</b> — אם מוסיפים שדה למחלקה ושוכחים אותו ב־<code>get_settings()</code> → <code>TypeError</code> בכל קריאה ל־<code>get_settings()</code> = כל השרת נופל. אם עושים להפך → <code>TypeError: unexpected keyword</code>.</li>
+<li>שוכחים את compose → בדוקר תמיד 3, בלי שום שגיאה.</li>
+<li>מקומות שבונים <code>Settings(...)</code> ידנית בטסטים (בדוק: <code>grep -rn "Settings(" server/tests</code>).</li>
+<li>צריך restart אחרי שינוי ב־<code>.env</code>: <code>get_settings()</code> קורא את <code>os.environ</code> בכל קריאה, אבל <code>load_dotenv</code> רץ פעם אחת ב־import של <code>config.py</code> (שורה 23) ולא דורס ערך קיים.</li></ul>
+</div></details>

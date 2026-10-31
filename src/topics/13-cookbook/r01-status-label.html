@@ -1,0 +1,13 @@
+<!-- R1 -->
+<details class="recipe" id="r1"><summary><span class="tag easy">קל</span> 1. לשנות טקסט/תווית בממשק (למשל שם הסטטוס "איסוף עדויות")</summary><div class="in">
+<span class="rlabel">קבצים</span>
+<ul><li><code>client/src/types.ts:413</code> — <code>CASE_STATUS_LABELS</code> (משמש את <code>CaseStatusChip</code>)</li>
+<li><code>client/src/components/case/PhaseTimeline.tsx:13</code> — מערך משלו!</li>
+<li><code>client/src/pages/Feed.tsx:31</code> — לשוניות הסינון, גם מערך משלו</li></ul>
+<span class="rlabel">צעדים</span>
+<pre><code><span class="del">-  witness_phase: "איסוף עדויות",</span>
+<span class="add">+  witness_phase: "שלב העדים",</span></code></pre>
+<p>החלף בכל שלושת המקומות (או רק במקום שהבוחן ביקש — ותגיד שיש עוד שניים).</p>
+<span class="rlabel">אימות</span><p><code>npm run dev</code> → <code>http://localhost:5174</code> → ה־chip בכרטיס תיק, ציר הזמן בדף תיק, ולשונית בפיד. Vite עושה HMR — אין צורך לרענן.</p>
+<span class="rlabel">מה יכול להישבר</span><p>טסט שמחפש את הטקסט הישן (<code>grep -rn "איסוף עדויות" client/src</code> כדי לוודא). <b>לא</b> לשנות את המפתח <code>witness_phase</code> — זה ערך ENUM ב־DB ובשרת.</p>
+</div></details>

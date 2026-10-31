@@ -1,0 +1,24 @@
+<!-- ---------- config ---------- -->
+<div class="fx-group"><h3>Config, משתני סביבה ופורטים <span class="lyr">config.py · docker-compose.yml</span></h3><div class="fx-list">
+<div class="fx" data-keys="env משתנה סביבה חדש להוסיף config settings"><div class="fx-q">להוסיף משתנה סביבה</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/app/config.py:195</code> (שדה ב־<code>Settings</code>) + <code>:324</code> (<code>get_settings()</code>) + <code>docker-compose.yml</code> + <code>.env.example</code></div>
+<div class="fx-also"><span class="lb">מלכודת</span> אם שוכחים את אחד משני המקומות ב־config.py, השרת כולו נופל עם TypeError. <a href="#r8" data-reveal="r8">מתכון 8 ←</a></div></div>
+
+<div class="fx" data-keys="phase_minutes יום משפט מהירות זמן שלב"><div class="fx-q">אורך "יום" במשפט (<code>PHASE_MINUTES</code>)</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/app/config.py:342</code></div>
+<div class="fx-also"><span class="lb">מלכודת</span> בדוקר compose דורס את הערך: <code>docker-compose.yml:97</code> (server) ו־<code>:163</code> (worker). <a href="#r9" data-reveal="r9">מתכון 9 ←</a></div></div>
+
+<div class="fx" data-keys="tick_seconds worker כל כמה שניות תדירות"><div class="fx-q">כל כמה שניות ה־worker רץ (<code>TICK_SECONDS</code> = 15)</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>server/app/config.py:343</code> + <code>docker-compose.yml:164</code></div>
+<div class="fx-check"><span class="lb">בדיקה</span> <code>/api/health</code> → <code>tick_count</code> עולה מהר יותר. <a href="#r20" data-reveal="r20">מתכון 20 ←</a></div></div>
+
+<div class="fx" data-keys="port פורט 8080 5002 3307 5174 localhost"><div class="fx-q">פורטים</div>
+<div class="fx-where"><span class="lb">web</span> 8080 <code>docker-compose.yml:225</code> · <span class="lb">api</span> 5002 <code>docker-compose.yml:141</code> / <code>server/app/config.py:331</code> · <span class="lb">db</span> 3307 <code>docker-compose.yml:37</code> / <code>config.py:327</code> · <span class="lb">vite</span> 5174 <code>client/vite.config.ts:8</code> (proxy ל־5002 ב־<code>:17</code>)</div>
+<div class="fx-also"><span class="lb">עדכן גם</span> <code>CLIENT_ORIGIN</code> (<code>config.py:332</code>, <code>docker-compose.yml:90</code>). <a href="#r24" data-reveal="r24">מתכון 24 ←</a></div></div>
+
+<div class="fx" data-keys="offline llm ai brain force מודל gemini"><div class="fx-q">LLM או offline</div>
+<div class="fx-where"><span class="lb">איפה</span> <code>BRAIN_FORCE_OFFLINE</code> ב־<code>docker-compose.yml:116</code> / <code>:181</code> (ברירת מחדל 1) · <code>LLM_PROVIDER</code> ב־<code>server/app/config.py:366</code></div></div>
+
+<div class="fx" data-keys="mail מייל smtp console איפוס סיסמה"><div class="fx-q">מיילים (איפוס סיסמה)</div>
+<div class="fx-where"><span class="lb">איפה</span> שליחה <code>server/app/mail.py:127</code> · מי שולח: <code>server/app/api/auth.py:119</code> · backend: <code>server/app/config.py:420</code> (<code>console</code> = מודפס ללוג)</div></div>
+</div></div>

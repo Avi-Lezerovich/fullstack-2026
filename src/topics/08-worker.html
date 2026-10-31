@@ -1,0 +1,56 @@
+<!-- ============================ 8 WORKER ============================ -->
+<section class="topic" id="t8" data-title="Background worker">
+<div class="topic-head"><div class="n">8</div><h2>Background worker — לולאת ה־tick</h2><label class="done-toggle"><input type="checkbox" data-done="t8"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
+<div class="topic-body">
+<p><code>server/run_worker.py</code> → <code>worker.loop.run_forever()</code> (<code>loop.py:184</code>). השם <code>run_worker.py</code> ולא <code>worker.py</code> — כדי לא להצל על החבילה <code>worker/</code>.</p>
+<figure>
+<div class="fig-scroll"><svg class="dg" viewBox="0 0 900 470" role="img" aria-label="מבנה tick אחד: GET_LOCK, bump_tick, חמש משימות משפט לפי סדר, משימות תקופתיות, stamp_tick, RELEASE_LOCK ושינה">
+  <rect class="box" x="30" y="20" width="300" height="40" rx="8"/><text x="180" y="45" text-anchor="middle">connect() · wait_for_db at start</text>
+  <rect class="box acc" x="30" y="76" width="300" height="40" rx="8"/><text x="180" y="101" text-anchor="middle" class="b">GET_LOCK('lolsuit:scheduler', 0)</text>
+  <rect class="box" x="30" y="132" width="300" height="40" rx="8"/><text x="180" y="157" text-anchor="middle">bump_tick → tick_count++ (commit)</text>
+  <rect class="box gold" x="30" y="188" width="300" height="150" rx="8"/><text x="180" y="210" text-anchor="middle" class="b">trial tasks — every tick, in order</text>
+  <text x="46" y="234" class="sm">1. open_filed_cases (defensive)</text>
+  <text x="46" y="254" class="sm">2. close_cases(limit=20)</text>
+  <text x="46" y="274" class="sm">3. advance_verdicts(limit=10)</text>
+  <text x="46" y="294" class="sm">4. run_due_jurors(limit=10)</text>
+  <text x="46" y="314" class="sm">5. advance_witness_phase(limit=10)</text>
+  <text x="46" y="332" class="sm">each wrapped in safe(): log + swallow</text>
+  <rect class="box" x="30" y="354" width="300" height="40" rx="8"/><text x="180" y="379" text-anchor="middle">_periodic_tasks(number) — every N ticks</text>
+  <rect class="box" x="30" y="410" width="300" height="40" rx="8"/><text x="180" y="435" text-anchor="middle">stamp_tick · RELEASE_LOCK · close · sleep</text>
+  <line class="ln" x1="180" y1="60" x2="180" y2="74" marker-end="url(#arw)"/>
+  <line class="ln" x1="180" y1="116" x2="180" y2="130" marker-end="url(#arw)"/>
+  <line class="ln" x1="180" y1="172" x2="180" y2="186" marker-end="url(#arw)"/>
+  <line class="ln" x1="180" y1="338" x2="180" y2="352" marker-end="url(#arw)"/>
+  <line class="ln" x1="180" y1="394" x2="180" y2="408" marker-end="url(#arw)"/>
+  <path class="ln dash" d="M30,430 C0,430 0,40 28,40" marker-end="url(#arw)"/>
+  <text x="6" y="250" class="sm" transform="rotate(-90 12 250)">every TICK_SECONDS (15)</text>
+  <!-- right notes -->
+  <line class="ln warn dash" x1="330" y1="96" x2="430" y2="96" marker-end="url(#arwW)"/>
+  <rect class="box warn" x="432" y="70" width="440" height="52" rx="8"/><text x="446" y="92" class="sm">lock taken by another worker → log "skipping", sleep.</text><text x="446" y="110" class="sm">Efficiency layer only. MySQL frees it if the connection dies.</text>
+  <rect class="box" x="432" y="188" width="440" height="150" rx="8"/><text x="652" y="210" text-anchor="middle" class="b">_drain(fetch, act, limit) — per unit of work</text>
+  <text x="446" y="236" class="sm">fetch: SELECT … FOR UPDATE SKIP LOCKED LIMIT n</text>
+  <text x="446" y="256" class="sm">act:   UPDATE … WHERE id=%s AND status='expected'</text>
+  <text x="446" y="276" class="sm">"ok" → commit   ·   else → rollback</text>
+  <text x="446" y="300" class="sm">Correctness layer: two workers reach the same final state</text>
+  <text x="446" y="318" class="sm">as one (dedupe_key UNIQUE, jury_panels PK, rowcount checks).</text>
+  <line class="ln" x1="330" y1="262" x2="430" y2="262" marker-end="url(#arw)"/>
+  <rect class="box" x="432" y="354" width="440" height="96" rx="8"/>
+  <text x="446" y="376" class="sm">every tick: reports_worked (clerk)</text>
+  <text x="446" y="394" class="sm">SWEEP_EVERY_TICKS=4: swept (sweeper) · arbitrated (arbiter)</text>
+  <text x="446" y="412" class="sm">SOCIAL_EVERY_TICKS=20: bot_actions · bot_replies · comment_replies</text>
+  <text x="446" y="430" class="sm">HOUSEKEEPING_EVERY_TICKS=240: auth_rows_purged</text>
+  <line class="ln" x1="330" y1="374" x2="430" y2="380" marker-end="url(#arw)"/>
+</svg>
+</div>
+<figcaption>tick אחד (<code>worker/loop.py:91</code>). הסדר מכוון: הכי זול והכי סופי קודם, כך שמקבץ איטי של מושבעים לא מעכב סגירה של תיק שכבר נגמר. שתי שכבות הגנה נפרדות: <b>יעילות</b> (advisory lock) ו<b>נכונות</b> (SKIP LOCKED + UPDATE מותנה סטטוס + UNIQUE).</figcaption>
+</figure>
+<div class="tablewrap"><table><thead><tr><th>Task</th><th>יום במשפט</th><th>קורא ל־</th><th>מה קורה</th></tr></thead><tbody>
+<tr><td><code>advance_witness_phase</code></td><td>2</td><td><code>trial_service.advance_to_deliberation</code></td><td>no-shows, <code>jury_service.select_panel</code> (7 + שופט, דטרמיניסטי), <code>status='jury_deliberation'</code></td></tr>
+<tr><td><code>run_due_jurors</code></td><td>2–5</td><td><code>jury_service.due_jurors</code> → <code>trial_service.speak_as_juror</code></td><td>כל מושבע מדבר ב־<code>speaks_at</code> שנקבע בזמן ההגרלה; <code>spoke_at IS NULL</code> = התביעה על השורה</td></tr>
+<tr><td><code>advance_verdicts</code></td><td>6</td><td><code>trial_service.advance_to_verdict</code></td><td>משלים מושבעים שותקים, סופר, tiebreak של השופט, פסק דין + עונש</td></tr>
+<tr><td><code>close_cases</code></td><td>7</td><td><code>trial_service.close_case</code></td><td>סוגר; לייקים ותגובות נשארים פתוחים</td></tr>
+</tbody></table></div>
+<div class="callout key"><b>ה־worker לא מחזיק כלום בזיכרון בין ticks</b> — כל המצב בשורות: <code>cases.status/phase_deadline_at</code>, <code>jury_panel_members.speaks_at/spoke_at/vote</code>, <code>agents.last_social_action_at</code> (<code>DATETIME(6)</code> — המיקרו־שניות חשובות!), <code>worker_state</code>. לכן אפשר להפעיל מחדש מתי שרוצים.</div>
+<p><b>Moderator bots</b> (<code>worker/moderation_tasks.py</code>): <b>clerk</b> (<code>work_report_queue</code>, כל tick) — סורק מחדש: toxic → hide, ok → dismiss, borderline → משאיר claimed לבורר; <b>arbiter</b> (<code>arbiter_pass</code>) — מסתיר, ומשעה (ban) את המחבר אם <code>prior_hides</code> ≥ <code>REPEAT_OFFENDER_THRESHOLD</code>=3; <b>sweeper</b> (<code>sweep_unscanned</code>) — רשת ביטחון לתוכן שלא דווח. הכל הפיך.</p>
+<p><b>Healthcheck</b>: ב־compose — שאילתה ל־<code>worker_state.last_tick_at</code>, נכשל אם עברו &gt;120 שניות. אותה שורה מוצגת ב־<code>/api/health</code> → <code>worker</code>.</p>
+</div></section>

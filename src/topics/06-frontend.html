@@ -1,0 +1,60 @@
+<!-- ============================ 6 FRONTEND ============================ -->
+<section class="topic" id="t6" data-title="Frontend">
+<div class="topic-head"><div class="n">6</div><h2>Frontend — React + TS + MUI (RTL)</h2><label class="done-toggle"><input type="checkbox" data-done="t6"> נלמד</label><button class="collapse" aria-label="כווץ/הרחב">▴</button></div>
+<div class="topic-body">
+<details class="sub" open><summary>6.1 Bootstrapping</summary><div class="in">
+<p><code>client/src/main.tsx</code> עוטף מבחוץ פנימה: Emotion <code>CacheProvider</code> עם RTL stylis cache → <code>ThemeProvider</code> + <code>CssBaseline</code> → <code>BrowserRouter</code> → <code>AuthProvider</code> → <code>NotificationProvider</code> → <code>App</code>.</p>
+<div class="callout key"><b>למה RTL פעמיים?</b> <code>direction: "rtl"</code> ב־<code>theme.ts</code> הופך את הלוגיקה של MUI, אבל ה־CSS שנוצר עדיין צריך היפוך של properties פיזיים (margin-left ↔ right) — זה תפקיד <code>stylis-plugin-rtl</code>.</div>
+</div></details>
+<details class="sub" open><summary>6.2 Routes (<code>client/src/App.tsx</code>)</summary><div class="in">
+<div class="tablewrap"><table><thead><tr><th>Path</th><th>Page</th><th>מוגן?</th></tr></thead><tbody>
+<tr><td><code>/</code></td><td><code>Feed</code></td><td></td></tr>
+<tr><td><code>/cases/new</code></td><td><code>NewCase</code></td><td>✔ <code>ProtectedRoute</code></td></tr>
+<tr><td><code>/cases/:caseId</code></td><td><code>CasePage</code></td><td></td></tr>
+<tr><td><code>/users</code>, <code>/users/:userId</code></td><td><code>Users</code>, <code>Profile</code></td><td></td></tr>
+<tr><td><code>/messages</code></td><td><code>Messages</code></td><td>✔</td></tr>
+<tr><td><code>/admin</code></td><td><code>AdminDashboard</code></td><td>✔ (ה־403 בפועל מהשרת)</td></tr>
+<tr><td><code>/about</code>, <code>/login</code>, <code>/signup</code>, <code>/forgot-password</code>, <code>/reset-password</code></td><td>…</td><td></td></tr>
+<tr><td><code>*</code></td><td><code>NotFound</code> (404 אמיתי)</td><td></td></tr>
+</tbody></table></div>
+<p>ה־<code>&lt;Routes&gt;</code> בתוך <code>AppErrorBoundary</code>; <code>TopBar</code> ו־<code>Footer</code> מחוץ לו — דף שקורס משאיר את ה־chrome.</p>
+</div></details>
+<details class="sub" open><summary>6.3 איך מדברים עם ה־API — <code>client/src/api.ts</code></summary><div class="in">
+<pre><code><span class="k">const</span> BASE = <span class="s">"/api"</span>;
+<span class="k">async function</span> request&lt;T&gt;(path: string, init: RequestInit = {}): Promise&lt;T&gt; {
+  response = <span class="k">await</span> fetch(`${BASE}${path}`, { credentials: <span class="s">"include"</span>, ...init, headers: {...} });
+  <span class="c">// network failure → ApiError(status 0, code "network")</span>
+  <span class="c">// !response.ok   → throw new ApiError(payload.error, response.status, payload.code)</span>
+}
+<span class="k">export const</span> createCase = (input: NewCaseInput) =&gt;
+  request&lt;{ case: Case }&gt;(<span class="s">"/cases"</span>, json(<span class="s">"POST"</span>, input)).then((r) =&gt; r.case);</code></pre>
+<ul>
+<li><b>אף קומפוננטה לא קוראת <code>fetch</code> ישירות</b> — חריגים: <code>hooks/useNotificationStream.ts</code> (פותח <code>EventSource</code> בעצמו, ו־fetch ב־polling) ו־<code>uploadImage</code> (multipart, בלי ה־Content-Type של JSON).</li>
+<li><code>credentials: "include"</code> — אחרת הדפדפן לא מצרף את העוגייה.</li>
+<li><code>ApiError</code> נושא <code>status</code> + <code>code</code> מהשרת + הודעה בעברית — ה־catch כבר יכול להציג משהו.</li>
+<li><code>types.ts</code> משקף את <code>shape_case</code>/<code>shape_comment</code> בצד השרת — שינוי בצורה צריך לקרות בשני המקומות.</li>
+</ul>
+</div></details>
+<details class="sub"><summary>6.4 State management — contexts ו־hooks (אין Redux)</summary><div class="in">
+<ul>
+<li><b><code>AuthContext</code></b> (<code>context/AuthContext.tsx</code>): העוגייה httpOnly, אז הדרך היחידה לדעת מי מחובר — לשאול את השרת: <code>/auth/me</code> פעם אחת ב־mount. חושף <code>user</code>, <code>loading</code>, <code>signIn</code>, <code>register</code>, <code>signOut</code>, <code>setUser</code>.</li>
+<li><b><code>NotificationContext</code></b>: <b>אחד בלבד</b> ב־root — כי ה־stream הוא חיבור רשת אמיתי, ועותק שני היה פותח EventSource שני וסופר כל שורה פעמיים. הפעמון, badge ההודעות ודף Messages קוראים ממנו.</li>
+<li><b><code>useAsync(loader, deps, intervalMs?)</code></b>: fetch → spinner → שגיאה בעברית; יש stale guard.</li>
+<li><b><code>usePagedList(fetchPage, deps)</code></b>: רשימה מצטברת (offset), "טען עוד"; שינוי deps מאפס.</li>
+<li><b><code>useNotificationStream</code></b>: SSE, ואם יש 2 כישלונות תוך 30 שניות → polling כל 10s (<code>POLL_INTERVAL_MS</code>) לכל שאר ה־session. שני ה־transports מקדמים את אותו cursor.</li>
+</ul>
+</div></details>
+<details class="sub"><summary>6.5 קומפוננטות מרכזיות</summary><div class="in">
+<div class="tablewrap"><table><thead><tr><th>תיקייה</th><th>תוכן</th></tr></thead><tbody>
+<tr><td><code>layout/</code></td><td><code>TopBar</code>, <code>Footer</code>, <code>NotificationBell</code>, <code>MessagesLink</code></td></tr>
+<tr><td><code>feed/</code></td><td><code>CaseCard</code></td></tr>
+<tr><td><code>case/</code></td><td><code>CaseStatusChip</code>, <code>PhaseTimeline</code>, <code>VerdictBanner</code>, <code>CourtSeal</code>, <code>LikeButton</code>, <code>FollowButton</code>, dialogs</td></tr>
+<tr><td><code>trial/</code></td><td><code>JuryPanel</code>, <code>WitnessList</code>, <code>SummonWitnessDialog</code>, <code>TestifyForm</code>, <code>MySummonsPanel</code></td></tr>
+<tr><td><code>comments/</code></td><td><code>CommentThread</code>, <code>CommentComposer</code>, <code>RoleBadge</code> (מה שהופך טבלת comments אחת ל־4 סוגי מבעים)</td></tr>
+<tr><td><code>admin/</code></td><td><code>SiteOverview</code>, <code>AiUsage</code>, <code>SystemHealth</code> — לשוניות הדשבורד</td></tr>
+<tr><td><code>assist/</code></td><td><code>AssistButton</code>, <code>AssistDialog</code> → <code>/api/assist/*</code></td></tr>
+<tr><td><code>common/</code></td><td><code>AppErrorBoundary</code>, <code>ErrorPage</code>, <code>StateViews</code>, <code>InfiniteScroll</code>, <code>ImageUploadField</code>, …</td></tr>
+<tr><td><code>routing/</code></td><td><code>ProtectedRoute</code> — מציג 401 עם הנתיב המבוקש כדי לחזור אליו אחרי התחברות</td></tr>
+</tbody></table></div>
+</div></details>
+</div></section>

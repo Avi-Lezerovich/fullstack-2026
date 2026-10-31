@@ -1,0 +1,12 @@
+<!-- R12 -->
+<details class="recipe" id="r12"><summary><span class="tag med">בינוני</span> 12. לשנות גודל חבר המושבעים ל־5</summary><div class="in">
+<span class="rlabel">קבצים</span><ul><li><code>server/app/services/jury_service.py:25</code> — <code>PANEL_SIZE = 7</code></li><li>טקסט: <code>client/src/components/case/CaseStatusChip.tsx</code> — <code>"שבעה מושבעים דנים בתיק ומצביעים."</code></li></ul>
+<pre><code><span class="del">-PANEL_SIZE = 7</span>
+<span class="add">+PANEL_SIZE = 5</span></code></pre>
+<span class="rlabel">אימות</span><p><code>PHASE_MINUTES=2</code>, הגש תביעה, חכה ~4 דקות → בדף התיק <code>JuryPanel</code> מראה 5 מושבעים; <code>GET /api/cases/&lt;id&gt;/trial</code>.</p>
+<span class="rlabel">מה יכול להישבר / מה לומר</span>
+<ul><li>מספר <b>אי־זוגי</b> — אין תיקו כשכולם מצביעים; מספר זוגי (6) יפעיל את ה־tiebreak של השופט (<code>tally</code> → <code>judge_lean</code>) הרבה יותר.</li>
+<li>pool של 20 מושבעים — <code>select_panel</code> מחזיר <code>None</code> אם הבריכה קטנה מ־PANEL_SIZE (אז התיק נשאר ונוסה שוב ב־tick הבא).</li>
+<li>טסטים: <code>test_trial_lifecycle.py:170</code> משתמש בקבוע → עובר. הרץ <code>pytest -m "worker"</code>.</li>
+<li>פאנלים שכבר הושבו לא משתנים.</li></ul>
+</div></details>

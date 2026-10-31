@@ -1,0 +1,15 @@
+<!-- R2 -->
+<details class="recipe" id="r2"><summary><span class="tag easy">קל</span> 2. לשנות כלל ולידציה: כותרת תביעה מינימום 5 תווים (במקום 3)</summary><div class="in">
+<span class="rlabel">קבצים</span><ul><li><code>server/app/api/cases.py:75</code></li><li>אופציונלי: <code>client/src/pages/NewCase.tsx</code> — ה־TextField של הכותרת (<code>inputProps</code> מכיל רק <code>maxLength: 512</code>)</li></ul>
+<pre><code><span class="del">-    if len(title) &lt; 3:</span>
+<span class="add">+    if len(title) &lt; 5:</span>
+         return fail("invalid", "כותרת התביעה קצרה מדי.")</code></pre>
+<p>בצד לקוח (UX, לא אבטחה): הוסף <code>minLength: 5</code> ל־<code>inputProps</code> של הכותרת.</p>
+<span class="rlabel">אימות</span>
+<pre><code>curl -s -c /tmp/c -H 'Content-Type: application/json' \
+  -d '{"email":"dana@lolsuit.local","password":"demo1234"}' localhost:5002/api/auth/login
+curl -s -b /tmp/c -H 'Content-Type: application/json' \
+  -d '{"title":"abcd","body":"long enough body here","defendant_text":"Monday"}' localhost:5002/api/cases
+<span class="c"># → 400 {"code":"invalid","error":"כותרת התביעה קצרה מדי."}</span></code></pre>
+<span class="rlabel">מה יכול להישבר</span><p><code>tests/integration/test_cases_api.py:76</code> בודק שכותרת "אב" (2 תווים) נדחית — עדיין עובר. אם <b>מורידים</b> את המינימום ל־2 — הטסט הזה ייכשל. בוטים: תביעות של בוטים עוברות דרך <code>cases_service.create_case</code> ישירות ולא דרך ה־route, אז הכלל לא חל עליהן (שווה לציין!).</p>
+</div></details>
