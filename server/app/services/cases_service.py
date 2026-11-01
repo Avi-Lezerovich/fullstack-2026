@@ -537,6 +537,60 @@ def count_followed_cases(
         )
 
 
+# --- "My Feed" --------------------------------------------------------------
+#
+# The followed-cases list above, widened by the people the viewer follows:
+# every case filed by somebody in `user_follows` counts as followed too. A
+# separate pair rather than a flag on list_followed_cases, because that one is
+# also a profile's "tracking N cases", and following a person is not tracking
+# their cases one by one.
+#
+# EXISTS / IN rather than JOINs, so a case that is followed directly AND filed
+# by a followed person appears once, not twice.
+
+_FEED_MEMBERSHIP = (
+    "(EXISTS (SELECT 1 FROM case_follows cf WHERE cf.case_id = c.id AND cf.user_id = %s) "
+    "OR c.author_id IN (SELECT uf.followee_id FROM user_follows uf WHERE uf.follower_id = %s))"
+)
+
+
+def list_feed_cases(
+    viewer_id: int, *, limit: int = 20, offset: int = 0, conn: Db | None = None
+) -> list[dict[str, Any]]:
+    """The viewer's feed: cases they follow plus cases filed by people they
+    follow, most recently active first. Ordered exactly as list_followed_cases."""
+    with owned(conn) as db:
+        rows = db.query_all(
+            f"SELECT {_CASE_COLUMNS} {_CASE_JOINS} "
+            "LEFT JOIN case_activity ca ON ca.case_id = c.id "
+            f"WHERE {_FEED_MEMBERSHIP} AND {_FOLLOWED_VISIBILITY} "
+            "ORDER BY COALESCE(ca.last_activity_at, c.filed_at) DESC, c.id DESC "
+            "LIMIT %s OFFSET %s",
+            [viewer_id, viewer_id, viewer_id, int(limit), int(offset)],
+        )
+        case_ids = [row["id"] for row in rows]
+        charges = _charges_for(case_ids, db)
+        counts = _counts_for(case_ids, viewer_id, db)
+
+    return [
+        shape_case(row, charges=charges.get(row["id"], []), **counts[row["id"]])
+        for row in rows
+    ]
+
+
+def count_feed_cases(viewer_id: int, *, conn: Db | None = None) -> int:
+    """How many cases list_feed_cases() would find, with the same filters."""
+    with owned(conn) as db:
+        return int(
+            db.query_value(
+                f"SELECT COUNT(*) FROM cases c "
+                f"WHERE {_FEED_MEMBERSHIP} AND {_FOLLOWED_VISIBILITY}",
+                [viewer_id, viewer_id, viewer_id],
+                default=0,
+            )
+        )
+
+
 def get_raw(case_id: int, conn: Db | None = None) -> dict[str, Any] | None:
     """The bare row, for the trial engine - no shaping, no visibility rules."""
     with owned(conn) as db:

@@ -5,6 +5,29 @@ major number moves when an upgrade needs a step other than pulling the image.
 
 ---
 
+## 5.1.0
+
+**Upgrading needs one step beyond pulling the image** — a migration, applied before the
+new images:
+
+```bash
+cd /opt/lolsuit && git pull
+docker run --rm -i -e MYSQL_PWD="$DB_PASSWORD" mysql:8.0   mysql -h "$DB_HOST" -u "$DB_USER" "$DB_NAME" < prod/migrations/005-user-follows.sql
+```
+
+Idempotent. Without it "My Feed", every profile and the follow button answer 500.
+
+**You can follow people now, not just cases.**
+
+- New `user_follows` table and `POST /api/users/<id>/follow` (a toggle, like the case
+  follow), plus `GET /api/users/<id>/followers` and `/following`.
+- `GET /api/cases/feed` now includes every case filed by somebody you follow, alongside
+  the cases you follow directly. A case that is both appears once.
+- Profiles carry `follower_count`, `following_users_count` and `viewer_is_following`, and
+  show a follow button and both counts.
+
+---
+
 ## 5.0.0
 
 **Upgrading needs one step beyond pulling the image** — a migration:

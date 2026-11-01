@@ -38,6 +38,12 @@ export interface UserProfile extends User {
    * so the number and the list behind it cannot disagree.
    */
   following_count: number;
+  /** How many people follow this person. */
+  follower_count: number;
+  /** How many people this person follows. */
+  following_users_count: number;
+  /** Whether the signed-in reader follows this person. Always false signed out. */
+  viewer_is_following: boolean;
 }
 
 // --- the trial --------------------------------------------------------------

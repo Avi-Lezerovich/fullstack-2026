@@ -143,7 +143,10 @@ export const fetchCases = ({
     `/cases${query({ ...params, status: Array.isArray(status) ? status.join(",") : status })}`,
   );
 
-/** The signed-in viewer's own feed: what they follow, most recently active first. */
+/**
+ * The signed-in viewer's own feed: the cases they follow plus the cases filed
+ * by the people they follow, most recently active first.
+ */
 export const fetchMyFeed = (params: { limit?: number; offset?: number } = {}) =>
   request<CaseListResponse>(`/cases/feed${query(params)}`);
 
@@ -232,6 +235,21 @@ export const fetchUserFollows = (
   userId: number,
   params: { limit?: number; offset?: number } = {},
 ) => request<CaseListResponse>(`/users/${userId}/follows${query(params)}`);
+
+/** Follow or unfollow a person. Same deal as toggleFollow: the server owns the state. */
+export const toggleFollowUser = (userId: number) =>
+  request<{ following: boolean; follower_count: number }>(
+    `/users/${userId}/follow`,
+    json("POST"),
+  );
+
+/** Who follows a person. */
+export const fetchUserFollowers = (userId: number) =>
+  request<{ users: UserRef[] }>(`/users/${userId}/followers`).then((r) => r.users);
+
+/** Whom a person follows. */
+export const fetchUserFollowing = (userId: number) =>
+  request<{ users: UserRef[] }>(`/users/${userId}/following`).then((r) => r.users);
 
 // --- direct messages --------------------------------------------------------
 

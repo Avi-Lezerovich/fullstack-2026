@@ -48,7 +48,8 @@ def list_cases():
 @bp.get("/cases/feed")
 @security.require_auth
 def my_feed():
-    """The viewer's own feed: what they follow, most recently active first.
+    """The viewer's own feed: the cases they follow and the cases filed by the
+    people they follow, most recently active first.
 
     Signed-in only, and no `status` filter - the point of this list is "what
     has moved", which a phase filter would fight. Same envelope as /cases so
@@ -57,8 +58,8 @@ def my_feed():
     limit = positive_int(request.args.get("limit"), 20, maximum=MAX_PAGE_SIZE)
     offset = positive_int(request.args.get("offset"), 0)
 
-    cases = cases_service.list_followed_cases(g.user_id, limit=limit, offset=offset)
-    total = cases_service.count_followed_cases(g.user_id)
+    cases = cases_service.list_feed_cases(g.user_id, limit=limit, offset=offset)
+    total = cases_service.count_feed_cases(g.user_id)
     return jsonify({"cases": cases, "total": total, "limit": limit, "offset": offset}), 200
 
 

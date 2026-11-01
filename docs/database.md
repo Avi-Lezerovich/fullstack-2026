@@ -46,6 +46,8 @@ erDiagram
     users ||--o{ likes : "user_id"
     cases ||--o{ case_follows : "case_id"
     users ||--o{ case_follows : "user_id"
+    users ||--o{ user_follows : "follower_id"
+    users ||--o{ user_follows : "followee_id"
     cases ||--o| case_activity : "case_id"
     cases ||--o{ witness_summons : "case_id"
     users ||--o{ witness_summons : "witness_user_id / summoned_by_user_id"
@@ -150,6 +152,11 @@ erDiagram
         int case_id PK
         int user_id PK
         enum source "auto / manual"
+        datetime created_at
+    }
+    user_follows {
+        int follower_id PK
+        int followee_id PK
         datetime created_at
     }
     case_activity {
@@ -312,6 +319,7 @@ erDiagram
 | `comments` | **One table for every utterance on a case** — regular comments, witness testimony, juror deliberation and the judge's verdict, told apart by `role`. The UI styles by role; storage, threading, moderation and notification are identical, which is why they share a table. `root_comment_id` lets one indexed query fetch a whole thread without a recursive CTE. |
 | `likes` | The composite PRIMARY KEY *is* the "one like per user" rule. |
 | `case_follows` | "My Feed". Composite PK, same trick. `source` records how the row got here — `manual` when the user tapped follow, `auto` when they filed the case, were named as its registered defendant, or testified. |
+| `user_follows` | People following people. Composite PK, same trick. Every case filed by somebody you follow joins "My Feed" next to the cases in `case_follows`. Following yourself is refused by the application. |
 | `case_activity` | One row per case holding the timestamp of the last thing worth surfacing to a follower. Denormalised on purpose: ordering a feed by "latest activity" has to be an indexed read, not a `GREATEST()` over four correlated subqueries. `case_activity_service.touch()` writes it in the same transaction as the event it records. |
 
 ### The trial
@@ -468,6 +476,7 @@ then starts, serves every page, and fails only inside the worker, where nobody i
 | [`002-my-feed.sql`](../prod/migrations/002-my-feed.sql) | `case_follows`, `case_activity` | Reconstructs `last_activity_at` from `GREATEST(filed_at, verdict_at, closed_at, last visible comment)`, and auto-follows every case a user filed, was named defendant in, or testified in. Without these two tables the app serves the public feed as usual and then 500s on `GET /api/cases/feed` **and on the first comment posted to any case** — the activity bump runs in the same transaction. |
 | [`003-brain-usage-log.sql`](../prod/migrations/003-brain-usage-log.sql) | `brain_calls` | None — a call made before the table existed was never recorded anywhere. Without it the app runs unchanged (`_log_call` swallows the failure and logs a warning) and the AI Usage tab has nothing to aggregate. Creates `fallback_reason` as `VARCHAR(300)`; 004 widens it. |
 | [`004-brain-credentials.sql`](../prod/migrations/004-brain-credentials.sql) | `ALTER TABLE brain_calls`: adds `credential`, `model`, `latency_ms`; widens `fallback_reason` to 500; adds `idx_brain_calls_day_credential` | None — old rows keep `credential = ''` and are read as their provider. Without it every usage row fails to insert and the AI tab goes blank. |
+| [`005-user-follows.sql`](../prod/migrations/005-user-follows.sql) | `user_follows` | None — nobody follows anybody until they tap the button. Without it the app 500s on `GET /api/cases/feed`, on every profile, and on the follow button. Idempotent. |
 
 001–003 are safe to re-run (`CREATE TABLE IF NOT EXISTS`, backfills guarded by
 `ON DUPLICATE KEY UPDATE`) and none of them drops or alters an existing table.
