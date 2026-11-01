@@ -6,7 +6,7 @@ from flask import Blueprint, g, jsonify, request
 
 from .. import security
 from ..errors import fail
-from ..services import cases_service, memory_service, users_service
+from ..services import cases_service, memory_service, user_follows_service, users_service
 from ..validation import body_of, clean, name_problem, positive_int
 
 bp = Blueprint("users", __name__)
@@ -63,7 +63,45 @@ def get_user(user_id: int):
     profile["following_count"] = cases_service.count_followed_cases(
         user_id, viewer_id=g.user_id
     )
+    # People, as opposed to cases: who follows this person, whom they follow,
+    # and whether the reader is one of the former.
+    profile["follower_count"] = user_follows_service.follower_count(user_id)
+    profile["following_users_count"] = user_follows_service.followee_count(user_id)
+    profile["viewer_is_following"] = user_follows_service.is_following(g.user_id, user_id)
     return jsonify({"user": profile}), 200
+
+
+@bp.post("/users/<int:user_id>/follow")
+@security.require_auth
+def toggle_follow_user(user_id: int):
+    """Follow or unfollow a person. One endpoint for both directions, like the
+    case follow: the server owns the state and hands back the new count."""
+    result, payload = user_follows_service.toggle(g.user_id, user_id)
+    if result == "invalid":
+        return fail("invalid", "אי אפשר לעקוב אחרי עצמך.")
+    if result != "ok":
+        return fail("not_found", "המשתמש/ת  המבוקש לא נמצא.")
+    return jsonify(payload), 200
+
+
+@bp.get("/users/<int:user_id>/followers")
+@security.optional_auth
+def list_user_followers(user_id: int):
+    """Who follows this person."""
+    row = users_service.get_by_id(user_id)
+    if row is None or row["status"] == "banned":
+        return fail("not_found", "המשתמש/ת  המבוקש לא נמצא.")
+    return jsonify({"users": user_follows_service.followers(user_id)}), 200
+
+
+@bp.get("/users/<int:user_id>/following")
+@security.optional_auth
+def list_user_following(user_id: int):
+    """Whom this person follows."""
+    row = users_service.get_by_id(user_id)
+    if row is None or row["status"] == "banned":
+        return fail("not_found", "המשתמש/ת  המבוקש לא נמצא.")
+    return jsonify({"users": user_follows_service.followees(user_id)}), 200
 
 
 @bp.get("/users/<int:user_id>/follows")

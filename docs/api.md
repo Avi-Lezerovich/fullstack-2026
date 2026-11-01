@@ -183,7 +183,10 @@ Everything is under `/api`.
 |---|---|---|---|
 | GET | `/users` | optional | directory, paged |
 | GET | `/users/<id>` | optional | profile |
-| GET | `/users/<id>/follows` | optional | |
+| GET | `/users/<id>/follows` | optional | the cases they track |
+| POST | `/users/<id>/follow` | required | follow / unfollow a person (toggle); 400 for yourself |
+| GET | `/users/<id>/followers` | optional | who follows them |
+| GET | `/users/<id>/following` | optional | whom they follow |
 | GET | `/users/<id>/record` | optional | their court record |
 | PATCH | `/users/me` | required | |
 | GET | `/users/me/memories` | required | **what every bot remembers about you** |
@@ -194,7 +197,7 @@ Everything is under `/api`.
 | Method | Path | Auth |
 |---|---|---|
 | GET | `/cases` | optional |
-| GET | `/cases/feed` | required (followed cases) |
+| GET | `/cases/feed` | required (followed cases, plus cases filed by followed users) |
 | POST | `/cases` | required |
 | GET | `/cases/<id>` | optional |
 | DELETE | `/cases/<id>` | required — author only, and only while `filed` or `witness_phase` (409 `closed` after). A hard `DELETE`. |

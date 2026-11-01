@@ -18,6 +18,8 @@ import { Link as RouterLink, useParams } from "react-router-dom";
 import * as api from "../api";
 import CaseCard from "../components/feed/CaseCard";
 import FollowedCasesDialog from "../components/case/FollowedCasesDialog";
+import FollowUserButton from "../components/common/FollowUserButton";
+import UserListDialog from "../components/common/UserListDialog";
 import { CourtRecord } from "../components/common/CourtRecord";
 import ImageUploadField from "../components/common/ImageUploadField";
 import { EmptyState, ErrorNote, Loading } from "../components/common/StateViews";
@@ -43,6 +45,17 @@ const Profile = () => {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [followsOpen, setFollowsOpen] = useState(false);
+  const [peopleOpen, setPeopleOpen] = useState<"followers" | "following" | null>(null);
+  // The follow button's answer, kept beside the profile it belongs to so a
+  // stale one is never shown on the next profile visited.
+  const [followState, setFollowState] = useState<{
+    userId: number;
+    following: boolean;
+    follower_count: number;
+  } | null>(null);
+
+  const loadFollowers = useCallback(() => api.fetchUserFollowers(id), [id]);
+  const loadFollowing = useCallback(() => api.fetchUserFollowing(id), [id]);
 
   if (profile.loading) return <Loading />;
   if (profile.error) return <ErrorNote message={profile.error} />;
@@ -50,6 +63,9 @@ const Profile = () => {
 
   const person = profile.data;
   const isMe = me?.id === person.id;
+  const mine = followState?.userId === person.id ? followState : null;
+  const viewerFollows = mine?.following ?? person.viewer_is_following;
+  const followerCount = mine?.follower_count ?? person.follower_count;
 
   const openEditor = () => {
     setName(person.name);
@@ -139,6 +155,32 @@ const Profile = () => {
                 עוקב/ת אחרי {person.following_count} תיקים
               </Button>
               <Typography variant="caption" color="text.secondary">
+                ·
+              </Typography>
+              <Button
+                size="small"
+                color="inherit"
+                onClick={() => setPeopleOpen("followers")}
+                disabled={followerCount === 0}
+                sx={{ minWidth: 0, p: 0, typography: "caption" }}
+                data-testid="show-user-followers"
+              >
+                {followerCount} עוקבים
+              </Button>
+              <Typography variant="caption" color="text.secondary">
+                ·
+              </Typography>
+              <Button
+                size="small"
+                color="inherit"
+                onClick={() => setPeopleOpen("following")}
+                disabled={person.following_users_count === 0}
+                sx={{ minWidth: 0, p: 0, typography: "caption" }}
+                data-testid="show-user-following"
+              >
+                עוקב/ת אחרי {person.following_users_count} משתמשים
+              </Button>
+              <Typography variant="caption" color="text.secondary">
                 · הצטרף/ה {formatDate(person.created_at)}
               </Typography>
             </Stack>
@@ -148,15 +190,22 @@ const Profile = () => {
             <Button onClick={openEditor}>עריכת פרופיל</Button>
           ) : (
             me && (
-              <Button
-                variant="outlined"
-                startIcon={<MailOutlineIcon />}
-                component={RouterLink}
-                to={`/messages?to=${person.id}`}
-                data-testid="message-user"
-              >
-                שלח/י הודעה
-              </Button>
+              <Stack direction="row" spacing={1}>
+                <FollowUserButton
+                  userId={person.id}
+                  following={viewerFollows}
+                  onChange={(next) => setFollowState({ userId: person.id, ...next })}
+                />
+                <Button
+                  variant="outlined"
+                  startIcon={<MailOutlineIcon />}
+                  component={RouterLink}
+                  to={`/messages?to=${person.id}`}
+                  data-testid="message-user"
+                >
+                  שלח/י הודעה
+                </Button>
+              </Stack>
             )
           )}
         </Stack>
@@ -188,6 +237,25 @@ const Profile = () => {
         userId={person.id}
         name={person.name}
         onClose={() => setFollowsOpen(false)}
+      />
+
+      <UserListDialog
+        open={peopleOpen === "followers"}
+        title={`מי עוקב אחרי ${person.name}`}
+        emptyTitle="עוד אף אחד לא עוקב"
+        load={loadFollowers}
+        onClose={() => setPeopleOpen(null)}
+        testId="user-followers-dialog"
+        rowTestId="user-follower-row"
+      />
+      <UserListDialog
+        open={peopleOpen === "following"}
+        title={`${person.name} עוקב/ת אחרי`}
+        emptyTitle="עדיין לא עוקב/ת אחרי אף אחד"
+        load={loadFollowing}
+        onClose={() => setPeopleOpen(null)}
+        testId="user-following-dialog"
+        rowTestId="user-following-row"
       />
 
       <Dialog open={editing} onClose={() => setEditing(false)} fullWidth maxWidth="sm">

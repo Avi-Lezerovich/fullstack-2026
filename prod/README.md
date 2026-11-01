@@ -434,6 +434,7 @@ Written migrations live in `prod/migrations/`, newest last:
 | `002-my-feed.sql` | v3.0.0 | Adds `case_follows` and `case_activity`, backfills each case's last-activity timestamp and the automatic follows. Apply *before* the new images. |
 | `003-brain-usage-log.sql` | v4.0.0 | Adds `brain_calls`, the AI usage log. Idempotent. |
 | `004-brain-credentials.sql` | v5.0.0 | `ALTER TABLE brain_calls`: adds `credential`, `model`, `latency_ms`, widens `fallback_reason`, adds an index. **Not idempotent** — run once; check `information_schema.COLUMNS` first (query in the file header). Needs `ALTER`. |
+| `005-user-follows.sql` | v5.1.0 | Adds `user_follows`, people following people. Idempotent. Apply *before* the new images. |
 
 001–003 are safe to re-run; 004 is not. Apply in order, each after a snapshot, with the
 `docker run … mysql` command above (it needs no `mysql` client on the instance — the

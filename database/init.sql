@@ -682,3 +682,24 @@ CREATE TABLE IF NOT EXISTS brain_calls (
   KEY idx_brain_calls_task (task, created_at),
   KEY idx_brain_calls_day_credential (created_at, credential)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 25. user_follows - people following people. The other half of "My Feed":
+--     every case filed by somebody you follow shows up there, next to the
+--     cases you follow one by one in `case_follows`.
+--
+--     The composite PRIMARY KEY is the "follow once" rule, the same trick as
+--     `likes` and `case_follows`. Following yourself is refused by the
+--     application, not by a CHECK - MySQL rejects a CHECK on a column that
+--     also carries a foreign key with a cascading action.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_follows (
+  follower_id INT      NOT NULL,
+  followee_id INT      NOT NULL,
+  created_at  DATETIME NOT NULL,
+  PRIMARY KEY (follower_id, followee_id),
+  CONSTRAINT fk_user_follows_follower FOREIGN KEY (follower_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_user_follows_followee FOREIGN KEY (followee_id) REFERENCES users(id) ON DELETE CASCADE,
+  -- "who follows this person" - the profile's follower count.
+  KEY idx_user_follows_followee (followee_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
